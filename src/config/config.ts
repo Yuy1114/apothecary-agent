@@ -6,7 +6,7 @@ import type { AgentWorkspace } from "../domain/workspace.js";
 export const defaultConfig: ApothecaryConfig = {
   version: 1,
   reviewer: {
-    provider: "openai",
+    provider: "mastra",
     model: "deepseek-chat",
     baseURL: "https://api.deepseek.com",
   },

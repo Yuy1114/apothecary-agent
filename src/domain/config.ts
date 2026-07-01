@@ -2,21 +2,12 @@ import { z } from "zod";
 
 export const ApothecaryConfigSchema = z.object({
   version: z.literal(1),
-  reviewer: z.discriminatedUnion("provider", [
-    z.object({ provider: z.literal("deterministic") }),
-    z.object({
-      provider: z.literal("openai"),
-      model: z.string().default("deepseek-chat"),
-      apiKey: z.string().optional(),
-      baseURL: z.string().default("https://api.deepseek.com"),
-    }),
-    z.object({
-      provider: z.literal("mastra"),
-      model: z.string().default("deepseek-chat"),
-      apiKey: z.string().optional(),
-      baseURL: z.string().default("https://api.deepseek.com"),
-    }),
-  ]),
+  reviewer: z.object({
+    provider: z.literal("mastra"),
+    model: z.string().default("deepseek-chat"),
+    apiKey: z.string().optional(),
+    baseURL: z.string().default("https://api.deepseek.com"),
+  }),
   scan: z.object({
     ignore: z.array(z.string()),
     include_hash: z.boolean(),
