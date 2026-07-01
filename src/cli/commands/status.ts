@@ -1,14 +1,16 @@
 import { Command } from "commander";
+import { resolveVaultPath } from "../../config/projectConfig.js";
 import { formatStatus, runStatusWorkflow } from "../../workflows/statusWorkflow.js";
 
 export function registerStatusCommand(program: Command): void {
   program
     .command("status")
     .description("Scan a vault and print a read-only status summary")
-    .requiredOption("--vault <path>", "Vault path")
+    .option("--vault <path>", "Vault path. Defaults to vault.path in apothecary.config.yaml")
     .option("--scope <subpath>", "Optional subdirectory scope")
-    .action(async (options: { vault: string; scope?: string }) => {
-      const result = await runStatusWorkflow({ vaultPath: options.vault, scopePath: options.scope });
+    .action(async (options: { vault?: string; scope?: string }) => {
+      const vaultPath = await resolveVaultPath(options.vault);
+      const result = await runStatusWorkflow({ vaultPath, scopePath: options.scope });
       console.log(formatStatus(result));
     });
 }
