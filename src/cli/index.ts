@@ -7,13 +7,13 @@ import { registerReviewCommand } from "./commands/review.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerRagCommands } from "./commands/rag.js";
 import { registerEditCommands } from "./commands/edit.js";
-import { registerChatCommand } from "./commands/chat.js";
+import { createChatSession } from "./commands/chat.js";
 
 const program = new Command();
 
 program
   .name("apothecary-agent")
-  .description("Read-only Vault Reviewer for local Markdown knowledge bases")
+  .description("Personal knowledge maintenance agent for local Markdown vaults")
   .version("0.1.0");
 
 registerInitCommand(program);
@@ -22,7 +22,11 @@ registerMapCommand(program);
 registerReviewCommand(program);
 registerRagCommands(program);
 registerEditCommands(program);
-registerChatCommand(program);
+
+// Default: start interactive chat session
+program.action(async () => {
+  await createChatSession();
+});
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
