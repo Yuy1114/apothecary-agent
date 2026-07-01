@@ -2,6 +2,8 @@ import { Agent } from "@mastra/core/agent";
 import { Mastra } from "@mastra/core";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { scanVaultTool, readMarkdownTool, writeReviewTool } from "../agent/tools.js";
+import { queryVaultTool } from "../agent/queryVaultTool.js";
+import { proposeEditTool } from "../agent/proposeEditTool.js";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
@@ -23,6 +25,8 @@ export const vaultReviewer = new Agent({
     scanVault: scanVaultTool,
     readMarkdown: readMarkdownTool,
     writeReview: writeReviewTool,
+    queryVault: queryVaultTool,
+    proposeEdit: proposeEditTool,
   },
 });
 

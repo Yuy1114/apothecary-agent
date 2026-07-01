@@ -5,6 +5,8 @@ import { registerInitCommand } from "./commands/init.js";
 import { registerMapCommand } from "./commands/map.js";
 import { registerReviewCommand } from "./commands/review.js";
 import { registerStatusCommand } from "./commands/status.js";
+import { registerRagCommands } from "./commands/rag.js";
+import { registerEditCommands } from "./commands/edit.js";
 
 const program = new Command();
 
@@ -17,6 +19,8 @@ registerInitCommand(program);
 registerStatusCommand(program);
 registerMapCommand(program);
 registerReviewCommand(program);
+registerRagCommands(program);
+registerEditCommands(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

@@ -6,6 +6,8 @@ import { createId } from "../utils/ids.js";
 import { nowIso } from "../utils/time.js";
 import type { ReviewerModel, KnowledgeMapInput, MaintenanceReviewInput } from "../reviewer/reviewerModel.js";
 import { scanVaultTool, readMarkdownTool, writeReviewTool } from "./tools.js";
+import { queryVaultTool } from "./queryVaultTool.js";
+import { proposeEditTool } from "./proposeEditTool.js";
 
 export class MastraReviewerModel implements ReviewerModel {
   private readonly agent: Agent;
@@ -31,6 +33,8 @@ export class MastraReviewerModel implements ReviewerModel {
         scanVault: scanVaultTool,
         readMarkdown: readMarkdownTool,
         writeReview: writeReviewTool,
+        queryVault: queryVaultTool,
+        proposeEdit: proposeEditTool,
       },
     });
   }
