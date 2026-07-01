@@ -1,5 +1,5 @@
 import path from "node:path";
-import { promises as fs } from "node:fs";
+import { writeJsonArtifact } from "../artifacts/writeAgentArtifact.js";
 import { loadConfig } from "../config/config.js";
 import { VaultScanSchema, type VaultScan } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
@@ -28,7 +28,7 @@ export async function runStatusWorkflow(input: StatusWorkflowInput): Promise<Sta
     recentFilesLimit: config.scan.recent_files_limit,
   }));
   const lastScanPath = path.join(workspace.metadataDir, "last-scan.json");
-  await fs.writeFile(lastScanPath, `${JSON.stringify(scan, null, 2)}\n`, "utf8");
+  await writeJsonArtifact({ workspace, artifactPath: lastScanPath, value: scan });
 
   return { scan, lastScanPath };
 }

@@ -26,7 +26,6 @@ export function assertInsideDirectory(parentDir: string, targetPath: string): vo
   }
 }
 
-export function assertAgentWorkspaceWrite(vaultPath: string, targetPath: string): void {
-  const agentRoot = path.join(path.resolve(vaultPath), ".agent");
-  assertInsideDirectory(agentRoot, targetPath);
+export function assertAgentWorkspaceWrite(agentRootPath: string, targetPath: string): void {
+  assertInsideDirectory(agentRootPath, targetPath);
 }

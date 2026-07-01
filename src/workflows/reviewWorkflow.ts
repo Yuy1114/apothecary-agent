@@ -1,4 +1,5 @@
 import path from "node:path";
+import { writeJsonArtifact, writeMarkdownArtifact } from "../artifacts/writeAgentArtifact.js";
 import { loadConfig } from "../config/config.js";
 import { MaintenanceReviewSchema } from "../domain/maintenanceReview.js";
 import { VaultScanSchema } from "../domain/vault.js";
@@ -8,7 +9,6 @@ import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
 import { buildMaintenanceReviewContext } from "../reviewer/buildReviewerContext.js";
 import { createReviewerModel } from "../reviewer/createReviewerModel.js";
 import { normalizeMaintenanceReview } from "../reviewer/normalizeMaintenanceReview.js";
-import { writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 import { renderMaintenanceReviewMarkdown } from "../reports/renderMaintenanceReviewMarkdown.js";
 import { timestampForFile } from "../utils/time.js";
 
@@ -44,12 +44,8 @@ export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ j
   const jsonPath = path.join(workspace.reviewsDir, `review-${stamp}.json`);
   const markdownPath = path.join(workspace.reviewsDir, `review-${stamp}.md`);
 
-  await writeJsonAndMarkdown({
-    jsonPath,
-    markdownPath,
-    value: review,
-    markdown: renderMaintenanceReviewMarkdown(review),
-  });
+  await writeJsonArtifact({ workspace, artifactPath: jsonPath, value: review });
+  await writeMarkdownArtifact({ workspace, artifactPath: markdownPath, content: renderMaintenanceReviewMarkdown(review) });
 
   return { jsonPath, markdownPath };
 }
