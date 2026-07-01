@@ -6,9 +6,9 @@ export const ApothecaryConfigSchema = z.object({
     z.object({ provider: z.literal("deterministic") }),
     z.object({
       provider: z.literal("openai"),
-      model: z.string(),
+      model: z.string().default("deepseek-chat"),
       apiKey: z.string().optional(),
-      baseURL: z.string().optional(),
+      baseURL: z.string().default("https://api.deepseek.com"),
     }),
   ]),
   scan: z.object({
