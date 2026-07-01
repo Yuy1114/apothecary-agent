@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/cli/index.ts",
+    "chroma": "chroma run --path ./sql --host 127.0.0.1 --port 8000",
     "dev:studio": "mastra dev",
     "build": "tsc",
     "check": "tsc --noEmit",
@@ -32,6 +33,7 @@
     "@mastra/memory": "^1.21.2",
     "@mastra/rag": "^2.3.0",
     "ai": "^7.0.8",
+    "chromadb": "^3.4.3",
     "commander": "^14.0.2",
     "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",
