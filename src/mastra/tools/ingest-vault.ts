@@ -2,8 +2,8 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { reindexFile } from "../rag/chromaStore.js";
-import { loadStructure, classifyWithStructure } from "./vaultStructure.js";
+import { reindexFile } from "../../rag/chromaStore.js";
+import { loadStructure, classifyWithStructure } from "./vault-structure.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -28,19 +28,15 @@ export const ingestVaultTool = createTool({
   }),
   execute: async ({ content, title: suggestedTitle, topic: suggestedTopic }) => {
     const structure = await loadStructure();
-    const lower = content.toLowerCase();
 
-    // Match by explicit topic hint
     let dir = "inbox";
     let label = "未分类";
 
     if (suggestedTopic) {
-      // Try exact dir match first
       if (structure.directories[suggestedTopic]) {
         dir = suggestedTopic;
         label = structure.directories[suggestedTopic].description;
       } else {
-        // Try keyword match against all directories
         for (const [d, def] of Object.entries(structure.directories)) {
           if (!def.keywords) continue;
           if (def.keywords.some((kw) => suggestedTopic.toLowerCase().includes(kw))) {
@@ -52,12 +48,10 @@ export const ingestVaultTool = createTool({
       }
     }
 
-    // Fall back to content classification
     if (dir === "inbox") {
       ({ dir, label } = classifyWithStructure(content, structure));
     }
 
-    // Generate title
     const headingMatch = content.match(/^#\s+(.+)/m);
     const title = suggestedTitle ?? headingMatch?.[1] ?? content.split("\n")[0]?.slice(0, 60) ?? "untitled";
     const fileName = `${slugify(title)}.md`;
@@ -69,7 +63,6 @@ export const ingestVaultTool = createTool({
     const filePath = path.join(dirPath, fileName);
     await fs.writeFile(filePath, fileContent, "utf8");
 
-    // Update README
     let readmeUpdated = false;
     const readmePath = path.join(dirPath, "README.md");
     try {
@@ -83,7 +76,6 @@ export const ingestVaultTool = createTool({
       readmeUpdated = true;
     }
 
-    // Auto-reindex
     const relativePath = path.relative(VAULT_PATH, filePath);
     await reindexFile(relativePath);
 

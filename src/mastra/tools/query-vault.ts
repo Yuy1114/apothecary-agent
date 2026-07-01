@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { queryVault } from "../rag/chromaStore.js";
+import { queryVault } from "../../rag/chromaStore.js";
 
 export const queryVaultTool = createTool({
   id: "queryVault",

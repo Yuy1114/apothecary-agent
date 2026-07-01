@@ -24,17 +24,14 @@ export const moveVaultFileTool = createTool({
 
     await fs.mkdir(path.dirname(toAbs), { recursive: true });
 
-    // Check source exists
     try {
       await fs.access(fromAbs);
     } catch {
       return { moved: false, from, to };
     }
 
-    // Move the file
     await fs.rename(fromAbs, toAbs);
 
-    // Clean up empty source directory
     const sourceDir = path.dirname(fromAbs);
     try {
       const remaining = await fs.readdir(sourceDir);

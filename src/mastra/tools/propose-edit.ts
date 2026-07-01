@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { createId } from "../utils/ids.js";
+import { createId } from "../../utils/ids.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -28,7 +28,6 @@ export const proposeEditTool = createTool({
     const editsDir = path.join(VAULT_PATH, ".agent", "edits");
     await fs.mkdir(editsDir, { recursive: true });
 
-    // Read current content
     const absolutePath = path.join(VAULT_PATH, filePath);
     let currentContent = "";
     try {
@@ -37,7 +36,6 @@ export const proposeEditTool = createTool({
       currentContent = "(new file)";
     }
 
-    // Write proposal
     const proposalPath = path.join(editsDir, `${proposalId}.json`);
     await fs.writeFile(
       proposalPath,

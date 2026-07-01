@@ -22,7 +22,6 @@ export async function loadStructure(): Promise<VaultStructure> {
     cache = parse(raw) as VaultStructure;
     return cache!;
   } catch {
-    // Default empty structure
     return { directories: {} };
   }
 }
@@ -35,7 +34,6 @@ export function classifyWithStructure(content: string, structure: VaultStructure
     if (!def.keywords) continue;
     const hits = def.keywords.filter((kw) => lower.includes(kw)).length;
     if (hits > best.score) best = { dir, label: def.description, score: hits };
-    // Boost if content mentions the directory path
     if (lower.includes(dir.toLowerCase())) {
       best = { dir, label: def.description, score: Math.max(best.score, 10) };
     }

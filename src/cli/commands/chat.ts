@@ -3,9 +3,7 @@ import readline from "node:readline";
 import { promises as fs } from "node:fs";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
-import { loadConfig } from "../../config/config.js";
-import { createReviewerModel } from "../../reviewer/createReviewerModel.js";
-import type { MastraReviewerModel } from "../../agent/mastraReviewerModel.js";
+import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
 import { indexVault } from "../../rag/chromaStore.js";
 import { listProposals, applyProposal, hitlConfirm } from "../hitl.js";
 import { runReviewWorkflow } from "../../workflows/reviewWorkflow.js";
@@ -76,9 +74,7 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
     console.log("Init done. Now analyzing your vault...\n");
   }
 
-  const config = await loadConfig(workspace);
-  const reviewer = createReviewerModel(config) as MastraReviewerModel;
-  const ctx: ChatContext = { vaultPath: resolvedVault, agent: reviewer.rawAgent, maxSteps: 20 };
+  const ctx: ChatContext = { vaultPath: resolvedVault, agent: vaultReviewer, maxSteps: 20 };
 
   console.log("╔══════════════════════════════════════════╗");
   console.log("║        apothecary-agent                 ║");

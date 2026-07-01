@@ -1,70 +1,21 @@
 import "dotenv/config";
-import { Agent } from "@mastra/core/agent";
 import { Mastra } from "@mastra/core/mastra";
-import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { registerApiRoute, type ContextWithMastra } from "@mastra/core/server";
 import { promises as fs } from "node:fs";
-import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 
-import { scanVaultTool, readMarkdownTool, writeReviewTool } from "../agent/tools.js";
-import { queryVaultTool } from "../agent/queryVaultTool.js";
-import { proposeEditTool } from "../agent/proposeEditTool.js";
-import { ingestVaultTool } from "../agent/ingestVaultTool.js";
-import { moveVaultFileTool } from "../agent/moveVaultFileTool.js";
-import { queryVault, indexVault, reindexFile, removeFromIndex } from "../rag/chromaStore.js";
+import { vaultReviewer } from "./agents/vault-reviewer.js";
+import { queryVault, indexVault, reindexFile } from "../rag/chromaStore.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
+import { startVaultWatcher, fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow } from "./workflows/sync-workflow.js";
 
 // ── Paths ──
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 const DB_PATH = `file:${path.join(VAULT_PATH, ".agent", "memory.db")}`;
 
-// ── Model provider (DeepSeek) ──
-
-const deepseek = createOpenAICompatible({
-  name: "deepseek",
-  baseURL: (process.env.APOTHECARY_OPENAI_BASE_URL ?? "https://api.deepseek.com") + "/v1",
-  apiKey: process.env.APOTHECARY_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
-});
-
-// ── Memory (LibSQL) ──
-
-const memory = new Memory({
-  storage: new LibSQLStore({ id: "apothecary-memory", url: DB_PATH }),
-  options: {
-    lastMessages: 20,
-    observationalMemory: true,
-  },
-});
-
-// ── Agent ──
-
-export const vaultReviewer = new Agent({
-  id: "vault-reviewer",
-  name: "Vault Reviewer",
-  description:
-    "Read-only vault reviewer that produces knowledge maps, maintenance reviews, answers questions, and proposes edits.",
-  instructions:
-    "You are apothecary-agent, a personal knowledge maintenance assistant for Yuy's vault. " +
-    "Use tools to scan, read, search, review, and propose edits. " +
-    "Answer in Chinese when the user writes Chinese. Be concise.",
-  model: deepseek("deepseek-chat"),
-  memory,
-  tools: {
-    scanVault: scanVaultTool,
-    readMarkdown: readMarkdownTool,
-    writeReview: writeReviewTool,
-    queryVault: queryVaultTool,
-    proposeEdit: proposeEditTool,
-    ingestVault: ingestVaultTool,
-    moveVaultFile: moveVaultFileTool,
-  },
-});
-
-// ── Utility helpers ──
+// ── Helpers ──
 
 function toPortablePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
@@ -76,34 +27,6 @@ function isMarkdownPath(p: string): boolean {
 
 function ensureMarkdownPath(p: string): void {
   if (!isMarkdownPath(p)) throw Object.assign(new Error("Only .md files can be edited"), { statusCode: 400 });
-}
-
-// ── File watcher ──
-
-let watcher: FSWatcher | null = null;
-
-function startVaultWatcher(): void {
-  if (watcher) return;
-  try {
-    watcher = watch(VAULT_PATH, { recursive: true }, (_eventType, filename) => {
-      const relativePath = toPortablePath(filename ?? "");
-      if (!relativePath || relativePath.startsWith(".")) return;
-      if (!isMarkdownPath(relativePath)) return;
-      const absolutePath = path.join(VAULT_PATH, relativePath);
-      fs.stat(absolutePath)
-        .then((stat) => {
-          if (stat.isFile()) {
-            reindexFile(relativePath).catch(() => {});
-          } else {
-            removeFromIndex(relativePath).catch(() => {});
-          }
-        })
-        .catch(() => removeFromIndex(relativePath).catch(() => {}));
-    });
-    console.log("Vault watcher started");
-  } catch {
-    console.warn("Vault watcher failed to start");
-  }
 }
 
 // ── Vault tree ──
@@ -227,6 +150,7 @@ async function handleReindex(c: ContextWithMastra) {
 
 export const mastra = new Mastra({
   agents: { vaultReviewer },
+  workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow },
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   server: {
     port: Number(process.env.APOTHECARY_UI_PORT ?? 8787),
