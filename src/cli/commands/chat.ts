@@ -1,5 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import readline from "node:readline";
+import { promises as fs } from "node:fs";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
 import { loadConfig } from "../../config/config.js";
@@ -60,9 +61,16 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
   );
   const workspace = await ensureAgentWorkspace(resolvedVault);
 
+  // Check if config exists — if not, auto-init
+  let configExists = false;
   try {
-    await loadConfig(workspace);
+    await fs.access(workspace.configPath);
+    configExists = true;
   } catch {
+    // config missing
+  }
+
+  if (!configExists) {
     console.log("Workspace not initialized. Running init...");
     await runInitWorkflow({ vaultPath: resolvedVault });
     console.log("Done. To analyze and reorganize your vault, type /organize\n");
