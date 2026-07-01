@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { PinoLogger } from "@mastra/loggers";
 import { registerApiRoute, type ContextWithMastra } from "@mastra/core/server";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -191,6 +192,7 @@ export const mastra = new Mastra({
   workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow },
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   vectors: { vaultChunks: vaultVector },
+  logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),
   server: {
     port: Number(process.env.APOTHECARY_UI_PORT ?? 8787),
     apiRoutes: [
