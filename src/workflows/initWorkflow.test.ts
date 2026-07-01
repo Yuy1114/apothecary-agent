@@ -21,6 +21,7 @@ describe("runInitWorkflow", () => {
       ".agent/config.yaml",
       ".agent/protocol/kb_protocol.md",
       ".agent/protocol/kb_protocol.yaml",
+      ".agent/structure.yaml",
     ]);
     await expect(readFile(path.join(vaultPath, ".agent", "config.yaml"), "utf8")).resolves.toContain("version: 1");
     await expect(readFile(path.join(vaultPath, ".agent", "logs", "init.log"), "utf8")).resolves.toContain(

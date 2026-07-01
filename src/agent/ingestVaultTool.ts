@@ -3,31 +3,9 @@ import { z } from "zod";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile } from "../rag/chromaStore.js";
+import { loadStructure, classifyWithStructure } from "./vaultStructure.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-
-const TOPIC_MAP: Array<{ keywords: string[]; dir: string; label: string }> = [
-  { keywords: ["java", "spring", "mybatis", "jvm", "并发", "redis", "rabbitmq", "websocket", "微服务"], dir: "notes/programming/Java", label: "Java 后端" },
-  { keywords: ["redis"], dir: "notes/programming/Redis", label: "Redis" },
-  { keywords: ["react", "前端", "vite", "swr", "jotai"], dir: "notes/programming/React", label: "React" },
-  { keywords: ["javascript", "js", "dom", "typescript", "ts"], dir: "notes/programming/JavaScript", label: "JavaScript" },
-  { keywords: ["算法", "数据结构", "leetcode", "二叉树", "链表", "动态规划", "bfs", "dfs"], dir: "notes/programming/Data Structures & Algorithms", label: "数据结构与算法" },
-  { keywords: ["面试", "简历", "投递", "岗位", "jd"], dir: "career", label: "求职" },
-  { keywords: ["项目", "agent", "apothecary", "do-together", "chat-room", "edu-flow"], dir: "projects", label: "项目" },
-  { keywords: ["感想", "反思", "复盘", "总结"], dir: "reflections", label: "反思" },
-];
-
-function classifyContent(content: string, lower: string) {
-  let best = { dir: "inbox", label: "未分类", score: 0 };
-  for (const topic of TOPIC_MAP) {
-    const hits = topic.keywords.filter((kw) => lower.includes(kw)).length;
-    if (hits > best.score) best = { dir: topic.dir, label: topic.label, score: hits };
-    if (lower.includes(topic.dir.toLowerCase())) {
-      best = { dir: topic.dir, label: topic.label, score: Math.max(best.score, 10) };
-    }
-  }
-  return best;
-}
 
 function slugify(text: string): string {
   return text.replace(/[^\w\u4e00-\u9fff\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 60);
@@ -36,11 +14,11 @@ function slugify(text: string): string {
 export const ingestVaultTool = createTool({
   id: "ingestVault",
   description:
-    "Ingest new content into the vault. Classifies content, creates a file in the right directory, updates README, and auto-indexes for search.",
+    "Ingest new content into the vault. Classifies content using the vault structure config (.agent/structure.yaml), creates a file in the right directory, updates README, and auto-indexes for search.",
   inputSchema: z.object({
     content: z.string().describe("The full content to ingest."),
     title: z.string().optional().describe("Suggested title."),
-    topic: z.string().optional().describe("Suggested topic area."),
+    topic: z.string().optional().describe("Hint: directory path like 'notes/programming/Redis' or description match."),
   }),
   outputSchema: z.object({
     filePath: z.string(),
@@ -49,13 +27,37 @@ export const ingestVaultTool = createTool({
     readmeUpdated: z.boolean(),
   }),
   execute: async ({ content, title: suggestedTitle, topic: suggestedTopic }) => {
+    const structure = await loadStructure();
     const lower = content.toLowerCase();
-    const classification = suggestedTopic
-      ? TOPIC_MAP.find((t) => t.keywords.includes(suggestedTopic.toLowerCase()) || t.dir.includes(suggestedTopic.toLowerCase()))
-      : null;
 
-    const { dir, label } = classification ?? classifyContent(content, lower);
+    // Match by explicit topic hint
+    let dir = "inbox";
+    let label = "未分类";
 
+    if (suggestedTopic) {
+      // Try exact dir match first
+      if (structure.directories[suggestedTopic]) {
+        dir = suggestedTopic;
+        label = structure.directories[suggestedTopic].description;
+      } else {
+        // Try keyword match against all directories
+        for (const [d, def] of Object.entries(structure.directories)) {
+          if (!def.keywords) continue;
+          if (def.keywords.some((kw) => suggestedTopic.toLowerCase().includes(kw))) {
+            dir = d;
+            label = def.description;
+            break;
+          }
+        }
+      }
+    }
+
+    // Fall back to content classification
+    if (dir === "inbox") {
+      ({ dir, label } = classifyWithStructure(content, structure));
+    }
+
+    // Generate title
     const headingMatch = content.match(/^#\s+(.+)/m);
     const title = suggestedTitle ?? headingMatch?.[1] ?? content.split("\n")[0]?.slice(0, 60) ?? "untitled";
     const fileName = `${slugify(title)}.md`;
@@ -63,10 +65,7 @@ export const ingestVaultTool = createTool({
     await fs.mkdir(dirPath, { recursive: true });
 
     const timestamp = new Date().toISOString().split("T")[0];
-    const fileContent = content.startsWith("#")
-      ? `---\ntitle: "${title}"\ntopic: "${label}"\ncreated: ${timestamp}\ntype: note\n---\n\n${content}`
-      : `---\ntitle: "${title}"\ntopic: "${label}"\ncreated: ${timestamp}\ntype: note\n---\n\n${content}`;
-
+    const fileContent = `---\ntitle: "${title}"\ntopic: "${label}"\ncreated: ${timestamp}\ntype: note\n---\n\n${content}`;
     const filePath = path.join(dirPath, fileName);
     await fs.writeFile(filePath, fileContent, "utf8");
 
