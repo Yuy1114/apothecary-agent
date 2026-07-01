@@ -1,4 +1,6 @@
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { MaintenanceReviewSchema, type MaintenanceReview } from "../domain/maintenanceReview.js";
 import { KnowledgeMapSchema, type KnowledgeMap } from "../domain/knowledgeMap.js";
@@ -8,6 +10,7 @@ import type { ReviewerModel, KnowledgeMapInput, MaintenanceReviewInput } from ".
 import { scanVaultTool, readMarkdownTool, writeReviewTool } from "./tools.js";
 import { queryVaultTool } from "./queryVaultTool.js";
 import { proposeEditTool } from "./proposeEditTool.js";
+import path from "node:path";
 
 export class MastraReviewerModel implements ReviewerModel {
   private readonly agent: Agent;
@@ -17,6 +20,7 @@ export class MastraReviewerModel implements ReviewerModel {
   }
 
   constructor(options: { model: string; apiKey?: string; baseURL?: string }) {
+    const vaultPath = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
     const deepseek = createOpenAICompatible({
       name: "deepseek",
       baseURL: (options.baseURL ?? process.env.APOTHECARY_OPENAI_BASE_URL ?? "https://api.deepseek.com") + "/v1",
@@ -33,6 +37,13 @@ export class MastraReviewerModel implements ReviewerModel {
         "Use scanVault to explore the vault and readMarkdown to inspect interesting files in detail. " +
         "When done, call writeReview to persist your findings.",
       model: deepseek(options.model),
+      memory: new Memory({
+        storage: new LibSQLStore({
+          id: "apothecary-reviewer",
+          url: `file:${path.join(vaultPath, ".agent", "memory.db")}`,
+        }),
+        options: { lastMessages: 20 },
+      }),
       tools: {
         scanVault: scanVaultTool,
         readMarkdown: readMarkdownTool,

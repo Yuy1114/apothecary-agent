@@ -1,9 +1,15 @@
 import { Agent } from "@mastra/core/agent";
 import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { scanVaultTool, readMarkdownTool, writeReviewTool } from "../agent/tools.js";
 import { queryVaultTool } from "../agent/queryVaultTool.js";
 import { proposeEditTool } from "../agent/proposeEditTool.js";
+import path from "node:path";
+
+const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+const DB_PATH = `file:${path.join(VAULT_PATH, ".agent", "memory.db")}`;
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
@@ -11,16 +17,21 @@ const deepseek = createOpenAICompatible({
   apiKey: process.env.APOTHECARY_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
 });
 
+const memory = new Memory({
+  storage: new LibSQLStore({ id: "apothecary-memory", url: DB_PATH }),
+  options: { lastMessages: 20 },
+});
+
 export const vaultReviewer = new Agent({
   id: "vault-reviewer",
   name: "Vault Reviewer",
-  description: "Read-only vault reviewer that produces knowledge maps and maintenance reviews for a local Markdown knowledge base.",
+  description:
+    "Read-only vault reviewer that produces knowledge maps, maintenance reviews, answers questions, and proposes edits.",
   instructions:
-    "You are apothecary-agent, a read-only vault reviewer. " +
-    "Review the vault and produce structured maintenance findings. " +
-    "Use scanVault to explore the vault and readMarkdown to inspect files in detail. " +
-    "When done, call writeReview to persist your findings.",
+    "You are apothecary-agent, a personal knowledge maintenance assistant for Yuy's vault. " +
+    "Use tools to scan, read, search, review, and propose edits.",
   model: deepseek("deepseek-chat"),
+  memory,
   tools: {
     scanVault: scanVaultTool,
     readMarkdown: readMarkdownTool,
@@ -32,4 +43,5 @@ export const vaultReviewer = new Agent({
 
 export const mastra = new Mastra({
   agents: { vaultReviewer },
+  storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
 });

@@ -71,6 +71,10 @@ export function registerChatCommand(program: Command): void {
           const result = await agent.generate(input, {
             maxSteps: 8,
             system: CHAT_AGENT_INSTRUCTIONS,
+            memory: {
+              resource: "yuy",
+              thread: "chat-session",
+            },
           });
           console.log(result.text);
 
