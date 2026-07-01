@@ -23,6 +23,7 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^14.0.2",
+    "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
     "openai": "^6.45.0",

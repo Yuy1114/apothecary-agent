@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "dotenv/config";
 import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
 import { registerMapCommand } from "./commands/map.js";
