@@ -12,6 +12,10 @@ import { proposeEditTool } from "./proposeEditTool.js";
 export class MastraReviewerModel implements ReviewerModel {
   private readonly agent: Agent;
 
+  get rawAgent(): Agent {
+    return this.agent;
+  }
+
   constructor(options: { model: string; apiKey?: string; baseURL?: string }) {
     const deepseek = createOpenAICompatible({
       name: "deepseek",
