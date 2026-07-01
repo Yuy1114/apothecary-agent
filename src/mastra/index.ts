@@ -26,6 +26,8 @@ import {
   handleRagQuery,
   handleReindex,
 } from "./routes.js";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { EMBEDDING_MODEL } from "./tools/rag.js";
 
 const DB_PATH = "file:./local.db";
 
@@ -51,6 +53,7 @@ export const mastra = new Mastra({
   logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),
   memory: {
     apothecary: new Memory({
+      embedder: EMBEDDING_MODEL,
       options: {
         lastMessages: 20,
         observationalMemory: true,

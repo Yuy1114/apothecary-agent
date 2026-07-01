@@ -4,18 +4,24 @@ import { embed } from "ai";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import type { LibSQLVector } from "@mastra/libsql";
 
-const EMBEDDING_MODEL = new ModelRouterEmbeddingModel({
+export const EMBEDDING_MODEL = new ModelRouterEmbeddingModel({
   providerId: "aihubmix",
   modelId: "text-embedding-3-small",
-  url: (process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1") + "/embeddings",
-  apiKey: process.env.APOTHECARY_EMBEDDING_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
+  url: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
+  apiKey:
+    process.env.APOTHECARY_EMBEDDING_API_KEY ??
+    process.env.OPENAI_API_KEY ??
+    "",
 });
 
 const INDEX_NAME = "vault_chunks";
 
-function getVector(context: { mastra?: { getVector?: (name: string) => unknown } } | undefined): LibSQLVector {
+function getVector(
+  context: { mastra?: { getVector?: (name: string) => unknown } } | undefined
+): LibSQLVector {
   const vs = (context as any)?.mastra?.getVector?.("vaultChunks");
-  if (!vs) throw new Error("Vector store 'vaultChunks' not found in Mastra instance");
+  if (!vs)
+    throw new Error("Vector store 'vaultChunks' not found in Mastra instance");
   return vs as LibSQLVector;
 }
 
@@ -25,16 +31,22 @@ export const queryVaultTool = createTool({
     "Search the vault for relevant content using semantic search. Returns matching chunks with source file, heading breadcrumb, and content snippet.",
   inputSchema: z.object({
     query: z.string().describe("The search query."),
-    topK: z.number().optional().default(5).describe("Number of results to return."),
+    topK: z
+      .number()
+      .optional()
+      .default(5)
+      .describe("Number of results to return."),
   }),
   outputSchema: z.object({
-    results: z.array(z.object({
-      source: z.string(),
-      title: z.string().optional(),
-      headings: z.array(z.string()).optional(),
-      content: z.string(),
-      score: z.number(),
-    })),
+    results: z.array(
+      z.object({
+        source: z.string(),
+        title: z.string().optional(),
+        headings: z.array(z.string()).optional(),
+        content: z.string(),
+        score: z.number(),
+      })
+    ),
   }),
   execute: async ({ query, topK }, context) => {
     const { embedding } = await embed({ model: EMBEDDING_MODEL, value: query });
@@ -62,8 +74,10 @@ function parseHeadings(rawValue: unknown): string[] | undefined {
   if (typeof rawValue !== "string") return undefined;
   try {
     const parsed = JSON.parse(rawValue) as unknown;
-    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
-      ? parsed : undefined;
+    return Array.isArray(parsed) &&
+      parsed.every((item) => typeof item === "string")
+      ? parsed
+      : undefined;
   } catch {
     return undefined;
   }
