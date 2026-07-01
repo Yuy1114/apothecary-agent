@@ -16,7 +16,7 @@ The project-level `apothecary.config.yaml` stores the default vault path:
 
 ```yaml
 vault:
-  path: /Users/yuy/Apothecary-Vault
+  path: /Users/yuy/apothecary-vault
 ```
 
 All commands also accept `--vault <path>` to override that default.
