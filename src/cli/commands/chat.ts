@@ -187,8 +187,10 @@ async function autoOrganize(ctx: ChatContext) {
     if (confirm.toLowerCase() === "y" || confirm.toLowerCase() === "yes") {
       console.log("\nExecuting...\n");
       const execResult = await ctx.agent.generate(
-        "Execute the reorganization plan you just proposed. Use proposeEdit for each file move. " +
-          "For each new directory, create a README.md. Update structure.yaml with the final layout.",
+        "Execute the reorganization plan you just proposed. " +
+          "Use moveVaultFile for each file you need to move. " +
+          "For each new directory, use proposeEdit to create a README.md listing its contents. " +
+          "After all moves, use proposeEdit to update structure.yaml with the final layout.",
         {
           maxSteps: 30,
           system: CHAT_AGENT_INSTRUCTIONS,

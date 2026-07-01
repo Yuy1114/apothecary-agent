@@ -11,6 +11,7 @@ import { scanVaultTool, readMarkdownTool, writeReviewTool } from "./tools.js";
 import { queryVaultTool } from "./queryVaultTool.js";
 import { proposeEditTool } from "./proposeEditTool.js";
 import { ingestVaultTool } from "./ingestVaultTool.js";
+import { moveVaultFileTool } from "./moveVaultFileTool.js";
 import path from "node:path";
 
 export class MastraReviewerModel implements ReviewerModel {
@@ -52,6 +53,7 @@ export class MastraReviewerModel implements ReviewerModel {
         queryVault: queryVaultTool,
         proposeEdit: proposeEditTool,
         ingestVault: ingestVaultTool,
+        moveVaultFile: moveVaultFileTool,
       },
     });
   }
