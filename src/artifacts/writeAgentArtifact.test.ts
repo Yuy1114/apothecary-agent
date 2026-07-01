@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentWorkspace } from "../domain/workspace.js";
-import { writeJsonArtifact, writeMarkdownArtifact } from "./writeAgentArtifact.js";
+import { appendTextArtifact, writeJsonArtifact, writeMarkdownArtifact, writeTextArtifactIfMissing } from "./writeAgentArtifact.js";
 
 const tempDirs: string[] = [];
 
@@ -31,6 +31,26 @@ describe("writeAgentArtifact", () => {
     await expect(writeJsonArtifact({ workspace, artifactPath: outsidePath, value: { ok: false } })).rejects.toThrow(
       "Path escapes allowed directory",
     );
+  });
+
+  it("writes missing text artifacts without overwriting existing content", async () => {
+    const workspace = await createTempWorkspace();
+    const configPath = path.join(workspace.rootPath, "config.yaml");
+
+    await expect(writeTextArtifactIfMissing({ workspace, artifactPath: configPath, content: "version: 1\n" })).resolves.toBe(true);
+    await expect(writeTextArtifactIfMissing({ workspace, artifactPath: configPath, content: "version: 2\n" })).resolves.toBe(false);
+
+    await expect(readFile(configPath, "utf8")).resolves.toBe("version: 1\n");
+  });
+
+  it("appends text artifacts inside the agent workspace", async () => {
+    const workspace = await createTempWorkspace();
+    const logPath = path.join(workspace.logsDir, "init.log");
+
+    await appendTextArtifact({ workspace, artifactPath: logPath, content: "first\n" });
+    await appendTextArtifact({ workspace, artifactPath: logPath, content: "second\n" });
+
+    await expect(readFile(logPath, "utf8")).resolves.toBe("first\nsecond\n");
   });
 });
 

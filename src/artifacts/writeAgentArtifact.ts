@@ -27,6 +27,33 @@ export async function writeMarkdownArtifact(params: {
   });
 }
 
+export async function writeTextArtifactIfMissing(params: {
+  workspace: AgentWorkspace;
+  artifactPath: string;
+  content: string;
+}): Promise<boolean> {
+  assertAgentWorkspaceWrite(params.workspace.rootPath, params.artifactPath);
+  const exists = await fs
+    .access(params.artifactPath)
+    .then(() => true)
+    .catch(() => false);
+
+  if (exists) return false;
+
+  await writeTextArtifact(params);
+  return true;
+}
+
+export async function appendTextArtifact(params: {
+  workspace: AgentWorkspace;
+  artifactPath: string;
+  content: string;
+}): Promise<void> {
+  assertAgentWorkspaceWrite(params.workspace.rootPath, params.artifactPath);
+  await fs.mkdir(path.dirname(params.artifactPath), { recursive: true });
+  await fs.appendFile(params.artifactPath, params.content, "utf8");
+}
+
 async function writeTextArtifact(params: {
   workspace: AgentWorkspace;
   artifactPath: string;
