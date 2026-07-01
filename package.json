@@ -22,6 +22,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@mastra/core": "^1.47.0",
     "commander": "^14.0.2",
     "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",

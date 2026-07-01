@@ -10,6 +10,12 @@ export const ApothecaryConfigSchema = z.object({
       apiKey: z.string().optional(),
       baseURL: z.string().default("https://api.deepseek.com"),
     }),
+    z.object({
+      provider: z.literal("mastra"),
+      model: z.string().default("deepseek-chat"),
+      apiKey: z.string().optional(),
+      baseURL: z.string().default("https://api.deepseek.com"),
+    }),
   ]),
   scan: z.object({
     ignore: z.array(z.string()),
