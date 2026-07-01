@@ -71,9 +71,9 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
   }
 
   if (!configExists) {
-    console.log("Workspace not initialized. Running init...");
+    console.log("Workspace not initialized. Running init...\n");
     await runInitWorkflow({ vaultPath: resolvedVault });
-    console.log("Done. To analyze and reorganize your vault, type /organize\n");
+    console.log("Init done. Now analyzing your vault...\n");
   }
 
   const config = await loadConfig(workspace);
@@ -83,10 +83,17 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
   console.log("╔══════════════════════════════════════════╗");
   console.log("║        apothecary-agent                 ║");
   console.log("╠══════════════════════════════════════════╣");
-  console.log("║  /organize  — reorganize entire vault   ║");
-  console.log("║  /init /index /status /review /map      ║");
-  console.log("║  /edits /help  |  exit to quit          ║");
-  console.log("╚══════════════════════════════════════════╝\n");
+
+  // Auto-organize on first launch
+  if (!configExists) {
+    console.log("║  Analyzing vault structure...           ║");
+    console.log("╚══════════════════════════════════════════╝\n");
+    await autoOrganize(ctx);
+  } else {
+    console.log("║  /organize /index /review /map /help    ║");
+    console.log("║  Type anything to chat, exit to quit    ║");
+    console.log("╚══════════════════════════════════════════╝\n");
+  }
 
   while (true) {
     const input = await question("apothecary> ");
@@ -112,7 +119,8 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
     if (input === "/edits") { await handleEdits(); continue; }
     if (input.startsWith("/edits apply ")) { await handleEditApply(input.slice(13).trim()); continue; }
     if (input === "/organize") {
-      console.log("Starting vault organization... (Agent will scan and analyze)\n");
+      await autoOrganize(ctx);
+      continue;
     }
     if (input.startsWith("/")) { console.log("Unknown command. Type /help."); continue; }
 
@@ -150,6 +158,52 @@ async function handleEditApply(id: string) {
   if (!p || p.status !== "proposed") { console.log(p ? `Already ${p.status}.` : "Not found."); return; }
   if (await hitlConfirm(p)) { await applyProposal(p); console.log("Applied."); }
   else console.log("Rejected.");
+}
+
+async function autoOrganize(ctx: ChatContext) {
+  console.log("Scanning your vault to understand its structure...\n");
+
+  try {
+    const result = await ctx.agent.generate(
+      "Organize this vault. Follow the VAULT ORGANIZE WORKFLOW: " +
+        "1. scanVault to see all files. 2. readMarkdown on key files to understand content. " +
+        "3. Propose a new directory structure based on actual content. " +
+        "4. List every suggested move with reasons. " +
+        "Start now — scan the vault and propose a structure.",
+      {
+        maxSteps: 30,
+        system: CHAT_AGENT_INSTRUCTIONS,
+        memory: { resource: "yuy", thread: "organize-session" },
+      },
+    );
+
+    console.log(result.text);
+    const tools = [...new Set(result.toolCalls?.map((tc: { payload?: { toolName?: string } }) => tc.payload?.toolName).filter(Boolean) ?? [])];
+    if (tools.length) console.log(`\n[tools: ${tools.join(", ")}]`);
+
+    console.log('\nType "yes" to execute the plan, or anything else to skip.');
+    const confirm = await question("execute? [y/N] ");
+
+    if (confirm.toLowerCase() === "y" || confirm.toLowerCase() === "yes") {
+      console.log("\nExecuting...\n");
+      const execResult = await ctx.agent.generate(
+        "Execute the reorganization plan you just proposed. Use proposeEdit for each file move. " +
+          "For each new directory, create a README.md. Update structure.yaml with the final layout.",
+        {
+          maxSteps: 30,
+          system: CHAT_AGENT_INSTRUCTIONS,
+          memory: { resource: "yuy", thread: "organize-session" },
+        },
+      );
+      console.log(execResult.text);
+      console.log("\nReorganization complete. Restarting chat...\n");
+    } else {
+      console.log("Skipped. You can run /organize later.\n");
+    }
+  } catch (error) {
+    console.log(`Organize interrupted: ${error instanceof Error ? error.message : String(error)}`);
+    console.log("You can run /organize later.\n");
+  }
 }
 
 function showHelp() {
