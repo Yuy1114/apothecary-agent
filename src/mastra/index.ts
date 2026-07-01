@@ -37,7 +37,14 @@ setVectorStore(vaultVector);
 
 export const mastra = new Mastra({
   agents: { vaultReviewer, vaultCurator, vaultIngestor },
-  workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow, initWorkflow, reviewWorkflow, mapWorkflow },
+  workflows: {
+    fullReindexWorkflow,
+    fileChangedWorkflow,
+    fileDeletedWorkflow,
+    initWorkflow,
+    reviewWorkflow,
+    mapWorkflow,
+  },
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   vectors: { vaultChunks: vaultVector },
   logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),

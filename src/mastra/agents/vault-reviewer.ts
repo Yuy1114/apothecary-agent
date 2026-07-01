@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { queryVaultTool } from "../tools/query-vault.js";
+import { queryVaultTool } from "../tools/rag.js";
 import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
 

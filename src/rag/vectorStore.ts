@@ -3,8 +3,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { MDocument } from "@mastra/rag";
 import { embed, embedMany } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
 import { LibSQLVector } from "@mastra/libsql";
+import { getEmbeddingModel } from "../mastra/embedding.js";
 
 const INDEX_NAME = "vault_chunks";
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -22,22 +22,7 @@ function getVectorStore(): LibSQLVector {
   return store;
 }
 
-// ── Embedding provider (aihubmix) ──
-
-function getEmbeddingProvider() {
-  return createOpenAI({
-    apiKey: process.env.APOTHECARY_EMBEDDING_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
-    baseURL: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
-  });
-}
-
-function getEmbeddingModel() {
-  return getEmbeddingProvider().embedding(
-    process.env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small",
-  );
-}
-
-// ── Types ──
+// ── Vector store (injected by Mastra setup) ──
 
 type ChunkDraft = {
   id: string;
