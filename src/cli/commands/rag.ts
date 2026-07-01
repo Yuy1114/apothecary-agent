@@ -27,8 +27,9 @@ export function registerRagCommands(program: Command): void {
       }
 
       for (const result of results) {
-        console.log(`\n--- ${result.source} ---`);
-        console.log(result.content.slice(0, 500));
+        const headingPath = result.headings?.length ? ` > ${result.headings.join(" > ")}` : "";
+        console.log(`\n📄 ${result.source}${headingPath}`);
+        console.log(`   ${result.content.slice(0, 500)}`);
       }
     });
 }

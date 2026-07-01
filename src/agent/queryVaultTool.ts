@@ -4,15 +4,20 @@ import { queryVault } from "../rag/chromaStore.js";
 
 export const queryVaultTool = createTool({
   id: "queryVault",
-  description: "Search the vault knowledge base for relevant content. Use this to answer questions about what the user has learned, written, or stored in their notes.",
+  description:
+    "Search the vault for relevant content using semantic search. Returns matching chunks with their source file, heading breadcrumb, and content snippet. Use this to answer questions about what the user has learned or stored.",
   inputSchema: z.object({
-    query: z.string().describe("The search query. Be specific about what you want to find."),
+    query: z.string().describe("The search query."),
   }),
   outputSchema: z.object({
-    results: z.array(z.object({
-      source: z.string(),
-      content: z.string(),
-    })),
+    results: z.array(
+      z.object({
+        source: z.string(),
+        title: z.string().optional(),
+        headings: z.array(z.string()).optional(),
+        content: z.string(),
+      }),
+    ),
   }),
   execute: async ({ query }) => {
     const results = await queryVault(query, 5);
