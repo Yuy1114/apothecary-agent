@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { Memory } from "@mastra/memory";
 import { PinoLogger } from "@mastra/loggers";
 import { registerApiRoute } from "@mastra/core/server";
 
@@ -48,6 +49,15 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   vectors: { vaultChunks: vaultVector },
   logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),
+  memory: {
+    apothecary: new Memory({
+      options: {
+        lastMessages: 20,
+        observationalMemory: true,
+        workingMemory: { enabled: true },
+      },
+    }),
+  },
   server: {
     port: Number(process.env.APOTHECARY_UI_PORT ?? 8787),
     apiRoutes: [
