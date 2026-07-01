@@ -19,10 +19,13 @@ export const ApothecaryConfigSchema = z.object({
   map: z.object({
     max_topics: z.number().int().positive(),
     max_files_per_topic: z.number().int().positive(),
+    max_files_per_context: z.number().int().positive(),
   }),
   review: z.object({
     long_context_word_threshold: z.number().int().positive(),
     long_context_line_threshold: z.number().int().positive(),
+    max_files_per_context: z.number().int().positive(),
+    min_review_size_bytes: z.number().int().nonnegative(),
   }),
 });
 

@@ -11,17 +11,20 @@ export const defaultConfig: ApothecaryConfig = {
     baseURL: "https://api.deepseek.com",
   },
   scan: {
-    ignore: [".agent/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
+    ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
     include_hash: true,
     recent_files_limit: 10,
   },
   map: {
     max_topics: 20,
     max_files_per_topic: 12,
+    max_files_per_context: 30,
   },
   review: {
     long_context_word_threshold: 5000,
     long_context_line_threshold: 300,
+    max_files_per_context: 200,
+    min_review_size_bytes: 100,
   },
 };
 

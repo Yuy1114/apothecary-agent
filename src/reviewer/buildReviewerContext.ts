@@ -1,22 +1,34 @@
 import type { VaultFile, VaultScan } from "../domain/vault.js";
 import type { KnowledgeMapContext, MaintenanceReviewContext, ReviewerFileContext } from "./reviewerContext.js";
 
-export function buildKnowledgeMapContext(scan: VaultScan): KnowledgeMapContext {
-  return buildBaseContext(scan);
+type BuildOptions = {
+  maxFiles: number;
+  minSizeBytes: number;
+};
+
+export function buildKnowledgeMapContext(scan: VaultScan, options: BuildOptions): KnowledgeMapContext {
+  return buildBaseContext(scan, options);
 }
 
-export function buildMaintenanceReviewContext(scan: VaultScan): MaintenanceReviewContext {
-  return buildBaseContext(scan);
+export function buildMaintenanceReviewContext(scan: VaultScan, options: BuildOptions): MaintenanceReviewContext {
+  return buildBaseContext(scan, options);
 }
 
-function buildBaseContext(scan: VaultScan): KnowledgeMapContext {
+function buildBaseContext(scan: VaultScan, options: BuildOptions): KnowledgeMapContext {
+  const files = scan.files
+    .filter((file) => file.mediaType === "markdown")
+    .filter((file) => file.sizeBytes >= options.minSizeBytes)
+    .sort((a, b) => (b.wordCount ?? 0) - (a.wordCount ?? 0))
+    .slice(0, options.maxFiles)
+    .map(toReviewerFileContext);
+
   return {
     scanId: scan.id,
     vaultPath: scan.vaultPath,
     scopePath: scan.scopePath,
     scannedAt: scan.scannedAt,
     stats: scan.stats,
-    files: scan.files.map(toReviewerFileContext),
+    files,
   };
 }
 

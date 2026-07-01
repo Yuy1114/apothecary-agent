@@ -4,7 +4,7 @@ import { buildKnowledgeMapContext } from "./buildReviewerContext.js";
 
 describe("buildReviewerContext", () => {
   it("keeps safe Markdown headings and a bounded excerpt without exposing full frontmatter values", () => {
-    const context = buildKnowledgeMapContext(makeScan());
+    const context = buildKnowledgeMapContext(makeScan(), { maxFiles: 100, minSizeBytes: 0 });
 
     expect(context.files[0]).toMatchObject({
       path: "projects/apothecary-agent/PRD.md",

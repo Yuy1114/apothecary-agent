@@ -28,7 +28,10 @@ export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ j
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
-  const context = buildMaintenanceReviewContext(scan);
+  const context = buildMaintenanceReviewContext(scan, {
+    maxFiles: config.review.max_files_per_context,
+    minSizeBytes: config.review.min_review_size_bytes,
+  });
   const reviewer = createReviewerModel(config);
   const rawReview = MaintenanceReviewSchema.parse(
     await reviewer.generateMaintenanceReview({

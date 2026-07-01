@@ -26,7 +26,10 @@ export async function runMapWorkflow(input: MapWorkflowInput): Promise<{ jsonPat
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
-  const context = buildKnowledgeMapContext(scan);
+  const context = buildKnowledgeMapContext(scan, {
+    maxFiles: config.map.max_files_per_context,
+    minSizeBytes: config.review.min_review_size_bytes,
+  });
   const reviewer = createReviewerModel(config);
   const map = KnowledgeMapSchema.parse(
     await reviewer.generateKnowledgeMap({
