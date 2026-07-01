@@ -1,7 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { loadConfig } from "../config/config.js";
-import type { VaultScan } from "../domain/vault.js";
+import { VaultScanSchema, type VaultScan } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
@@ -20,13 +20,13 @@ export async function runStatusWorkflow(input: StatusWorkflowInput): Promise<Sta
   const vaultPath = await resolveExistingDirectory(input.vaultPath);
   const workspace = await ensureAgentWorkspace(vaultPath);
   const config = await loadConfig(workspace);
-  const scan = await scanVault({
+  const scan = VaultScanSchema.parse(await scanVault({
     vaultPath,
     scopePath: input.scopePath,
     includeHash: config.scan.include_hash,
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
-  });
+  }));
   const lastScanPath = path.join(workspace.metadataDir, "last-scan.json");
   await fs.writeFile(lastScanPath, `${JSON.stringify(scan, null, 2)}\n`, "utf8");
 

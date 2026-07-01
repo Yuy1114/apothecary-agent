@@ -1,33 +1,40 @@
-export type MaintenanceFindingType =
-  | "stale_note"
-  | "long_context"
-  | "orphan_note"
-  | "duplicate_topic"
-  | "unassimilated_ai_output"
-  | "missing_index"
-  | "unclear_location";
+import { z } from "zod";
 
-export type FindingSeverity = "low" | "medium" | "high";
+export const MaintenanceFindingTypeSchema = z.enum([
+  "stale_note",
+  "long_context",
+  "orphan_note",
+  "duplicate_topic",
+  "unassimilated_ai_output",
+  "missing_index",
+  "unclear_location",
+]);
+export type MaintenanceFindingType = z.infer<typeof MaintenanceFindingTypeSchema>;
 
-export type MaintenanceFinding = {
-  id: string;
-  type: MaintenanceFindingType;
-  severity: FindingSeverity;
-  filePaths: string[];
-  observation: string;
-  whyItMatters: string;
-  suggestion: string;
-  relatedFiles: string[];
-  confidence: number;
-};
+export const FindingSeveritySchema = z.enum(["low", "medium", "high"]);
+export type FindingSeverity = z.infer<typeof FindingSeveritySchema>;
 
-export type MaintenanceReview = {
-  id: string;
-  vaultPath: string;
-  scopePath?: string;
-  generatedAt: string;
-  basedOnScanId: string;
-  basedOnMapId?: string;
-  findings: MaintenanceFinding[];
-  summary: string;
-};
+export const MaintenanceFindingSchema = z.object({
+  id: z.string().min(1),
+  type: MaintenanceFindingTypeSchema,
+  severity: FindingSeveritySchema,
+  filePaths: z.array(z.string().min(1)),
+  observation: z.string().min(1),
+  whyItMatters: z.string().min(1),
+  suggestion: z.string().min(1),
+  relatedFiles: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+});
+export type MaintenanceFinding = z.infer<typeof MaintenanceFindingSchema>;
+
+export const MaintenanceReviewSchema = z.object({
+  id: z.string().min(1),
+  vaultPath: z.string().min(1),
+  scopePath: z.string().optional(),
+  generatedAt: z.string().min(1),
+  basedOnScanId: z.string().min(1),
+  basedOnMapId: z.string().optional(),
+  findings: z.array(MaintenanceFindingSchema),
+  summary: z.string(),
+});
+export type MaintenanceReview = z.infer<typeof MaintenanceReviewSchema>;
