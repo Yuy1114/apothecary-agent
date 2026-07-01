@@ -6,6 +6,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { scanVaultTool, readMarkdownTool, writeReviewTool } from "../agent/tools.js";
 import { queryVaultTool } from "../agent/queryVaultTool.js";
 import { proposeEditTool } from "../agent/proposeEditTool.js";
+import { ingestVaultTool } from "../agent/ingestVaultTool.js";
 import path from "node:path";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -38,6 +39,7 @@ export const vaultReviewer = new Agent({
     writeReview: writeReviewTool,
     queryVault: queryVaultTool,
     proposeEdit: proposeEditTool,
+    ingestVault: ingestVaultTool,
   },
 });
 

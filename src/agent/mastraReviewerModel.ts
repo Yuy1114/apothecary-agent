@@ -10,6 +10,7 @@ import type { ReviewerModel, KnowledgeMapInput, MaintenanceReviewInput } from ".
 import { scanVaultTool, readMarkdownTool, writeReviewTool } from "./tools.js";
 import { queryVaultTool } from "./queryVaultTool.js";
 import { proposeEditTool } from "./proposeEditTool.js";
+import { ingestVaultTool } from "./ingestVaultTool.js";
 import path from "node:path";
 
 export class MastraReviewerModel implements ReviewerModel {
@@ -50,6 +51,7 @@ export class MastraReviewerModel implements ReviewerModel {
         writeReview: writeReviewTool,
         queryVault: queryVaultTool,
         proposeEdit: proposeEditTool,
+        ingestVault: ingestVaultTool,
       },
     });
   }
