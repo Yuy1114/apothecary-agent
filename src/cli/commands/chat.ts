@@ -95,11 +95,14 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
     console.log("╚══════════════════════════════════════════╝\n");
   }
 
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const q = (prompt: string) => new Promise<string>((resolve) => rl.question(prompt, (a: string) => resolve(a.trim())));
+
   while (true) {
-    const input = await question("apothecary> ");
+    const input = await q("apothecary> ");
 
     if (!input) continue;
-    if (input === "exit" || input === "quit") { console.log("Bye."); break; }
+    if (input === "exit" || input === "quit") { console.log("Bye."); rl.close(); break; }
     if (input === "/help") { showHelp(); continue; }
     if (input === "/init") { await runInitWorkflow({ vaultPath: ctx.vaultPath }); console.log("Done."); continue; }
     if (input === "/index") { const { indexed } = await indexVault(); console.log(`Done: ${indexed} chunks.`); continue; }
@@ -182,7 +185,7 @@ async function autoOrganize(ctx: ChatContext) {
     if (tools.length) console.log(`\n[tools: ${tools.join(", ")}]`);
 
     console.log('\nType "yes" to execute the plan, or anything else to skip.');
-    const confirm = await question("execute? [y/N] ");
+    const confirm = await ask("execute? [y/N] ");
 
     if (confirm.toLowerCase() === "y" || confirm.toLowerCase() === "yes") {
       console.log("\nExecuting...\n");
@@ -221,7 +224,8 @@ function showHelp() {
   console.log("  exit           Quit");
 }
 
-function question(prompt: string): Promise<string> {
+// One-off readline for autoOrganize confirmation
+function ask(prompt: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
     rl.question(prompt, (answer) => { rl.close(); resolve(answer.trim()); });
