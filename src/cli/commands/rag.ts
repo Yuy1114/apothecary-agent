@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { indexVault, queryVault } from "../../rag/vectorStore.js";
+import { indexVault, queryVault } from "../../mastra/tools/rag.js";
 
 export function registerRagCommands(program: Command): void {
   program

@@ -8,7 +8,7 @@ import { registerApiRoute } from "@mastra/core/server";
 import { vaultReviewer } from "./agents/vault-reviewer.js";
 import { vaultCurator } from "./agents/vault-curator.js";
 import { vaultIngestor } from "./agents/vault-ingestor.js";
-import { setVectorStore } from "../rag/vectorStore.js";
+import { setVectorStore } from "./tools/rag.js";
 import {
   startVaultWatcher,
   fullReindexWorkflow,

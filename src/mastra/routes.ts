@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ContextWithMastra } from "@mastra/core/server";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
-import { queryVault, indexVault, reindexFile } from "../rag/vectorStore.js";
+import { queryVault, indexVault, reindexFile } from "./tools/rag.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
