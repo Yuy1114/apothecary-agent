@@ -8,6 +8,7 @@ export function getAgentWorkspace(vaultPath: string): AgentWorkspace {
 
   return {
     rootPath,
+    configPath: path.join(rootPath, "config.yaml"),
     protocolDir,
     protocolPath: path.join(protocolDir, "kb_protocol.md"),
     protocolYamlPath: path.join(protocolDir, "kb_protocol.yaml"),

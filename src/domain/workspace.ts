@@ -1,5 +1,6 @@
 export type AgentWorkspace = {
   rootPath: string;
+  configPath: string;
   protocolDir: string;
   protocolPath: string;
   protocolYamlPath: string;

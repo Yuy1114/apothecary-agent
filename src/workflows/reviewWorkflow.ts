@@ -1,4 +1,5 @@
 import path from "node:path";
+import { loadConfig } from "../config/config.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
@@ -15,8 +16,18 @@ export type ReviewWorkflowInput = {
 export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ jsonPath: string; markdownPath: string }> {
   const vaultPath = await resolveExistingDirectory(input.vaultPath);
   const workspace = await ensureAgentWorkspace(vaultPath);
-  const scan = await scanVault({ vaultPath, scopePath: input.scopePath });
-  const review = buildDeterministicMaintenanceReview(scan);
+  const config = await loadConfig(workspace);
+  const scan = await scanVault({
+    vaultPath,
+    scopePath: input.scopePath,
+    includeHash: config.scan.include_hash,
+    ignore: config.scan.ignore,
+    recentFilesLimit: config.scan.recent_files_limit,
+  });
+  const review = buildDeterministicMaintenanceReview(scan, {
+    longContextWordThreshold: config.review.long_context_word_threshold,
+    longContextLineThreshold: config.review.long_context_line_threshold,
+  });
   const stamp = timestampForFile();
   const jsonPath = path.join(workspace.reviewsDir, `review-${stamp}.json`);
   const markdownPath = path.join(workspace.reviewsDir, `review-${stamp}.md`);

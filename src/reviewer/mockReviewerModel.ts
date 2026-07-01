@@ -4,7 +4,15 @@ import type { VaultScan } from "../domain/vault.js";
 import { createId } from "../utils/ids.js";
 import { nowIso } from "../utils/time.js";
 
-export function buildDeterministicKnowledgeMap(scan: VaultScan): KnowledgeMap {
+export type BuildDeterministicKnowledgeMapOptions = {
+  maxTopics: number;
+  maxFilesPerTopic: number;
+};
+
+export function buildDeterministicKnowledgeMap(
+  scan: VaultScan,
+  options: BuildDeterministicKnowledgeMapOptions,
+): KnowledgeMap {
   const topicMap = new Map<string, KnowledgeTopic>();
 
   for (const file of scan.files.filter((candidate) => candidate.mediaType === "markdown")) {
@@ -33,11 +41,11 @@ export function buildDeterministicKnowledgeMap(scan: VaultScan): KnowledgeMap {
   const topics = [...topicMap.values()]
     .map((topic) => ({
       ...topic,
-      relatedFiles: topic.relatedFiles.slice(0, 12),
+      relatedFiles: topic.relatedFiles.slice(0, options.maxFilesPerTopic),
       summary: `${topic.title} contains ${topic.relatedFiles.length} markdown file(s).`,
     }))
     .sort((a, b) => b.relatedFiles.length - a.relatedFiles.length)
-    .slice(0, 20);
+    .slice(0, options.maxTopics);
 
   return {
     id: createId("map"),

@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { defaultConfigYaml } from "../config/config.js";
 import { defaultProtocolMarkdown, defaultProtocolYaml } from "../protocol/defaultProtocol.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { nowIso } from "../utils/time.js";
@@ -19,6 +20,10 @@ export async function runInitWorkflow(input: InitWorkflowInput): Promise<InitWor
   const vaultPath = await resolveExistingDirectory(input.vaultPath);
   const workspace = await ensureAgentWorkspace(vaultPath);
   const created: string[] = [];
+
+  if (await writeIfMissing(workspace.configPath, defaultConfigYaml)) {
+    created.push(path.relative(vaultPath, workspace.configPath));
+  }
 
   if (await writeIfMissing(workspace.protocolPath, defaultProtocolMarkdown)) {
     created.push(path.relative(vaultPath, workspace.protocolPath));

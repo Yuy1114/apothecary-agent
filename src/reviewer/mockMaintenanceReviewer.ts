@@ -4,11 +4,22 @@ import type { VaultScan } from "../domain/vault.js";
 import { createId } from "../utils/ids.js";
 import { nowIso } from "../utils/time.js";
 
-export function buildDeterministicMaintenanceReview(scan: VaultScan): MaintenanceReview {
+export type BuildDeterministicMaintenanceReviewOptions = {
+  longContextWordThreshold: number;
+  longContextLineThreshold: number;
+};
+
+export function buildDeterministicMaintenanceReview(
+  scan: VaultScan,
+  options: BuildDeterministicMaintenanceReviewOptions,
+): MaintenanceReview {
   const findings: MaintenanceFinding[] = [];
 
   for (const file of scan.files.filter((candidate) => candidate.mediaType === "markdown")) {
-    if ((file.wordCount ?? 0) > 5000 || (file.lineCount ?? 0) > 300) {
+    if (
+      (file.wordCount ?? 0) > options.longContextWordThreshold ||
+      (file.lineCount ?? 0) > options.longContextLineThreshold
+    ) {
       findings.push({
         id: createId("finding"),
         type: "long_context",

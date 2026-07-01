@@ -13,6 +13,8 @@ export type ScanVaultOptions = {
   vaultPath: string;
   scopePath?: string;
   includeHash?: boolean;
+  ignore?: string[];
+  recentFilesLimit?: number;
 };
 
 export async function scanVault(options: ScanVaultOptions): Promise<VaultScan> {
@@ -22,7 +24,7 @@ export async function scanVault(options: ScanVaultOptions): Promise<VaultScan> {
     cwd: scopeRoot,
     dot: true,
     onlyFiles: true,
-    ignore: [".agent/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
+    ignore: options.ignore ?? [".agent/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
     absolute: true,
   });
 
@@ -36,7 +38,7 @@ export async function scanVault(options: ScanVaultOptions): Promise<VaultScan> {
     scopePath: options.scopePath,
     scannedAt: nowIso(),
     files: files.sort((a, b) => a.path.localeCompare(b.path)),
-    stats: buildStats(files),
+    stats: buildStats(files, options.recentFilesLimit ?? 10),
   };
 }
 
@@ -80,7 +82,7 @@ function classifyMediaType(extension: string): VaultFileMediaType {
   return "other";
 }
 
-function buildStats(files: VaultFile[]): VaultStats {
+function buildStats(files: VaultFile[], recentFilesLimit: number): VaultStats {
   const topLevelMap = new Map<string, DirectoryStat>();
 
   for (const file of files) {
@@ -100,7 +102,7 @@ function buildStats(files: VaultFile[]): VaultStats {
 
   const recentlyChangedFiles = [...files]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 10)
+    .slice(0, recentFilesLimit)
     .map((file) => file.path);
 
   return {
