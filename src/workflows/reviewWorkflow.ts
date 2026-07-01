@@ -5,7 +5,7 @@ import { VaultScanSchema } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
-import { buildDeterministicMaintenanceReview } from "../reviewer/mockMaintenanceReviewer.js";
+import { DeterministicReviewerModel } from "../reviewer/deterministicReviewerModel.js";
 import { writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 import { renderMaintenanceReviewMarkdown } from "../reports/renderMaintenanceReviewMarkdown.js";
 import { timestampForFile } from "../utils/time.js";
@@ -26,10 +26,16 @@ export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ j
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
-  const review = MaintenanceReviewSchema.parse(buildDeterministicMaintenanceReview(scan, {
-    longContextWordThreshold: config.review.long_context_word_threshold,
-    longContextLineThreshold: config.review.long_context_line_threshold,
-  }));
+  const reviewer = new DeterministicReviewerModel();
+  const review = MaintenanceReviewSchema.parse(
+    await reviewer.generateMaintenanceReview({
+      scan,
+      options: {
+        longContextWordThreshold: config.review.long_context_word_threshold,
+        longContextLineThreshold: config.review.long_context_line_threshold,
+      },
+    }),
+  );
   const stamp = timestampForFile();
   const jsonPath = path.join(workspace.reviewsDir, `review-${stamp}.json`);
   const markdownPath = path.join(workspace.reviewsDir, `review-${stamp}.md`);

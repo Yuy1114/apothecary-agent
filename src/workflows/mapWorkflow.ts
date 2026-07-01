@@ -5,7 +5,7 @@ import { VaultScanSchema } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
-import { buildDeterministicKnowledgeMap } from "../reviewer/mockReviewerModel.js";
+import { DeterministicReviewerModel } from "../reviewer/deterministicReviewerModel.js";
 import { renderKnowledgeMapMarkdown, writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 
 export type MapWorkflowInput = {
@@ -24,10 +24,16 @@ export async function runMapWorkflow(input: MapWorkflowInput): Promise<{ jsonPat
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
-  const map = KnowledgeMapSchema.parse(buildDeterministicKnowledgeMap(scan, {
-    maxTopics: config.map.max_topics,
-    maxFilesPerTopic: config.map.max_files_per_topic,
-  }));
+  const reviewer = new DeterministicReviewerModel();
+  const map = KnowledgeMapSchema.parse(
+    await reviewer.generateKnowledgeMap({
+      scan,
+      options: {
+        maxTopics: config.map.max_topics,
+        maxFilesPerTopic: config.map.max_files_per_topic,
+      },
+    }),
+  );
   const jsonPath = path.join(workspace.mapsDir, "knowledge-map.json");
   const markdownPath = path.join(workspace.mapsDir, "knowledge-map.md");
 
