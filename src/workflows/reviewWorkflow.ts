@@ -7,6 +7,7 @@ import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
 import { buildMaintenanceReviewContext } from "../reviewer/buildReviewerContext.js";
 import { createReviewerModel } from "../reviewer/createReviewerModel.js";
+import { normalizeMaintenanceReview } from "../reviewer/normalizeMaintenanceReview.js";
 import { writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 import { renderMaintenanceReviewMarkdown } from "../reports/renderMaintenanceReviewMarkdown.js";
 import { timestampForFile } from "../utils/time.js";
@@ -29,7 +30,7 @@ export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ j
   }));
   const context = buildMaintenanceReviewContext(scan);
   const reviewer = createReviewerModel(config);
-  const review = MaintenanceReviewSchema.parse(
+  const rawReview = MaintenanceReviewSchema.parse(
     await reviewer.generateMaintenanceReview({
       context,
       options: {
@@ -38,6 +39,7 @@ export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ j
       },
     }),
   );
+  const review = MaintenanceReviewSchema.parse(normalizeMaintenanceReview(rawReview));
   const stamp = timestampForFile();
   const jsonPath = path.join(workspace.reviewsDir, `review-${stamp}.json`);
   const markdownPath = path.join(workspace.reviewsDir, `review-${stamp}.md`);
