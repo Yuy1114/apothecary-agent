@@ -12,16 +12,25 @@ const CHAT_AGENT_INSTRUCTIONS = [
   "",
   "You have these tools:",
   "- scanVault: scan the vault to see what files exist",
-  "- readMarkdown: read a specific file's full content",
+  "- readMarkdown: read a specific file's full content for deep analysis",
   "- writeReview: persist maintenance review findings",
   "- queryVault: search the vault for relevant content",
   "- proposeEdit: create an edit proposal for human review",
   "",
+  "DEEP REVIEW WORKFLOW (when user asks to review a topic or directory):",
+  "1. Call scanVault to get file list",
+  "2. For each interesting file, call readMarkdown to read full content",
+  "3. Analyze: are there stale notes? missing indexes? duplicate content?",
+  "4. For each finding, give specific suggestions quoting actual file content",
+  "5. If user confirms, use proposeEdit to create actionable proposals",
+  "",
   "Guidelines:",
   "- Be concise. Short answers preferred.",
+  "- For review tasks, ALWAYS read files before making judgments — never guess from titles alone.",
   "- When suggesting edits, use proposeEdit (never modify files directly).",
   "- When asked about vault contents, use queryVault or scanVault first.",
   "- Summarize findings in Chinese when the user writes in Chinese.",
+  "- /review <scope> triggers a full deep review workflow.",
 ].join("\n");
 
 export function registerChatCommand(program: Command): void {
@@ -41,7 +50,8 @@ export function registerChatCommand(program: Command): void {
       console.log("╔══════════════════════════════════════════╗");
       console.log("║      apothecary-agent chat              ║");
       console.log("╠══════════════════════════════════════════╣");
-      console.log("║  scan|read|review|search|edit           ║");
+      console.log("║  /review <scope>  — deep review         ║");
+      console.log("║  scan|search|edit                       ║");
       console.log("║  Type 'exit' to quit                    ║");
       console.log("╚══════════════════════════════════════════╝\n");
 
@@ -50,6 +60,9 @@ export function registerChatCommand(program: Command): void {
         output: process.stdout,
         prompt: "you> ",
       });
+
+      // Enable deep review by default with increased maxSteps
+      const maxSteps = 12;
 
       rl.prompt();
 
@@ -65,11 +78,16 @@ export function registerChatCommand(program: Command): void {
           break;
         }
 
+        // /review shorthand triggers deep review
+        const prompt = input.startsWith("/review ")
+          ? `Deep review the following scope: ${input.slice(8)}. Follow the deep review workflow: scan first, then read files, analyze, and give specific suggestions.`
+          : input;
+
         process.stdout.write("agent> ");
 
         try {
-          const result = await agent.generate(input, {
-            maxSteps: 8,
+          const result = await agent.generate(prompt, {
+            maxSteps,
             system: CHAT_AGENT_INSTRUCTIONS,
             memory: {
               resource: "yuy",
@@ -78,7 +96,6 @@ export function registerChatCommand(program: Command): void {
           });
           console.log(result.text);
 
-          // Show tool usage summary
           if (result.toolCalls?.length) {
             const steps = [...new Set(result.toolCalls.map((tc) => tc.payload?.toolName).filter(Boolean))];
             console.log(`\n[tools used: ${steps.join(", ")}]`);
