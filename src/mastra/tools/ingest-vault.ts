@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { reindexFile } from "../../rag/chromaStore.js";
+import { reindexFile } from "../../rag/vectorStore.js";
 import { loadStructure, classifyWithStructure } from "./vault-structure.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";

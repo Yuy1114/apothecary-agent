@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { indexVault, queryVault } from "../../rag/chromaStore.js";
+import { indexVault, queryVault } from "../../rag/vectorStore.js";
 
 export function registerRagCommands(program: Command): void {
   program

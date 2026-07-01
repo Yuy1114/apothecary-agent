@@ -2,7 +2,6 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import path from "node:path";
 
 import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
@@ -13,7 +12,7 @@ import { ingestVaultTool } from "../tools/ingest-vault.js";
 import { moveVaultFileTool } from "../tools/move-vault-file.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-const DB_PATH = `file:${path.join(VAULT_PATH, ".agent", "memory.db")}`;
+const DB_PATH = "file:./local.db";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",

@@ -6,3 +6,6 @@ coverage/
 .agent/
 .mastra/
 examples/**/.agent/
+local.db
+local.db-shm
+local.db-wal

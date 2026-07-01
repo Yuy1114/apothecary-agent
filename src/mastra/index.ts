@@ -1,19 +1,25 @@
 import "dotenv/config";
 import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { registerApiRoute, type ContextWithMastra } from "@mastra/core/server";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
-import { queryVault, indexVault, reindexFile } from "../rag/chromaStore.js";
+import { queryVault, indexVault, reindexFile } from "../rag/vectorStore.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
-import { startVaultWatcher, fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow } from "./workflows/sync-workflow.js";
+import {
+  startVaultWatcher,
+  fullReindexWorkflow,
+  fileChangedWorkflow,
+  fileDeletedWorkflow,
+} from "./workflows/sync-workflow.js";
 
 // ── Paths ──
 
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-const DB_PATH = `file:${path.join(VAULT_PATH, ".agent", "memory.db")}`;
+const VAULT_PATH =
+  process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+const DB_PATH = "file:./local.db";
 
 // ── Helpers ──
 
@@ -26,7 +32,10 @@ function isMarkdownPath(p: string): boolean {
 }
 
 function ensureMarkdownPath(p: string): void {
-  if (!isMarkdownPath(p)) throw Object.assign(new Error("Only .md files can be edited"), { statusCode: 400 });
+  if (!isMarkdownPath(p))
+    throw Object.assign(new Error("Only .md files can be edited"), {
+      statusCode: 400,
+    });
 }
 
 // ── Vault tree ──
@@ -38,7 +47,10 @@ type VaultTreeNode = {
   children?: VaultTreeNode[];
 };
 
-async function listVaultTree(root: string, relativeDir: string): Promise<VaultTreeNode[]> {
+async function listVaultTree(
+  root: string,
+  relativeDir: string
+): Promise<VaultTreeNode[]> {
   const absoluteDir = path.join(root, relativeDir);
   const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
   const nodes = await Promise.all(
@@ -47,13 +59,18 @@ async function listVaultTree(root: string, relativeDir: string): Promise<VaultTr
       .map(async (entry): Promise<VaultTreeNode | null> => {
         const relPath = toPortablePath(path.join(relativeDir, entry.name));
         if (entry.isDirectory()) {
-          return { name: entry.name, path: relPath, type: "directory", children: await listVaultTree(root, relPath) };
+          return {
+            name: entry.name,
+            path: relPath,
+            type: "directory",
+            children: await listVaultTree(root, relPath),
+          };
         }
         if (entry.isFile() && isMarkdownPath(entry.name)) {
           return { name: entry.name, path: relPath, type: "file" };
         }
         return null;
-      }),
+      })
   );
   return nodes.filter((n): n is VaultTreeNode => n !== null);
 }
@@ -74,11 +91,16 @@ async function handleVaultTree(c: ContextWithMastra) {
 async function handleReadFile(c: ContextWithMastra) {
   const vaultPath = await resolveExistingDirectory(VAULT_PATH);
   const relativePath = c.req.query("path");
-  if (!relativePath) return c.json({ message: "path query parameter required" }, 400);
+  if (!relativePath)
+    return c.json({ message: "path query parameter required" }, 400);
   const absolutePath = path.join(vaultPath, relativePath);
-  if (!absolutePath.startsWith(vaultPath)) return c.json({ message: "path escapes vault" }, 403);
+  if (!absolutePath.startsWith(vaultPath))
+    return c.json({ message: "path escapes vault" }, 403);
 
-  const [content, stat] = await Promise.all([fs.readFile(absolutePath, "utf8"), fs.stat(absolutePath)]);
+  const [content, stat] = await Promise.all([
+    fs.readFile(absolutePath, "utf8"),
+    fs.stat(absolutePath),
+  ]);
   return c.json({
     path: toPortablePath(path.relative(vaultPath, absolutePath)),
     content,
@@ -94,7 +116,8 @@ async function handleWriteFile(c: ContextWithMastra) {
   }
 
   const absolutePath = path.join(vaultPath, body.path);
-  if (!absolutePath.startsWith(vaultPath)) return c.json({ message: "path escapes vault" }, 403);
+  if (!absolutePath.startsWith(vaultPath))
+    return c.json({ message: "path escapes vault" }, 403);
   ensureMarkdownPath(absolutePath);
 
   await fs.mkdir(path.dirname(absolutePath), { recursive: true });
@@ -105,7 +128,12 @@ async function handleWriteFile(c: ContextWithMastra) {
 
   const stat = await fs.stat(absolutePath);
   return c.json({
-    file: { path: relativePath, content: body.content, updatedAt: stat.mtime.toISOString(), saved: true },
+    file: {
+      path: relativePath,
+      content: body.content,
+      updatedAt: stat.mtime.toISOString(),
+      saved: true,
+    },
   });
 }
 
@@ -128,7 +156,11 @@ async function handleRagQuery(c: ContextWithMastra) {
   const prompt =
     `Question: ${query}\n\n` +
     "Retrieved vault evidence JSON:\n" +
-    JSON.stringify(sources.map((s, i) => ({ index: i + 1, ...s })), null, 2) +
+    JSON.stringify(
+      sources.map((s, i) => ({ index: i + 1, ...s })),
+      null,
+      2
+    ) +
     "\n\nAnswer from this evidence. Include a short '参考文件' list.";
 
   const result = await vaultReviewer.generate(prompt, {
@@ -156,10 +188,22 @@ export const mastra = new Mastra({
     port: Number(process.env.APOTHECARY_UI_PORT ?? 8787),
     apiRoutes: [
       registerApiRoute("/health", { method: "GET", handler: handleHealth }),
-      registerApiRoute("/vault/tree", { method: "GET", handler: handleVaultTree }),
-      registerApiRoute("/vault/files", { method: "GET", handler: handleReadFile }),
-      registerApiRoute("/vault/files", { method: "PUT", handler: handleWriteFile }),
-      registerApiRoute("/rag/query", { method: "POST", handler: handleRagQuery }),
+      registerApiRoute("/vault/tree", {
+        method: "GET",
+        handler: handleVaultTree,
+      }),
+      registerApiRoute("/vault/files", {
+        method: "GET",
+        handler: handleReadFile,
+      }),
+      registerApiRoute("/vault/files", {
+        method: "PUT",
+        handler: handleWriteFile,
+      }),
+      registerApiRoute("/rag/query", {
+        method: "POST",
+        handler: handleRagQuery,
+      }),
       registerApiRoute("/index", { method: "POST", handler: handleReindex }),
     ],
   },

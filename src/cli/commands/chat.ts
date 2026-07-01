@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
 import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
-import { indexVault } from "../../rag/chromaStore.js";
+import { indexVault } from "../../rag/vectorStore.js";
 import { listProposals, applyProposal, hitlConfirm } from "../hitl.js";
 import { runReviewWorkflow } from "../../workflows/reviewWorkflow.js";
 import { runMapWorkflow } from "../../workflows/mapWorkflow.js";

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { promises as fs } from "node:fs";
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
-import { indexVault, reindexFile, removeFromIndex } from "../../rag/chromaStore.js";
+import { indexVault, reindexFile, removeFromIndex } from "../../rag/vectorStore.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
