@@ -6,7 +6,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
-import { queryVault, indexVault, reindexFile } from "../rag/vectorStore.js";
+import { queryVault, indexVault, reindexFile, setVectorStore } from "../rag/vectorStore.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import {
   startVaultWatcher,
@@ -180,10 +180,17 @@ async function handleReindex(c: ContextWithMastra) {
 
 // ── Mastra instance ──
 
+const vaultVector = new LibSQLVector({
+  id: "vault-chunks",
+  url: DB_PATH,
+});
+setVectorStore(vaultVector);
+
 export const mastra = new Mastra({
   agents: { vaultReviewer },
   workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow },
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
+  vectors: { vaultChunks: vaultVector },
   server: {
     port: Number(process.env.APOTHECARY_UI_PORT ?? 8787),
     apiRoutes: [

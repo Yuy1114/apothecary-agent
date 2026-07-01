@@ -7,18 +7,18 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { LibSQLVector } from "@mastra/libsql";
 
 const INDEX_NAME = "vault_chunks";
-const DB_URL = process.env.APOTHECARY_DB_URL ?? "file:./local.db";
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
-// ── Vector store singleton ──
+// ── Vector store (injected by Mastra setup) ──
 
 let store: LibSQLVector | null = null;
 
+export function setVectorStore(vs: LibSQLVector): void {
+  store = vs;
+}
+
 function getVectorStore(): LibSQLVector {
-  store ??= new LibSQLVector({
-    id: "apothecary-vector",
-    url: DB_URL,
-  });
+  if (!store) throw new Error("Vector store not initialized. Call setVectorStore() first.");
   return store;
 }
 
