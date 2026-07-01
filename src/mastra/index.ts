@@ -26,7 +26,6 @@ import {
   handleRagQuery,
   handleReindex,
 } from "./routes.js";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { EMBEDDING_MODEL } from "./tools/rag.js";
 
 const DB_PATH = "file:./local.db";

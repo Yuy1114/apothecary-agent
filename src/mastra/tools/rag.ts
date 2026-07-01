@@ -7,11 +7,9 @@ import type { LibSQLVector } from "@mastra/libsql";
 export const EMBEDDING_MODEL = new ModelRouterEmbeddingModel({
   providerId: "aihubmix",
   modelId: "text-embedding-3-small",
-  url: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
-  apiKey:
-    process.env.APOTHECARY_EMBEDDING_API_KEY ??
-    process.env.OPENAI_API_KEY ??
-    "",
+  url:
+    process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
+  apiKey: process.env.APOTHECARY_EMBEDDING_API_KEY ?? "",
 });
 
 const INDEX_NAME = "vault_chunks";
