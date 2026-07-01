@@ -57,6 +57,65 @@ describe("DeterministicReviewerModel", () => {
       ]),
     );
   });
+
+  it("flags duplicate topics when markdown files in the same directory share overlapping headings", async () => {
+    const reviewer = new DeterministicReviewerModel();
+
+    const review = await reviewer.generateMaintenanceReview({
+      context: makeContext([
+        makeFile("projects/apothecary-agent/PRD.md", {
+          headingTitles: ["Vision", "MVP", "Scope", "Agent Architecture"],
+        }),
+        makeFile("projects/apothecary-agent/VISION.md", {
+          headingTitles: ["Vision", "MVP", "Agent Architecture", "Knowledge Entropy"],
+        }),
+      ]),
+      options: {
+        longContextLineThreshold: 300,
+        longContextWordThreshold: 5000,
+      },
+    });
+
+    expect(review.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "duplicate_topic",
+          filePaths: expect.arrayContaining([
+            "projects/apothecary-agent/PRD.md",
+            "projects/apothecary-agent/VISION.md",
+          ]),
+        }),
+      ]),
+    );
+  });
+
+  it("flags superficial notes that are too short and lack clear topic context", async () => {
+    const reviewer = new DeterministicReviewerModel();
+
+    const review = await reviewer.generateMaintenanceReview({
+      context: makeContext([
+        makeFile("notes/misc/todo-2024.md", {
+          lineCount: 4,
+          wordCount: 15,
+          headingTitles: [],
+        }),
+      ]),
+      options: {
+        longContextLineThreshold: 300,
+        longContextWordThreshold: 5000,
+      },
+    });
+
+    expect(review.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "superficial_note",
+          filePaths: ["notes/misc/todo-2024.md"],
+          severity: "low",
+        }),
+      ]),
+    );
+  });
 });
 
 function makeContext(files: ReviewerFileContext[]): MaintenanceReviewContext {

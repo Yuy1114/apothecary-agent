@@ -6,8 +6,9 @@ const FINDING_TYPE_PRIORITY: Record<MaintenanceFindingType, number> = {
   unassimilated_ai_output: 2,
   duplicate_topic: 3,
   long_context: 4,
-  orphan_note: 5,
-  unclear_location: 6,
+  superficial_note: 5,
+  orphan_note: 6,
+  unclear_location: 7,
 };
 
 const SEVERITY_PRIORITY: Record<FindingSeverity, number> = {

@@ -8,6 +8,7 @@ export const MaintenanceFindingTypeSchema = z.enum([
   "unassimilated_ai_output",
   "missing_index",
   "unclear_location",
+  "superficial_note",
 ]);
 export type MaintenanceFindingType = z.infer<typeof MaintenanceFindingTypeSchema>;
 

@@ -146,9 +146,24 @@ export class DeterministicReviewerModel implements ReviewerModel {
           confidence: 0.45,
         });
       }
+
+      if (isSuperficial(file)) {
+        findings.push({
+          id: createId("finding"),
+          type: "superficial_note",
+          severity: "low",
+          filePaths: [file.path],
+          observation: "This note is very short and may not contain enough durable content to warrant a standalone file.",
+          whyItMatters: "Very short notes are harder to re-discover and may be better folded into a parent topic or deleted if stale.",
+          suggestion: "Check whether this note's content can be merged into a larger topic note or whether it is still relevant.",
+          relatedFiles: [],
+          confidence: 0.55,
+        });
+      }
     }
 
     findings.push(...buildMissingIndexFindings(markdownFiles));
+    findings.push(...buildDuplicateTopicFindings(markdownFiles));
 
     return {
       id: createId("review"),
@@ -234,6 +249,12 @@ function isLikelyOrphan(file: ReviewerFileContext): boolean {
   return false;
 }
 
+function isSuperficial(file: ReviewerFileContext): boolean {
+  const lineCount = file.lineCount ?? 0;
+  const wordCount = file.wordCount ?? 0;
+  return lineCount < 10 && wordCount < 200;
+}
+
 function buildMissingIndexFindings(files: ReviewerFileContext[]): MaintenanceFinding[] {
   return [...groupFilesByDirectory(files).entries()]
     .filter(([, directoryFiles]) => directoryFiles.length >= 3)
@@ -261,6 +282,44 @@ function groupFilesByDirectory(files: ReviewerFileContext[]): Map<string, Review
     groups.set(directory, current);
   }
   return groups;
+}
+
+function buildDuplicateTopicFindings(files: ReviewerFileContext[]): MaintenanceFinding[] {
+  const findings: MaintenanceFinding[] = [];
+  for (const [, directoryFiles] of groupFilesByDirectory(files)) {
+    if (directoryFiles.length < 2) continue;
+    for (let i = 0; i < directoryFiles.length; i++) {
+      for (let j = i + 1; j < directoryFiles.length; j++) {
+        const overlap = headingOverlap(directoryFiles[i], directoryFiles[j]);
+        if (overlap >= 0.3) {
+          findings.push({
+            id: createId("finding"),
+            type: "duplicate_topic",
+            severity: "medium",
+            filePaths: [directoryFiles[i].path, directoryFiles[j].path],
+            observation: `These two files share significant heading overlap (${Math.round(overlap * 100)}%).`,
+            whyItMatters: "Files covering very similar ground may split durable insights across multiple locations, making them harder to maintain and recall.",
+            suggestion: "Consider whether these files should be merged, or whether one should delegate to the other with a short cross-reference.",
+            relatedFiles: [],
+            confidence: 0.4 + overlap * 0.4,
+          });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
+function headingOverlap(a: ReviewerFileContext, b: ReviewerFileContext): number {
+  if (a.headingTitles.length === 0 || b.headingTitles.length === 0) return 0;
+  const setA = new Set(a.headingTitles.map((title) => title.toLowerCase()));
+  const setB = new Set(b.headingTitles.map((title) => title.toLowerCase()));
+  let intersection = 0;
+  let union = new Set([...setA, ...setB]).size;
+  for (const title of setA) {
+    if (setB.has(title)) intersection++;
+  }
+  return union === 0 ? 0 : intersection / union;
 }
 
 function isIndexFile(filePath: string): boolean {
