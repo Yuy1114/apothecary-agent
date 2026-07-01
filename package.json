@@ -12,7 +12,8 @@
     "build": "tsc",
     "check": "tsc --noEmit",
     "start": "node dist/cli/index.js",
-    "test": "vitest"
+    "test": "vitest",
+    "ci": "pnpm run check && pnpm run build && pnpm vitest run"
   },
   "keywords": [
     "agent",
