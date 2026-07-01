@@ -43,6 +43,7 @@ export class DeterministicReviewerModel implements ReviewerModel {
         role: inferRole(file.path),
         relevance: 0.5,
       });
+      existing.keyConcepts = collectUnique([...existing.keyConcepts, ...file.headingTitles]).slice(0, 8);
       topicMap.set(topicTitle, existing);
     }
 
@@ -50,7 +51,8 @@ export class DeterministicReviewerModel implements ReviewerModel {
       .map((topic) => ({
         ...topic,
         relatedFiles: topic.relatedFiles.slice(0, options.maxFilesPerTopic),
-        summary: `${topic.title} contains ${topic.relatedFiles.length} markdown file(s).`,
+        keyConcepts: collectKeyConcepts(topic),
+        summary: buildTopicSummary(topic),
       }))
       .sort((a, b) => b.relatedFiles.length - a.relatedFiles.length)
       .slice(0, options.maxTopics);
@@ -186,18 +188,35 @@ function inferRole(filePath: string): KnowledgeTopic["relatedFiles"][number]["ro
   return "unknown";
 }
 
-function buildFileSummary(file: { lineCount?: number; wordCount?: number; layer: string }): string {
+function buildFileSummary(file: ReviewerFileContext): string {
   const details = [
     file.lineCount === undefined ? undefined : `${file.lineCount} lines`,
     file.wordCount === undefined ? undefined : `${file.wordCount} words/chars`,
     `layer: ${file.layer}`,
+    file.headingTitles.length > 0 ? `Headings: ${file.headingTitles.slice(0, 3).join(", ")}` : undefined,
+    file.excerpt ? `Excerpt: ${file.excerpt}` : undefined,
   ].filter(Boolean);
-  return details.join(", ");
+  return details.join("; ");
+}
+
+function collectKeyConcepts(topic: KnowledgeTopic): string[] {
+  return collectUnique(topic.keyConcepts).slice(0, 8);
+}
+
+function buildTopicSummary(topic: KnowledgeTopic): string {
+  const keyConcepts = collectKeyConcepts(topic).slice(0, 3);
+  const base = `${topic.title} contains ${topic.relatedFiles.length} markdown file(s).`;
+  if (keyConcepts.length === 0) return base;
+  return `${base} Common headings: ${keyConcepts.join(", ")}.`;
 }
 
 function isLikelyAiOutput(filePath: string): boolean {
   const lower = filePath.toLowerCase();
   return lower.includes("output") || lower.includes("ai-generated") || lower.includes("chatgpt") || lower.includes("claude");
+}
+
+function collectUnique(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function isLikelyStale(filePath: string): boolean {

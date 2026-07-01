@@ -3,6 +3,35 @@ import type { MaintenanceReviewContext, ReviewerFileContext } from "./reviewerCo
 import { DeterministicReviewerModel } from "./deterministicReviewerModel.js";
 
 describe("DeterministicReviewerModel", () => {
+  it("uses headings and excerpts to make deterministic knowledge maps more informative", async () => {
+    const reviewer = new DeterministicReviewerModel();
+
+    const map = await reviewer.generateKnowledgeMap({
+      context: makeContext([
+        makeFile("projects/apothecary-agent/PRD.md", {
+          headingTitles: ["Vision", "MVP Boundary", "Review Flow"],
+          excerpt: "Read-only reviewer for a local Markdown vault.",
+        }),
+        makeFile("projects/apothecary-agent/VISION.md", {
+          headingTitles: ["Vision", "Knowledge Entropy"],
+          excerpt: "Reduce knowledge entropy through safe maintenance reports.",
+        }),
+      ]),
+      options: {
+        maxTopics: 10,
+        maxFilesPerTopic: 10,
+      },
+    });
+
+    expect(map.topics[0]).toMatchObject({
+      title: "projects/apothecary-agent",
+      keyConcepts: ["Vision", "MVP Boundary", "Review Flow", "Knowledge Entropy"],
+      summary: "projects/apothecary-agent contains 2 markdown file(s). Common headings: Vision, MVP Boundary, Review Flow.",
+    });
+    expect(map.topics[0]?.relatedFiles[0]?.summary).toContain("Headings: Vision, MVP Boundary, Review Flow");
+    expect(map.topics[0]?.relatedFiles[0]?.summary).toContain("Excerpt: Read-only reviewer for a local Markdown vault.");
+  });
+
   it("finds missing indexes, stale notes, unclear titles, and orphan notes from reviewer context", async () => {
     const reviewer = new DeterministicReviewerModel();
 
@@ -49,7 +78,7 @@ function makeContext(files: ReviewerFileContext[]): MaintenanceReviewContext {
   };
 }
 
-function makeFile(filePath: string): ReviewerFileContext {
+function makeFile(filePath: string, overrides: Partial<ReviewerFileContext> = {}): ReviewerFileContext {
   return {
     path: filePath,
     mediaType: "markdown",
@@ -60,5 +89,6 @@ function makeFile(filePath: string): ReviewerFileContext {
     updatedAt: "2026-07-01T00:00:00.000Z",
     frontmatterKeys: [],
     headingTitles: [],
+    ...overrides,
   };
 }
