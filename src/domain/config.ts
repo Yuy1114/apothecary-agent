@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const ApothecaryConfigSchema = z.object({
   version: z.literal(1),
+  reviewer: z
+    .object({
+      provider: z.literal("deterministic"),
+    })
+    .default({ provider: "deterministic" }),
   scan: z.object({
     ignore: z.array(z.string()),
     include_hash: z.boolean(),

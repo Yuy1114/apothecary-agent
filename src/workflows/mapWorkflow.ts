@@ -5,7 +5,7 @@ import { VaultScanSchema } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
-import { DeterministicReviewerModel } from "../reviewer/deterministicReviewerModel.js";
+import { createReviewerModel } from "../reviewer/createReviewerModel.js";
 import { renderKnowledgeMapMarkdown, writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 
 export type MapWorkflowInput = {
@@ -24,7 +24,7 @@ export async function runMapWorkflow(input: MapWorkflowInput): Promise<{ jsonPat
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
-  const reviewer = new DeterministicReviewerModel();
+  const reviewer = createReviewerModel(config);
   const map = KnowledgeMapSchema.parse(
     await reviewer.generateKnowledgeMap({
       scan,

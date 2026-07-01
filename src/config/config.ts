@@ -5,6 +5,9 @@ import type { AgentWorkspace } from "../domain/workspace.js";
 
 export const defaultConfig: ApothecaryConfig = {
   version: 1,
+  reviewer: {
+    provider: "deterministic",
+  },
   scan: {
     ignore: [".agent/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
     include_hash: true,
