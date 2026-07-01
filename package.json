@@ -22,7 +22,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.2",
     "@mastra/core": "^1.47.0",
+    "ai": "^7.0.8",
     "commander": "^14.0.2",
     "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",
