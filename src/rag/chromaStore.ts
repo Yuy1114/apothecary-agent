@@ -90,7 +90,52 @@ export async function indexVault(scopePath?: string): Promise<{ indexed: number 
   return { indexed: indexed.length };
 }
 
-export async function queryVault(query: string, topK = 5): Promise<Array<{ source: string; content: string }>> {
+/**
+ * Re-index a single file (called after ingest). Appends its chunks to the existing index.
+ */
+export async function reindexFile(relativePath: string): Promise<{ added: number }> {
+  const absolutePath = path.join(VAULT_PATH, relativePath);
+  const content = await fs.readFile(absolutePath, "utf8");
+  const title = extractTitle(content, relativePath);
+
+  const doc = MDocument.fromMarkdown(content, { type: "md" });
+  const docChunks = await doc.chunk({ strategy: "markdown", maxSize: 800, overlap: 60 });
+
+  const newChunks: Array<{ source: string; content: string; title?: string }> = [];
+  for (const chunk of docChunks) {
+    if (chunk.text.trim().length < 50) continue;
+    newChunks.push({ source: relativePath, content: chunk.text.slice(0, 2000), title });
+  }
+
+  if (newChunks.length === 0) return { added: 0 };
+
+  // Load existing index, remove old chunks for this file, append new ones
+  const existing = await loadIndex().then((idx) => idx.filter((c) => c.source !== relativePath));
+
+  const embeddingModel = getEmbeddingProvider().embedding(
+    process.env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small",
+  );
+  const { embeddings } = await embedMany({
+    model: embeddingModel,
+    values: newChunks.map((c) => c.content),
+  });
+
+  for (let j = 0; j < newChunks.length; j++) {
+    existing.push({
+      source: newChunks[j].source,
+      content: newChunks[j].content,
+      title: newChunks[j].title,
+      embedding: embeddings[j] as unknown as number[],
+    });
+  }
+
+  await fs.writeFile(INDEX_PATH, JSON.stringify(existing), "utf8");
+  index = existing;
+
+  return { added: newChunks.length };
+}
+
+export async function queryVault(query: string, topK = 5): Promise<Array<{ source: string; content: string; title?: string }>> {
   const chunks = await loadIndex();
   if (chunks.length === 0) return [];
 
@@ -114,6 +159,7 @@ export async function queryVault(query: string, topK = 5): Promise<Array<{ sourc
     .slice(0, topK)
     .map((s) => ({
       source: chunks[s.idx].source,
+      title: chunks[s.idx].title,
       content: chunks[s.idx].content.slice(0, 1000),
     }));
 }
