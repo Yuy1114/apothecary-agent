@@ -63,6 +63,8 @@ async function buildVaultFile(vaultPath: string, absolutePath: string, includeHa
     const snapshot = parseMarkdownSnapshot(relativePath, content);
     base.title = snapshot.title;
     base.frontmatter = snapshot.frontmatter;
+    base.headings = snapshot.headings;
+    base.excerpt = snapshot.excerpt;
     base.lineCount = snapshot.lineCount;
     base.wordCount = snapshot.wordCount;
   }

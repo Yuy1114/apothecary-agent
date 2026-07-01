@@ -59,5 +59,6 @@ function makeFile(filePath: string): ReviewerFileContext {
     wordCount: 100,
     updatedAt: "2026-07-01T00:00:00.000Z",
     frontmatterKeys: [],
+    headingTitles: [],
   };
 }

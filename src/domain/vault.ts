@@ -33,6 +33,12 @@ export const VaultFileSchema = z.object({
   mediaType: VaultFileMediaTypeSchema,
   title: z.string().optional(),
   frontmatter: z.record(z.unknown()).optional(),
+  headings: z.array(z.object({
+    level: z.number().int().min(1).max(6),
+    text: z.string().min(1),
+    line: z.number().int().positive().optional(),
+  })).optional(),
+  excerpt: z.string().optional(),
   sizeBytes: z.number().int().nonnegative(),
   lineCount: z.number().int().nonnegative().optional(),
   wordCount: z.number().int().nonnegative().optional(),

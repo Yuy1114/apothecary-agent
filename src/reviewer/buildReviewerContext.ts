@@ -31,5 +31,7 @@ function toReviewerFileContext(file: VaultFile): ReviewerFileContext {
     wordCount: file.wordCount,
     updatedAt: file.updatedAt,
     frontmatterKeys: Object.keys(file.frontmatter ?? {}).sort(),
+    headingTitles: file.headings?.map((heading) => heading.text) ?? [],
+    excerpt: file.excerpt ? file.excerpt.slice(0, 500) : undefined,
   };
 }

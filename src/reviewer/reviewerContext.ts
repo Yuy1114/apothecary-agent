@@ -10,6 +10,8 @@ export type ReviewerFileContext = {
   wordCount?: number;
   updatedAt: string;
   frontmatterKeys: string[];
+  headingTitles: string[];
+  excerpt?: string;
 };
 
 export type BaseReviewerContext = {
