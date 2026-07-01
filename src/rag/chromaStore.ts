@@ -7,7 +7,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { ChromaClient, type Collection, type Metadata } from "chromadb";
 
 const CHROMA_COLLECTION = "vault_chunks";
-const CHROMA_HOST = process.env.APOTHECARY_CHROMA_HOST ?? "127.0.0.1";
+const CHROMA_HOST = process.env.APOTHECARY_CHROMA_HOST ?? "localhost";
 const CHROMA_PORT = Number(process.env.APOTHECARY_CHROMA_PORT ?? "8000");
 
 type ChunkDraft = {

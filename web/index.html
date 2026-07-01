@@ -24,9 +24,6 @@
         <nav class="top-tabs" aria-label="Main panels">
           <button class="tab selected" data-panel="chat">RAG Chat</button>
           <button class="tab" data-panel="editor">Source</button>
-          <button class="tab" data-panel="memory">Memory</button>
-          <button class="tab" data-panel="activity">Activity</button>
-          <button class="tab" data-panel="jobs">Jobs</button>
         </nav>
 
         <section id="panel-chat" class="panel active">
@@ -38,14 +35,10 @@
             <button id="reindex" type="button">Reindex Vault</button>
           </header>
           <form id="chat-form" class="chat-form">
-            <textarea id="question" rows="3" placeholder="例如：Frank 的七项工程闭环和 HITL 是什么关系？"></textarea>
+            <textarea id="question" rows="3" placeholder="例如：Frank 的七项工程闭环是什么？"></textarea>
             <button type="submit">提问</button>
           </form>
           <article id="answer" class="answer empty-state">答案会显示在这里。</article>
-          <section>
-            <h3>Conversation Ledger</h3>
-            <div id="conversation-feed" class="conversation-feed empty-state">当前 thread 的消息会保存在 SQLite app.db。</div>
-          </section>
           <section>
             <h3>Sources</h3>
             <div id="sources" class="sources empty-state">检索到的文件和片段会显示在这里。</div>
@@ -65,54 +58,6 @@
             </div>
           </header>
           <textarea id="markdown-editor" class="markdown-editor" placeholder="从左侧选择 Markdown 文件开始编辑。" disabled spellcheck="false"></textarea>
-        </section>
-
-        <section id="panel-memory" class="panel">
-          <header class="panel-header">
-            <div>
-              <p class="eyebrow">Conversation → Candidate → Confirmed Memory</p>
-              <h2>Memory Candidates</h2>
-            </div>
-            <button id="refresh-memory" type="button">刷新</button>
-          </header>
-          <div class="memory-layout">
-            <section>
-              <h3>候选 / 已确认 / 已写入</h3>
-              <div id="memory-candidates" class="memory-candidates empty-state">暂无候选记忆。</div>
-            </section>
-            <section>
-              <h3>Thread Summary</h3>
-              <div id="thread-summary" class="thread-summary empty-state">暂无摘要。</div>
-            </section>
-          </div>
-        </section>
-
-        <section id="panel-activity" class="panel">
-          <header class="panel-header">
-            <div>
-              <p class="eyebrow">Live System State</p>
-              <h2>Activity</h2>
-            </div>
-          </header>
-          <div id="activity-feed" class="activity-feed empty-state">等待文件事件…</div>
-        </section>
-
-        <section id="panel-jobs" class="panel">
-          <header class="panel-header">
-            <div>
-              <p class="eyebrow">Scheduled / Manual Work</p>
-              <h2>Jobs</h2>
-            </div>
-          </header>
-          <section>
-            <h3>Index Status</h3>
-            <div id="sync-status" class="sync-status empty-state">加载中…</div>
-          </section>
-          <section>
-            <h3>Sync Jobs</h3>
-            <div id="sync-jobs" class="sync-jobs empty-state">加载中…</div>
-          </section>
-          <div id="jobs" class="jobs empty-state">加载中…</div>
         </section>
       </section>
     </main>
