@@ -1,18 +1,8 @@
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-
+import { queryVaultTool } from "../tools/query-vault.js";
 import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
-import { writeReviewTool } from "../tools/write-review.js";
-import { queryVaultTool } from "../tools/query-vault.js";
-import { proposeEditTool } from "../tools/propose-edit.js";
-import { ingestVaultTool } from "../tools/ingest-vault.js";
-import { moveVaultFileTool } from "../tools/move-vault-file.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-const DB_PATH = "file:./local.db";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
@@ -20,32 +10,18 @@ const deepseek = createOpenAICompatible({
   apiKey: process.env.APOTHECARY_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
 });
 
-const memory = new Memory({
-  storage: new LibSQLStore({ id: "apothecary-memory", url: DB_PATH }),
-  options: {
-    lastMessages: 20,
-    observationalMemory: true,
-  },
-});
-
 export const vaultReviewer = new Agent({
   id: "vault-reviewer",
   name: "Vault Reviewer",
-  description:
-    "Read-only vault reviewer that produces knowledge maps, maintenance reviews, answers questions, and proposes edits.",
+  description: "Answers questions about Yuy's vault by searching and reading markdown files.",
   instructions:
-    "You are apothecary-agent, a personal knowledge maintenance assistant for Yuy's vault. " +
-    "Use tools to scan, read, search, review, and propose edits. " +
-    "Answer in Chinese when the user writes Chinese. Be concise.",
+    "You are apothecary-agent, Yuy's personal knowledge assistant. " +
+    "Use queryVault to search for relevant content, scanVault to explore, and readMarkdown to inspect files. " +
+    "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: deepseek("deepseek-chat"),
-  memory,
   tools: {
+    queryVault: queryVaultTool,
     scanVault: scanVaultTool,
     readMarkdown: readMarkdownTool,
-    writeReview: writeReviewTool,
-    queryVault: queryVaultTool,
-    proposeEdit: proposeEditTool,
-    ingestVault: ingestVaultTool,
-    moveVaultFile: moveVaultFileTool,
   },
 });

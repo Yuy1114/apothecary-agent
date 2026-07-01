@@ -5,6 +5,8 @@ import { PinoLogger } from "@mastra/loggers";
 import { registerApiRoute } from "@mastra/core/server";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
+import { vaultCurator } from "./agents/vault-curator.js";
+import { vaultIngestor } from "./agents/vault-ingestor.js";
 import { setVectorStore } from "../rag/vectorStore.js";
 import {
   startVaultWatcher,
@@ -34,7 +36,7 @@ setVectorStore(vaultVector);
 // ── Mastra instance ──
 
 export const mastra = new Mastra({
-  agents: { vaultReviewer },
+  agents: { vaultReviewer, vaultCurator, vaultIngestor },
   workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow, initWorkflow, reviewWorkflow, mapWorkflow },
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   vectors: { vaultChunks: vaultVector },

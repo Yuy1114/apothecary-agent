@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { resolveVaultPath } from "../../config/projectConfig.js";
-import { runMapWorkflow } from "../../workflows/mapWorkflow.js";
+import { mapWorkflow } from "../../mastra/workflows/map.js";
 
 export function registerMapCommand(program: Command): void {
   program
@@ -10,9 +10,11 @@ export function registerMapCommand(program: Command): void {
     .option("--scope <subpath>", "Optional subdirectory scope")
     .action(async (options: { vault?: string; scope?: string }) => {
       const vaultPath = await resolveVaultPath(options.vault);
-      const result = await runMapWorkflow({ vaultPath, scopePath: options.scope });
+      const run = await mapWorkflow.createRun();
+      const result = await run.start({ inputData: { vaultPath, scopePath: options.scope } });
+      if (result.status !== "success") { console.log("Map failed."); return; }
       console.log("Knowledge map generated:");
-      console.log(`- ${result.markdownPath}`);
-      console.log(`- ${result.jsonPath}`);
+      console.log(`- ${result.result.markdownPath}`);
+      console.log(`- ${result.result.jsonPath}`);
     });
 }

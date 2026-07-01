@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { resolveVaultPath } from "../../config/projectConfig.js";
-import { runReviewWorkflow } from "../../workflows/reviewWorkflow.js";
+import { reviewWorkflow } from "../../mastra/workflows/review.js";
 
 export function registerReviewCommand(program: Command): void {
   program
@@ -10,9 +10,11 @@ export function registerReviewCommand(program: Command): void {
     .option("--scope <subpath>", "Optional subdirectory scope")
     .action(async (options: { vault?: string; scope?: string }) => {
       const vaultPath = await resolveVaultPath(options.vault);
-      const result = await runReviewWorkflow({ vaultPath, scopePath: options.scope });
+      const run = await reviewWorkflow.createRun();
+      const result = await run.start({ inputData: { vaultPath, scopePath: options.scope } });
+      if (result.status !== "success") { console.log("Review failed."); return; }
       console.log("Maintenance review generated:");
-      console.log(`- ${result.markdownPath}`);
-      console.log(`- ${result.jsonPath}`);
+      console.log(`- ${result.result.markdownPath}`);
+      console.log(`- ${result.result.jsonPath}`);
     });
 }

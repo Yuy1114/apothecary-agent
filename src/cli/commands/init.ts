@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { resolveVaultPath } from "../../config/projectConfig.js";
-import { runInitWorkflow } from "../../workflows/initWorkflow.js";
+import { initWorkflow } from "../../mastra/workflows/init.js";
 
 export function registerInitCommand(program: Command): void {
   program
@@ -9,11 +9,14 @@ export function registerInitCommand(program: Command): void {
     .option("--vault <path>", "Vault path. Defaults to vault.path in apothecary.config.yaml")
     .action(async (options: { vault?: string }) => {
       const vaultPath = await resolveVaultPath(options.vault);
-      const result = await runInitWorkflow({ vaultPath });
-      console.log(`Initialized apothecary-agent workspace: ${result.agentPath}`);
-      if (result.created.length > 0) {
+      const run = await initWorkflow.createRun();
+      const result = await run.start({ inputData: { vaultPath } });
+      if (result.status !== "success") { console.log("Init failed."); return; }
+      const { agentPath, created } = result.result;
+      console.log(`Initialized apothecary-agent workspace: ${agentPath}`);
+      if (created.length > 0) {
         console.log("Created:");
-        for (const file of result.created) console.log(`- ${file}`);
+        for (const file of created) console.log(`- ${file}`);
       } else {
         console.log("Protocol files already existed.");
       }
