@@ -3,7 +3,20 @@ import type { KnowledgeMap, KnowledgeTopic } from "../domain/knowledgeMap.js";
 import type { MaintenanceFinding, MaintenanceReview } from "../domain/maintenanceReview.js";
 import { createId } from "../utils/ids.js";
 import { nowIso } from "../utils/time.js";
+import type { ReviewerFileContext } from "./reviewerContext.js";
 import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from "./reviewerModel.js";
+
+const INDEX_FILE_NAMES = new Set([
+  "readme.md",
+  "index.md",
+  "_index.md",
+  "overview.md",
+  "概览.md",
+  "总览.md",
+  "入口.md",
+]);
+
+const ORPHAN_DIRECTORY_HINTS = new Set(["random", "untitled", "tmp", "temp", "draft", "drafts", "misc", "杂项", "临时"]);
 
 export class DeterministicReviewerModel implements ReviewerModel {
   async generateKnowledgeMap(input: KnowledgeMapInput): Promise<KnowledgeMap> {
@@ -56,8 +69,9 @@ export class DeterministicReviewerModel implements ReviewerModel {
   async generateMaintenanceReview(input: MaintenanceReviewInput): Promise<MaintenanceReview> {
     const { context, options } = input;
     const findings: MaintenanceFinding[] = [];
+    const markdownFiles = context.files.filter((candidate) => candidate.mediaType === "markdown");
 
-    for (const file of context.files.filter((candidate) => candidate.mediaType === "markdown")) {
+    for (const file of markdownFiles) {
       if (
         (file.wordCount ?? 0) > options.longContextWordThreshold ||
         (file.lineCount ?? 0) > options.longContextLineThreshold
@@ -89,6 +103,20 @@ export class DeterministicReviewerModel implements ReviewerModel {
         });
       }
 
+      if (isLikelyStale(file.path)) {
+        findings.push({
+          id: createId("finding"),
+          type: "stale_note",
+          severity: "medium",
+          filePaths: [file.path],
+          observation: "The file path or name suggests this note may represent old, legacy, draft, archived, or deprecated material.",
+          whyItMatters: "Older notes can still contain durable decisions, but they can also mislead future work if their status is unclear.",
+          suggestion: "Manually check whether durable insights should be extracted into current notes, and mark the old note status clearly if needed.",
+          relatedFiles: [],
+          confidence: 0.5,
+        });
+      }
+
       if (path.basename(file.path).toLowerCase().includes("untitled")) {
         findings.push({
           id: createId("finding"),
@@ -102,7 +130,23 @@ export class DeterministicReviewerModel implements ReviewerModel {
           confidence: 0.5,
         });
       }
+
+      if (isLikelyOrphan(file)) {
+        findings.push({
+          id: createId("finding"),
+          type: "orphan_note",
+          severity: "low",
+          filePaths: [file.path],
+          observation: "This note appears to live in a temporary, miscellaneous, shallow, or weakly categorized location.",
+          whyItMatters: "Orphan notes are easy to lose because future review has no stable topic entry point for finding them again.",
+          suggestion: "Decide whether this note belongs under a stable project, concept, course, or archive topic.",
+          relatedFiles: [],
+          confidence: 0.45,
+        });
+      }
     }
+
+    findings.push(...buildMissingIndexFindings(markdownFiles));
 
     return {
       id: createId("review"),
@@ -118,6 +162,8 @@ export class DeterministicReviewerModel implements ReviewerModel {
 
 function inferTopicTitle(filePath: string): string {
   const parts = filePath.split("/").filter(Boolean);
+  if (parts[0] === "projects" && parts.length >= 2) return parts.slice(0, 2).join("/");
+  if (parts[0] === "notes" && parts.length >= 3) return parts.slice(0, 3).join("/");
   if (parts.length >= 2) return parts.slice(0, 2).join("/");
   return parts[0] ?? "root";
 }
@@ -132,10 +178,11 @@ function inferCategory(filePath: string): KnowledgeTopic["category"] {
 
 function inferRole(filePath: string): KnowledgeTopic["relatedFiles"][number]["role"] {
   const lower = filePath.toLowerCase();
-  if (lower.includes("readme") || lower.includes("index")) return "index";
+  if (isIndexFile(filePath)) return "index";
   if (lower.includes("vision") || lower.includes("prd") || lower.includes("overview")) return "overview";
   if (lower.includes("decision") || lower.includes("adr")) return "decision";
   if (lower.includes("draft") || lower.includes("temp")) return "draft";
+  if (isLikelyStale(filePath)) return "outdated";
   return "unknown";
 }
 
@@ -151,4 +198,52 @@ function buildFileSummary(file: { lineCount?: number; wordCount?: number; layer:
 function isLikelyAiOutput(filePath: string): boolean {
   const lower = filePath.toLowerCase();
   return lower.includes("output") || lower.includes("ai-generated") || lower.includes("chatgpt") || lower.includes("claude");
+}
+
+function isLikelyStale(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return ["old", "legacy", "deprecated", "archive", "archived", "草稿", "旧版", "过时", "废弃"].some((hint) =>
+    lower.includes(hint),
+  );
+}
+
+function isLikelyOrphan(file: ReviewerFileContext): boolean {
+  const parts = file.path.split("/").filter(Boolean);
+  if (parts.length <= 1) return true;
+  if (ORPHAN_DIRECTORY_HINTS.has(parts[0]?.toLowerCase() ?? "")) return true;
+  if (parts.some((part) => ORPHAN_DIRECTORY_HINTS.has(part.toLowerCase()))) return true;
+  return false;
+}
+
+function buildMissingIndexFindings(files: ReviewerFileContext[]): MaintenanceFinding[] {
+  return [...groupFilesByDirectory(files).entries()]
+    .filter(([, directoryFiles]) => directoryFiles.length >= 3)
+    .filter(([, directoryFiles]) => !directoryFiles.some((file) => isIndexFile(file.path)))
+    .map(([directory, directoryFiles]) => ({
+      id: createId("finding"),
+      type: "missing_index" as const,
+      severity: "medium" as const,
+      filePaths: directoryFiles.map((file) => file.path),
+      observation: `The directory ${directory} contains ${directoryFiles.length} Markdown files but no obvious index or overview note.`,
+      whyItMatters: "A topic with several notes but no entry point increases context recovery cost when revisiting the area later.",
+      suggestion: "Consider creating a README, index, overview, 概览, or 总览 note that summarizes the topic and links the key files.",
+      relatedFiles: [],
+      confidence: 0.65,
+    }));
+}
+
+function groupFilesByDirectory(files: ReviewerFileContext[]): Map<string, ReviewerFileContext[]> {
+  const groups = new Map<string, ReviewerFileContext[]>();
+  for (const file of files) {
+    const directory = path.posix.dirname(file.path);
+    if (directory === ".") continue;
+    const current = groups.get(directory) ?? [];
+    current.push(file);
+    groups.set(directory, current);
+  }
+  return groups;
+}
+
+function isIndexFile(filePath: string): boolean {
+  return INDEX_FILE_NAMES.has(path.posix.basename(filePath).toLowerCase());
 }
