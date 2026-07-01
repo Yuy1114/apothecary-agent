@@ -23,11 +23,13 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.4",
     "@ai-sdk/openai-compatible": "^3.0.2",
     "@mastra/core": "^1.47.0",
     "@mastra/evals": "^1.5.0",
     "@mastra/libsql": "^1.14.2",
     "@mastra/memory": "^1.21.2",
+    "@mastra/rag": "^2.3.0",
     "ai": "^7.0.8",
     "commander": "^14.0.2",
     "dotenv": "^17.4.2",

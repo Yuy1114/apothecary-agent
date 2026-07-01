@@ -1,5 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 const INDEX_PATH = path.join(VAULT_PATH, ".agent", "rag-index.json");
@@ -8,9 +11,17 @@ type IndexedChunk = {
   source: string;
   content: string;
   title?: string;
+  embedding: number[];
 };
 
 let index: IndexedChunk[] | null = null;
+
+function getEmbeddingProvider() {
+  return createOpenAI({
+    baseURL: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://aihubmix.com/v1",
+    apiKey: process.env.APOTHECARY_EMBEDDING_API_KEY ?? "",
+  });
+}
 
 async function loadIndex(): Promise<IndexedChunk[]> {
   if (index) return index;
@@ -26,70 +37,98 @@ async function loadIndex(): Promise<IndexedChunk[]> {
 export async function indexVault(scopePath?: string): Promise<{ indexed: number }> {
   const scanRoot = scopePath ? path.join(VAULT_PATH, scopePath) : VAULT_PATH;
   const files = await walkMarkdownFiles(scanRoot);
-  const chunks: IndexedChunk[] = [];
+  const chunks: Array<{ source: string; content: string; title?: string }> = [];
 
   for (const file of files) {
     const content = await fs.readFile(file, "utf8");
     const relativePath = path.relative(VAULT_PATH, file);
+    const title = extractTitle(content, relativePath);
 
-    // Split by headings for meaningful chunks
-    const sections = content.split(/(?=^#{1,3}\s)/m).filter((s) => s.trim().length > 50);
-
-    // Also store a full-content chunk for each file
-    chunks.push({
-      source: relativePath,
-      content: content.slice(0, 3000),
-      title: extractTitle(content, relativePath),
+    // Use Mastra RAG for smart markdown chunking
+    const doc = MDocument.fromMarkdown(content, { type: "md" });
+    const docChunks = await doc.chunk({
+      strategy: "markdown",
+      maxSize: 800,
+      overlap: 60,
     });
 
-    for (const section of sections) {
-      chunks.push({
-        source: relativePath,
-        content: section.slice(0, 2000),
-        title: extractTitle(content, relativePath),
+    for (const chunk of docChunks) {
+      if (chunk.text.trim().length < 50) continue;
+      chunks.push({ source: relativePath, content: chunk.text.slice(0, 2000), title });
+    }
+  }
+
+  // Generate embeddings in batches
+  const embeddingModel = getEmbeddingProvider().embedding(
+    process.env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small",
+  );
+
+  const batchSize = 50;
+  const indexed: IndexedChunk[] = [];
+
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize);
+    const { embeddings } = await embedMany({
+      model: embeddingModel,
+      values: batch.map((c) => c.content),
+    });
+
+    for (let j = 0; j < batch.length; j++) {
+      indexed.push({
+        source: batch[j].source,
+        content: batch[j].content,
+        title: batch[j].title,
+        embedding: embeddings[j] as unknown as number[],
       });
     }
   }
 
   await fs.mkdir(path.dirname(INDEX_PATH), { recursive: true });
-  await fs.writeFile(INDEX_PATH, JSON.stringify(chunks), "utf8");
+  await fs.writeFile(INDEX_PATH, JSON.stringify(indexed), "utf8");
+  index = indexed;
 
-  index = chunks;
-  return { indexed: chunks.length };
+  return { indexed: indexed.length };
 }
 
-/**
- * Simple relevance-based search: token overlap between query and each chunk.
- */
 export async function queryVault(query: string, topK = 5): Promise<Array<{ source: string; content: string }>> {
   const chunks = await loadIndex();
   if (chunks.length === 0) return [];
 
-  const queryTokens = tokenize(query.toLowerCase());
+  // Generate query embedding
+  const embeddingModel = getEmbeddingProvider().embedding(
+    process.env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small",
+  );
+  const { embedding } = await import("ai").then(({ embed }) =>
+    embed({ model: embeddingModel, value: query }),
+  );
 
-  const scored = chunks.map((chunk) => {
-    const chunkTokens = tokenize(chunk.content.toLowerCase());
-    const overlap = queryTokens.filter((t) => chunkTokens.includes(t)).length;
-    // Boost exact phrase matches
-    const phraseBoost = chunk.content.toLowerCase().includes(query.toLowerCase()) ? 2 : 0;
-    return { chunk, score: overlap + phraseBoost };
-  });
+  // Cosine similarity
+  const queryVec = embedding as unknown as number[];
+  const scored = chunks.map((chunk, idx) => ({
+    idx,
+    score: cosineSimilarity(queryVec, chunk.embedding),
+  }));
 
   return scored
-    .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK)
     .map((s) => ({
-      source: s.chunk.source,
-      content: s.chunk.content.slice(0, 1000),
+      source: chunks[s.idx].source,
+      content: chunks[s.idx].content.slice(0, 1000),
     }));
 }
 
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[\s,.;:!?()\[\]{}"']+/)
-    .filter((t) => t.length > 1);
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? 0 : dot / denom;
 }
 
 function extractTitle(content: string, filePath: string): string {
