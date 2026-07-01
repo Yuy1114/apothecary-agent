@@ -5,6 +5,7 @@ import { VaultScanSchema } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
+import { buildMaintenanceReviewContext } from "../reviewer/buildReviewerContext.js";
 import { createReviewerModel } from "../reviewer/createReviewerModel.js";
 import { writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 import { renderMaintenanceReviewMarkdown } from "../reports/renderMaintenanceReviewMarkdown.js";
@@ -26,10 +27,11 @@ export async function runReviewWorkflow(input: ReviewWorkflowInput): Promise<{ j
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
+  const context = buildMaintenanceReviewContext(scan);
   const reviewer = createReviewerModel(config);
   const review = MaintenanceReviewSchema.parse(
     await reviewer.generateMaintenanceReview({
-      scan,
+      context,
       options: {
         longContextWordThreshold: config.review.long_context_word_threshold,
         longContextLineThreshold: config.review.long_context_line_threshold,

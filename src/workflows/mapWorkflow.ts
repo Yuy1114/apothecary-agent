@@ -5,6 +5,7 @@ import { VaultScanSchema } from "../domain/vault.js";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
 import { scanVault } from "../vault/scanner.js";
 import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
+import { buildKnowledgeMapContext } from "../reviewer/buildReviewerContext.js";
 import { createReviewerModel } from "../reviewer/createReviewerModel.js";
 import { renderKnowledgeMapMarkdown, writeJsonAndMarkdown } from "../reports/renderKnowledgeMapMarkdown.js";
 
@@ -24,10 +25,11 @@ export async function runMapWorkflow(input: MapWorkflowInput): Promise<{ jsonPat
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
+  const context = buildKnowledgeMapContext(scan);
   const reviewer = createReviewerModel(config);
   const map = KnowledgeMapSchema.parse(
     await reviewer.generateKnowledgeMap({
-      scan,
+      context,
       options: {
         maxTopics: config.map.max_topics,
         maxFilesPerTopic: config.map.max_files_per_topic,

@@ -1,9 +1,9 @@
 import type { KnowledgeMap } from "../domain/knowledgeMap.js";
 import type { MaintenanceReview } from "../domain/maintenanceReview.js";
-import type { VaultScan } from "../domain/vault.js";
+import type { KnowledgeMapContext, MaintenanceReviewContext } from "./reviewerContext.js";
 
 export type KnowledgeMapInput = {
-  scan: VaultScan;
+  context: KnowledgeMapContext;
   options: {
     maxTopics: number;
     maxFilesPerTopic: number;
@@ -11,7 +11,7 @@ export type KnowledgeMapInput = {
 };
 
 export type MaintenanceReviewInput = {
-  scan: VaultScan;
+  context: MaintenanceReviewContext;
   options: {
     longContextWordThreshold: number;
     longContextLineThreshold: number;

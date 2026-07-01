@@ -7,10 +7,10 @@ import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from ".
 
 export class DeterministicReviewerModel implements ReviewerModel {
   async generateKnowledgeMap(input: KnowledgeMapInput): Promise<KnowledgeMap> {
-    const { scan, options } = input;
+    const { context, options } = input;
     const topicMap = new Map<string, KnowledgeTopic>();
 
-    for (const file of scan.files.filter((candidate) => candidate.mediaType === "markdown")) {
+    for (const file of context.files.filter((candidate) => candidate.mediaType === "markdown")) {
       const topicTitle = inferTopicTitle(file.path);
       const existing = topicMap.get(topicTitle) ?? {
         id: createId("topic"),
@@ -44,20 +44,20 @@ export class DeterministicReviewerModel implements ReviewerModel {
 
     return {
       id: createId("map"),
-      vaultPath: scan.vaultPath,
-      scopePath: scan.scopePath,
+      vaultPath: context.vaultPath,
+      scopePath: context.scopePath,
       generatedAt: nowIso(),
-      basedOnScanId: scan.id,
+      basedOnScanId: context.scanId,
       topics,
-      summary: `Generated ${topics.length} topic candidate(s) from ${scan.stats.markdownFiles} markdown file(s).`,
+      summary: `Generated ${topics.length} topic candidate(s) from ${context.stats.markdownFiles} markdown file(s).`,
     };
   }
 
   async generateMaintenanceReview(input: MaintenanceReviewInput): Promise<MaintenanceReview> {
-    const { scan, options } = input;
+    const { context, options } = input;
     const findings: MaintenanceFinding[] = [];
 
-    for (const file of scan.files.filter((candidate) => candidate.mediaType === "markdown")) {
+    for (const file of context.files.filter((candidate) => candidate.mediaType === "markdown")) {
       if (
         (file.wordCount ?? 0) > options.longContextWordThreshold ||
         (file.lineCount ?? 0) > options.longContextLineThreshold
@@ -106,12 +106,12 @@ export class DeterministicReviewerModel implements ReviewerModel {
 
     return {
       id: createId("review"),
-      vaultPath: scan.vaultPath,
-      scopePath: scan.scopePath,
+      vaultPath: context.vaultPath,
+      scopePath: context.scopePath,
       generatedAt: nowIso(),
-      basedOnScanId: scan.id,
+      basedOnScanId: context.scanId,
       findings,
-      summary: `Found ${findings.length} maintenance finding(s) from ${scan.stats.markdownFiles} markdown file(s).`,
+      summary: `Found ${findings.length} maintenance finding(s) from ${context.stats.markdownFiles} markdown file(s).`,
     };
   }
 }
