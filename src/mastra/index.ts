@@ -12,6 +12,9 @@ import {
   fileChangedWorkflow,
   fileDeletedWorkflow,
 } from "./workflows/sync-workflow.js";
+import { initWorkflow } from "./workflows/init.js";
+import { reviewWorkflow } from "./workflows/review.js";
+import { mapWorkflow } from "./workflows/map.js";
 import {
   handleHealth,
   handleVaultTree,
@@ -32,7 +35,7 @@ setVectorStore(vaultVector);
 
 export const mastra = new Mastra({
   agents: { vaultReviewer },
-  workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow },
+  workflows: { fullReindexWorkflow, fileChangedWorkflow, fileDeletedWorkflow, initWorkflow, reviewWorkflow, mapWorkflow },
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   vectors: { vaultChunks: vaultVector },
   logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),

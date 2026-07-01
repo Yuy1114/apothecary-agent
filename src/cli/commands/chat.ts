@@ -6,10 +6,10 @@ import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
 import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
 import { indexVault } from "../../rag/vectorStore.js";
 import { listProposals, applyProposal, hitlConfirm } from "../hitl.js";
-import { runReviewWorkflow } from "../../workflows/reviewWorkflow.js";
-import { runMapWorkflow } from "../../workflows/mapWorkflow.js";
+import { initWorkflow } from "../../mastra/workflows/init.js";
+import { reviewWorkflow } from "../../mastra/workflows/review.js";
+import { mapWorkflow } from "../../mastra/workflows/map.js";
 import { runStatusWorkflow } from "../../workflows/statusWorkflow.js";
-import { runInitWorkflow } from "../../workflows/initWorkflow.js";
 
 const CHAT_AGENT_INSTRUCTIONS = [
   "You are apothecary-agent, a personal knowledge maintenance assistant.",
@@ -70,7 +70,7 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
 
   if (!configExists) {
     console.log("Workspace not initialized. Running init...\n");
-    await runInitWorkflow({ vaultPath: resolvedVault });
+    await (await initWorkflow.createRun()).start({ inputData: { vaultPath: resolvedVault } });
     console.log("Init done. Now analyzing your vault...\n");
   }
 
@@ -100,19 +100,23 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
     if (!input) continue;
     if (input === "exit" || input === "quit") { console.log("Bye."); rl.close(); break; }
     if (input === "/help") { showHelp(); continue; }
-    if (input === "/init") { await runInitWorkflow({ vaultPath: ctx.vaultPath }); console.log("Done."); continue; }
+    if (input === "/init") { const run = await initWorkflow.createRun(); const result = await run.start({ inputData: { vaultPath: ctx.vaultPath } }); console.log(`Created: ${result.status === "success" ? result.result.created.join(", ") : "failed"}`); continue; }
     if (input === "/index") { const { indexed } = await indexVault(); console.log(`Done: ${indexed} chunks.`); continue; }
     if (input === "/status") { await runStatusWorkflow({ vaultPath: ctx.vaultPath }); continue; }
     if (input.startsWith("/review")) {
       const scope = input.slice(8).trim() || undefined;
-      const { markdownPath } = await runReviewWorkflow({ vaultPath: ctx.vaultPath, scopePath: scope });
-      console.log(`Report: ${markdownPath}`);
+      const run = await reviewWorkflow.createRun();
+      const result = await run.start({ inputData: { vaultPath: ctx.vaultPath, scopePath: scope } });
+      if (result.status === "success") console.log(`Report: ${result.result.markdownPath}`);
+      else console.log("Review failed.");
       continue;
     }
     if (input.startsWith("/map")) {
       const scope = input.slice(5).trim() || undefined;
-      const { markdownPath } = await runMapWorkflow({ vaultPath: ctx.vaultPath, scopePath: scope });
-      console.log(`Map: ${markdownPath}`);
+      const run = await mapWorkflow.createRun();
+      const result = await run.start({ inputData: { vaultPath: ctx.vaultPath, scopePath: scope } });
+      if (result.status === "success") console.log(`Map: ${result.result.markdownPath}`);
+      else console.log("Map failed.");
       continue;
     }
     if (input === "/edits") { await handleEdits(); continue; }
