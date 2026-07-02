@@ -69,5 +69,6 @@ async function createTempArtifacts(): Promise<AgentArtifacts> {
     reviewsDir: path.join(agentRoot, "reviews"),
     metadataDir: path.join(agentRoot, "metadata"),
     logsDir: path.join(agentRoot, "logs"),
+    semanticDir: path.join(agentRoot, "semantic"),
   };
 }

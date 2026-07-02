@@ -8,4 +8,5 @@ export type AgentArtifacts = {
   reviewsDir: string;
   metadataDir: string;
   logsDir: string;
+  semanticDir: string;
 };

@@ -16,6 +16,7 @@ export function getAgentArtifacts(vaultPath: string): AgentArtifacts {
     reviewsDir: path.join(rootPath, "reviews"),
     metadataDir: path.join(rootPath, "metadata"),
     logsDir: path.join(rootPath, "logs"),
+    semanticDir: path.join(rootPath, "semantic"),
   };
 }
 
@@ -27,6 +28,7 @@ export async function ensureAgentArtifacts(vaultPath: string): Promise<AgentArti
     fs.mkdir(artifacts.reviewsDir, { recursive: true }),
     fs.mkdir(artifacts.metadataDir, { recursive: true }),
     fs.mkdir(artifacts.logsDir, { recursive: true }),
+    fs.mkdir(artifacts.semanticDir, { recursive: true }),
   ]);
   return artifacts;
 }
