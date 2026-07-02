@@ -2,6 +2,7 @@ import type { Mastra } from "@mastra/core/mastra";
 import { promises as fs } from "node:fs";
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
+import { enqueueChange } from "./../../vault/changeLog.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -37,11 +38,23 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
   // Isolated from the stat above so a workflow failure is never mistaken for a
   // deletion, and never escapes as an unhandled rejection that crashes the host.
   try {
+    // Index stays eager so search is always fresh.
     const workflowKey = exists ? FILE_CHANGED_WORKFLOW : FILE_DELETED_WORKFLOW;
     const run = await mastra.getWorkflow(workflowKey).createRun();
     await run.start({ inputData: { filePath: relativePath } });
   } catch (error) {
     console.warn(`Vault watcher: failed to sync ${relativePath}:`, error);
+  }
+
+  // Record the change as pending agent-work in the durable ledger.
+  try {
+    await enqueueChange({
+      path: relativePath,
+      changeType: exists ? "modified" : "deleted",
+      source: "watcher",
+    });
+  } catch (error) {
+    console.warn(`Vault watcher: failed to log change for ${relativePath}:`, error);
   }
 }
 
