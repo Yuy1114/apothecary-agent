@@ -11,6 +11,9 @@ export type DirectoryDef = {
 
 export type VaultStructure = {
   directories: Record<string, DirectoryDef>;
+  // Source-prefix → canonical-prefix. Used to canonicalize alias directories
+  // (e.g. "notes/programming/dsa/" → "notes/programming/Data Structures & Algorithms/").
+  aliases: Record<string, string>;
 };
 
 let cache: VaultStructure | null = null;
@@ -19,10 +22,14 @@ export async function loadStructure(): Promise<VaultStructure> {
   if (cache) return cache;
   try {
     const raw = await fs.readFile(path.join(VAULT_PATH, ".agent", "structure.yaml"), "utf8");
-    cache = parse(raw) as VaultStructure;
-    return cache!;
+    const parsed = (parse(raw) ?? {}) as Partial<VaultStructure>;
+    cache = {
+      directories: parsed.directories ?? {},
+      aliases: parsed.aliases ?? {},
+    };
+    return cache;
   } catch {
-    return { directories: {} };
+    return { directories: {}, aliases: {} };
   }
 }
 

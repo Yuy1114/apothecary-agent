@@ -24,6 +24,7 @@ import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
 import { applyEditWorkflow } from "./workflows/apply-edit.js";
+import { reorganizeWorkflow } from "./workflows/reorganize.js";
 import { workspace } from "./workspaces.js";
 import { apothecaryMemory } from "./memory.js";
 import path from "path";
@@ -79,6 +80,7 @@ export const mastra = new Mastra({
     reviewWorkflow,
     mapWorkflow,
     applyEditWorkflow,
+    reorganizeWorkflow,
   },
   workspace,
   storage: new MastraCompositeStore({
