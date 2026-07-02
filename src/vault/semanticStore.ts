@@ -2,11 +2,34 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getAgentArtifacts } from "../artifacts/agentArtifacts.js";
 import { FileSummariesSchema, type FileSummaries, type FileSummary } from "../domain/semantic.js";
+import { SemanticGraphSchema, type SemanticGraph } from "../domain/semantic.js";
 
 const FILE = "file-summaries.json";
+const GRAPH_FILE = "semantic-graph.json";
 
 function summariesPath(vaultPath: string): string {
   return path.join(getAgentArtifacts(vaultPath).semanticDir, FILE);
+}
+
+function graphPath(vaultPath: string): string {
+  return path.join(getAgentArtifacts(vaultPath).semanticDir, GRAPH_FILE);
+}
+
+const EMPTY_GRAPH: SemanticGraph = { generatedAt: "", topics: [], concepts: [] };
+
+export async function loadGraph(vaultPath: string): Promise<SemanticGraph> {
+  try {
+    const raw = await fs.readFile(graphPath(vaultPath), "utf8");
+    return SemanticGraphSchema.parse(JSON.parse(raw));
+  } catch {
+    return EMPTY_GRAPH;
+  }
+}
+
+export async function saveGraph(vaultPath: string, graph: SemanticGraph): Promise<void> {
+  const filePath = graphPath(vaultPath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(graph, null, 2), "utf8");
 }
 
 export async function loadSummaries(vaultPath: string): Promise<FileSummaries> {

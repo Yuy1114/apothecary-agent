@@ -20,6 +20,20 @@ export type FileSummary = z.infer<typeof FileSummarySchema>;
 export const FileSummariesSchema = z.record(z.string(), FileSummarySchema);
 export type FileSummaries = z.infer<typeof FileSummariesSchema>;
 
+export const GraphEntrySchema = z.object({
+  label: z.string(),
+  files: z.array(z.string()),
+});
+export type GraphEntry = z.infer<typeof GraphEntrySchema>;
+
+/** Deterministic cross-file index derived from file summaries. */
+export const SemanticGraphSchema = z.object({
+  generatedAt: z.string(),
+  topics: z.array(GraphEntrySchema),
+  concepts: z.array(GraphEntrySchema),
+});
+export type SemanticGraph = z.infer<typeof SemanticGraphSchema>;
+
 /** The model-generated portion (metadata is attached deterministically). */
 export const FileSummaryDraftSchema = z.object({
   gist: z.string(),

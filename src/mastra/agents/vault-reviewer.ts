@@ -3,6 +3,8 @@ import { queryVaultTool } from "../tools/rag.js";
 import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
 import { readFileSummaryTool } from "../tools/read-file-summary.js";
+import { listSemanticTopicsTool } from "../tools/list-semantic-topics.js";
+import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
 import { apothecaryMemory } from "../memory.js";
@@ -18,6 +20,7 @@ export const vaultReviewer = new Agent({
     "Relevant vault excerpts may be automatically provided before each answer. " +
     "Use queryVault to search for more content, scanVault to explore, and readMarkdown to inspect files. " +
     "Use readFileSummary to get a file's semantic summary (gist, topics, concepts) without reading the whole file. " +
+    "Use listSemanticTopics for a birds-eye view of the vault's topics/concepts, and findRelatedFiles to find notes related to a given file. " +
     "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: "deepseek/deepseek-v4-flash",
   inputProcessors: [new VaultSemanticRecallProcessor()],
@@ -27,5 +30,7 @@ export const vaultReviewer = new Agent({
     scanVault: scanVaultTool,
     readMarkdown: readMarkdownTool,
     readFileSummary: readFileSummaryTool,
+    listSemanticTopics: listSemanticTopicsTool,
+    findRelatedFiles: findRelatedFilesTool,
   },
 });

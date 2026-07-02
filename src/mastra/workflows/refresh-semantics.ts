@@ -7,10 +7,12 @@ import { scanVault } from "../../vault/scanner.js";
 import {
   loadSummaries,
   saveSummaries,
+  saveGraph,
   needsRefresh,
   upsertSummary,
   pruneMissing,
 } from "../../vault/semanticStore.js";
+import { buildSemanticGraph } from "../../domain/semanticGraph.js";
 import { generateFileSummary } from "../../application/semantic/generateFileSummary.js";
 
 const OutputSchema = z.object({
@@ -18,6 +20,8 @@ const OutputSchema = z.object({
   skipped: z.number(),
   pruned: z.number(),
   failed: z.number(),
+  topics: z.number(),
+  concepts: z.number(),
 });
 
 const CONCURRENCY = Number(process.env.APOTHECARY_SEMANTIC_CONCURRENCY ?? 8);
@@ -128,7 +132,18 @@ const refreshStep = createStep({
     const pruneResult = pruneMissing(summaries, markdown.map((file) => file.path));
     await saveSummaries(vaultPath, pruneResult.summaries);
 
-    return { refreshed, skipped, pruned: pruneResult.pruned, failed };
+    // Rebuild the derived semantic graph from the final summaries (deterministic, cheap).
+    const graph = buildSemanticGraph(pruneResult.summaries);
+    await saveGraph(vaultPath, graph);
+
+    return {
+      refreshed,
+      skipped,
+      pruned: pruneResult.pruned,
+      failed,
+      topics: graph.topics.length,
+      concepts: graph.concepts.length,
+    };
   },
 });
 
