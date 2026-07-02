@@ -5,6 +5,7 @@ import { readMarkdownTool } from "../tools/read-markdown.js";
 import { readFileSummaryTool } from "../tools/read-file-summary.js";
 import { listSemanticTopicsTool } from "../tools/list-semantic-topics.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
+import { generateKnowledgeViewTool } from "../tools/generate-knowledge-view.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
 import { apothecaryMemory } from "../memory.js";
@@ -21,6 +22,7 @@ export const vaultReviewer = new Agent({
     "Use queryVault to search for more content, scanVault to explore, and readMarkdown to inspect files. " +
     "Use readFileSummary to get a file's semantic summary (gist, topics, concepts) without reading the whole file. " +
     "Use listSemanticTopics for a birds-eye view of the vault's topics/concepts, and findRelatedFiles to find notes related to a given file. " +
+    "When the user asks for an overview or knowledge system of some direction/subject, use generateKnowledgeView to build a structured view. " +
     "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: "deepseek/deepseek-v4-flash",
   inputProcessors: [new VaultSemanticRecallProcessor()],
@@ -32,5 +34,6 @@ export const vaultReviewer = new Agent({
     readFileSummary: readFileSummaryTool,
     listSemanticTopics: listSemanticTopicsTool,
     findRelatedFiles: findRelatedFilesTool,
+    generateKnowledgeView: generateKnowledgeViewTool,
   },
 });

@@ -9,4 +9,5 @@ export type AgentArtifacts = {
   metadataDir: string;
   logsDir: string;
   semanticDir: string;
+  viewsDir: string;
 };
