@@ -1,25 +1,34 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { embed, embedMany } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LibSQLVector } from "@mastra/libsql";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { MDocument } from "@mastra/rag";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
 
 // ── Embedding model ──
 
-export const EMBEDDING_MODEL = new ModelRouterEmbeddingModel({
-  providerId: "aihubmix",
-  modelId: process.env.APOTHECARY_EMBEDDING_MODEL ?? "",
-  url: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "",
-  apiKey: process.env.APOTHECARY_EMBEDDING_API_KEY ?? "",
+const embeddingProvider = createOpenAICompatible({
+  name: "aihubmix",
+  baseURL:
+    process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
+  apiKey:
+    process.env.APOTHECARY_EMBEDDING_API_KEY ??
+    process.env.OPENAI_API_KEY ??
+    "",
 });
+
+export const embedder = embeddingProvider.embeddingModel(
+  process.env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small"
+);
+export const EMBEDDING_MODEL = embedder;
 
 // ── Constants ──
 
 const INDEX_NAME = "vault_chunks";
+const VECTOR_STORE_NAME = "vaultChunks";
 const VAULT_PATH =
   process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -58,7 +67,7 @@ type SearchResult = {
   headings?: string[];
 };
 
-// ── Plain functions (for workflows, routes, CLI) ──
+// ── Plain functions (for workflows and processors) ──
 
 export async function indexVault(
   scopePath?: string
@@ -160,8 +169,8 @@ export async function queryVault(
     });
 
     return results
-      .map((r): SearchResult | null => {
-        const meta = r.metadata;
+      .map((result): SearchResult | null => {
+        const meta = result.metadata;
         if (!meta?.source) return null;
         return {
           source: meta.source as string,
@@ -178,33 +187,14 @@ export async function queryVault(
 
 // ── Mastra tools (for agents) ──
 
-export const queryVaultTool = createTool({
+export const queryVaultTool = createVectorQueryTool({
   id: "queryVault",
   description:
-    "Search the vault for relevant content using semantic search. Returns matching chunks with source file, heading breadcrumb, and content snippet.",
-  inputSchema: z.object({
-    query: z.string().describe("The search query."),
-    topK: z
-      .number()
-      .optional()
-      .default(5)
-      .describe("Number of results to return."),
-  }),
-  outputSchema: z.object({
-    results: z.array(
-      z.object({
-        source: z.string(),
-        title: z.string().optional(),
-        headings: z.array(z.string()).optional(),
-        content: z.string(),
-        score: z.number(),
-      })
-    ),
-  }),
-  execute: async ({ query, topK }) => {
-    const results = await queryVault(query, topK);
-    return { results: results.map((r) => ({ ...r, score: 0 })) };
-  },
+    "Search Yuy's vault for relevant markdown excerpts using semantic search. Use this when answering questions that need evidence from the vault. Cite source metadata paths in the answer.",
+  vectorStoreName: VECTOR_STORE_NAME,
+  indexName: INDEX_NAME,
+  model: EMBEDDING_MODEL as any,
+  includeSources: true,
 });
 
 export const indexVaultTool = createTool({
@@ -358,12 +348,13 @@ function extractHeadingTree(content: string): HeadingNode[] {
   let pos = 0;
   for (const line of lines) {
     const match = line.match(/^(#{1,6})\s+(.+)/);
-    if (match)
+    if (match) {
       nodes.push({
         level: match[1].length,
         text: match[2].trim(),
         position: pos,
       });
+    }
     pos += line.length + 1;
   }
   return nodes;
@@ -387,10 +378,10 @@ function findHeadingBreadcrumb(
   chunkPosition: number
 ): string[] {
   const breadcrumb: string[] = [];
-  for (const h of headings) {
-    if (h.position > chunkPosition) break;
-    while (breadcrumb.length >= h.level) breadcrumb.pop();
-    breadcrumb.push(h.text);
+  for (const heading of headings) {
+    if (heading.position > chunkPosition) break;
+    while (breadcrumb.length >= heading.level) breadcrumb.pop();
+    breadcrumb.push(heading.text);
   }
   return breadcrumb;
 }

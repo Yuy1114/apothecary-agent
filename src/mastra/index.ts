@@ -106,7 +106,7 @@ export const mastra = new Mastra({
   }),
   memory: {
     apothecary: new Memory({
-      embedder: EMBEDDING_MODEL,
+      embedder: EMBEDDING_MODEL as any,
       options: {
         lastMessages: 20,
         observationalMemory: true,
