@@ -5,7 +5,11 @@ import { DuckDBStore } from "@mastra/duckdb";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
 import { PinoLogger } from "@mastra/loggers";
-import { Observability, MastraStorageExporter, SensitiveDataFilter } from "@mastra/observability";
+import {
+  Observability,
+  MastraStorageExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
 import { vaultCurator } from "./agents/vault-curator.js";
@@ -23,17 +27,46 @@ import { mapWorkflow } from "./workflows/map.js";
 import { applyEditWorkflow } from "./workflows/apply-edit.js";
 import { EMBEDDING_MODEL } from "./tools/rag.js";
 import { workspace } from "./workspaces.js";
+import path from "path";
 
-const DB_PATH = "file:./local.db";
-const OBSERVABILITY_DB_PATH = "./observability.duckdb";
+function getProjectRoot() {
+  const cwd = process.cwd();
+  const devRuntimePath = `${path.sep}src${path.sep}mastra${path.sep}public`;
+  const buildRuntimePath = `${path.sep}.mastra${path.sep}output`;
 
+  if (cwd.includes(devRuntimePath)) {
+    return cwd.slice(0, cwd.indexOf(devRuntimePath));
+  }
+  if (cwd.includes(buildRuntimePath)) {
+    return cwd.slice(0, cwd.indexOf(buildRuntimePath));
+  }
+  return cwd;
+}
+
+const projectRoot = getProjectRoot();
+
+const DB_PATH = `file:${path.resolve(projectRoot, "sql/local.db")}`;
+const VECTOR_DB_PATH = `file:${path.resolve(projectRoot, "sql/vectors.db")}`;
+const OBSERVABILITY_DB_PATH = path.resolve(
+  projectRoot,
+  "sql/observability.duckdb"
+);
 // ── Vector store ──
 
-const vaultVector = new LibSQLVector({ id: "vault-chunks", url: DB_PATH });
+const vaultVector = new LibSQLVector({
+  id: "vault-chunks",
+  url: VECTOR_DB_PATH,
+});
 setVectorStore(vaultVector);
 
-const applicationStorage = new LibSQLStore({ id: "apothecary-storage", url: DB_PATH });
-const observabilityStorage = new DuckDBStore({ id: "apothecary-observability", path: OBSERVABILITY_DB_PATH });
+const applicationStorage = new LibSQLStore({
+  id: "apothecary-storage",
+  url: DB_PATH,
+});
+const observabilityStorage = new DuckDBStore({
+  id: "apothecary-observability",
+  path: OBSERVABILITY_DB_PATH,
+});
 
 // ── Mastra instance ──
 

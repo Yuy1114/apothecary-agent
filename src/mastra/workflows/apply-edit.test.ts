@@ -9,7 +9,9 @@ import { applyEditWorkflow } from "./apply-edit.js";
 const tempDirs: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+  );
 });
 
 describe("applyEditWorkflow", () => {
@@ -27,7 +29,9 @@ describe("applyEditWorkflow", () => {
     });
 
     const run = await createApplyEditWorkflowRun();
-    const result = await run.start({ inputData: { vaultPath, proposalId: "edit-approval-001" } });
+    const result = await run.start({
+      inputData: { vaultPath, proposalId: "edit-approval-001" },
+    });
 
     expect(result.status).toBe("suspended");
     if (result.status !== "suspended") return;
@@ -44,9 +48,16 @@ describe("applyEditWorkflow", () => {
     expect(resumed.status).toBe("success");
     if (resumed.status !== "success") return;
     expect(resumed.result.applied).toBe(true);
-    await expect(readFile(path.join(vaultPath, "notes/test.md"), "utf8")).resolves.toBe("# New\n\nApproved content.");
+    await expect(
+      readFile(path.join(vaultPath, "notes/test.md"), "utf8")
+    ).resolves.toBe("# New\n\nApproved content.");
 
-    const proposal = JSON.parse(await readFile(path.join(vaultPath, ".agent", "edits", "edit-approval-001.json"), "utf8"));
+    const proposal = JSON.parse(
+      await readFile(
+        path.join(vaultPath, ".agent", "edits", "edit-approval-001.json"),
+        "utf8"
+      )
+    );
     expect(proposal.status).toBe("applied");
   });
 
@@ -64,7 +75,9 @@ describe("applyEditWorkflow", () => {
     });
 
     const run = await createApplyEditWorkflowRun();
-    const result = await run.start({ inputData: { vaultPath, proposalId: "edit-approval-002" } });
+    const result = await run.start({
+      inputData: { vaultPath, proposalId: "edit-approval-002" },
+    });
     expect(result.status).toBe("suspended");
 
     const resumed = await run.resume({ resumeData: { approved: false } });
@@ -72,7 +85,12 @@ describe("applyEditWorkflow", () => {
     expect(resumed.status).toBe("success");
     if (resumed.status !== "success") return;
     expect(resumed.result.applied).toBe(false);
-    const proposal = JSON.parse(await readFile(path.join(vaultPath, ".agent", "edits", "edit-approval-002.json"), "utf8"));
+    const proposal = JSON.parse(
+      await readFile(
+        path.join(vaultPath, ".agent", "edits", "edit-approval-002.json"),
+        "utf8"
+      )
+    );
     expect(proposal.status).toBe("proposed");
   });
 });
@@ -80,20 +98,34 @@ describe("applyEditWorkflow", () => {
 async function createApplyEditWorkflowRun() {
   const mastra = new Mastra({
     workflows: { applyEditWorkflow },
-    storage: new LibSQLStore({ id: "apothecary-apply-edit-workflow-test-storage", url: "file:./local.db" }),
+    storage: new LibSQLStore({
+      id: "apothecary-apply-edit-workflow-test-storage",
+      url: "file:./sql/local.db",
+    }),
   });
   const workflow = mastra.getWorkflow("applyEditWorkflow");
   return await workflow.createRun();
 }
 
 async function createTempVault(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "apothecary-apply-edit-workflow-test-"));
+  const dir = await mkdtemp(
+    path.join(tmpdir(), "apothecary-apply-edit-workflow-test-")
+  );
   tempDirs.push(dir);
   return dir;
 }
 
-async function writeProposal(vaultPath: string, proposal: Record<string, unknown>): Promise<void> {
+async function writeProposal(
+  vaultPath: string,
+  proposal: Record<string, unknown>
+): Promise<void> {
   const editsDir = path.join(vaultPath, ".agent", "edits");
-  await import("node:fs/promises").then((fs) => fs.mkdir(editsDir, { recursive: true }));
-  await writeFile(path.join(editsDir, `${proposal.id}.json`), JSON.stringify(proposal), "utf8");
+  await import("node:fs/promises").then((fs) =>
+    fs.mkdir(editsDir, { recursive: true })
+  );
+  await writeFile(
+    path.join(editsDir, `${proposal.id}.json`),
+    JSON.stringify(proposal),
+    "utf8"
+  );
 }

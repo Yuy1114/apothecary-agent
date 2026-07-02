@@ -6,8 +6,12 @@ coverage/
 .agent/
 .mastra/
 examples/**/.agent/
+
 local.db
 local.db-shm
 local.db-wal
 observability.duckdb
 observability.duckdb.wal
+vectors.db
+vectors.db-shm
+vectors.db-wal
