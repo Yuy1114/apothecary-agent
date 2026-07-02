@@ -1,24 +1,15 @@
 # apothecary-agent
 
-Read-only Vault Reviewer for local Markdown knowledge bases.
+Mastra-native agent for local Markdown knowledge bases.
 
-v0.1 focuses on scanning a local vault and generating safe `.agent/` artifacts. It does not modify user notes.
+The project is developed and tested through Mastra Studio. Local vault access is configured through `APOTHECARY_VAULT_PATH`, falling back to `/Users/yuy/apothecary-vault` for Yuy's local setup.
 
 ## Development
 
 ```bash
 pnpm install
 pnpm run build
-pnpm run dev -- status
+pnpm run dev
 ```
 
-The project-level `apothecary.config.yaml` stores the default vault path:
-
-```yaml
-vault:
-  path: /Users/yuy/apothecary-vault
-```
-
-All commands also accept `--vault <path>` to override that default.
-
-`init` creates `.agent/config.yaml` plus protocol files inside the target vault. v0.1 reads the vault-local YAML config for scan ignore patterns, hash behavior, status recent-file limits, map size limits, and deterministic review thresholds.
+The vault-local `.agent/config.yaml` remains the editable knowledge-maintenance config. It controls scan ignore patterns, hash behavior, status recent-file limits, map size limits, and deterministic review thresholds.
