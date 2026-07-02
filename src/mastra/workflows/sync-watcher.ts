@@ -19,25 +19,40 @@ function isIgnoredPath(relativePath: string): boolean {
   return relativePath.startsWith(".");
 }
 
+// Mastra.getWorkflow() resolves by registration key (see index.ts), NOT the
+// workflow's internal id. These must match the keys used when registering.
+const FILE_CHANGED_WORKFLOW = "fileChangedWorkflow";
+const FILE_DELETED_WORKFLOW = "fileDeletedWorkflow";
+
+async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
+  const absolutePath = path.join(VAULT_PATH, relativePath);
+
+  let exists = false;
+  try {
+    exists = (await fs.stat(absolutePath)).isFile();
+  } catch {
+    exists = false;
+  }
+
+  // Isolated from the stat above so a workflow failure is never mistaken for a
+  // deletion, and never escapes as an unhandled rejection that crashes the host.
+  try {
+    const workflowKey = exists ? FILE_CHANGED_WORKFLOW : FILE_DELETED_WORKFLOW;
+    const run = await mastra.getWorkflow(workflowKey).createRun();
+    await run.start({ inputData: { filePath: relativePath } });
+  } catch (error) {
+    console.warn(`Vault watcher: failed to sync ${relativePath}:`, error);
+  }
+}
+
 export function startVaultWatcher(mastra: Mastra): void {
   if (watcher) return;
   try {
-    watcher = watch(VAULT_PATH, { recursive: true }, async (_eventType, filename) => {
+    watcher = watch(VAULT_PATH, { recursive: true }, (_eventType, filename) => {
       const relativePath = toPortablePath(filename ?? "");
       if (!relativePath || isIgnoredPath(relativePath)) return;
       if (!isMarkdownPath(relativePath)) return;
-
-      const absolutePath = path.join(VAULT_PATH, relativePath);
-      try {
-        const stat = await fs.stat(absolutePath);
-        if (stat.isFile()) {
-          const run = await mastra.getWorkflow("file-changed").createRun();
-          await run.start({ inputData: { filePath: relativePath } });
-        }
-      } catch {
-        const run = await mastra.getWorkflow("file-deleted").createRun();
-        await run.start({ inputData: { filePath: relativePath } });
-      }
+      void syncChange(mastra, relativePath);
     });
     console.log("Vault watcher started");
   } catch {
