@@ -1,4 +1,4 @@
-import type { VaultFileMediaType, VaultLayer, VaultStats } from "../domain/vault.js";
+import type { VaultFileMediaType, VaultLayer, VaultStats } from "../../domain/vault.js";
 
 export type ReviewerFileContext = {
   path: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { VaultScan } from "../domain/vault.js";
+import type { VaultScan } from "../../domain/vault.js";
 import { buildKnowledgeMapContext } from "./buildReviewerContext.js";
 
 describe("buildReviewerContext", () => {

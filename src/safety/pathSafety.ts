@@ -26,6 +26,6 @@ export function assertInsideDirectory(parentDir: string, targetPath: string): vo
   }
 }
 
-export function assertAgentWorkspaceWrite(agentRootPath: string, targetPath: string): void {
+export function assertAgentArtifactsWrite(agentRootPath: string, targetPath: string): void {
   assertInsideDirectory(agentRootPath, targetPath);
 }

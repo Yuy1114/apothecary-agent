@@ -6,9 +6,9 @@ import { KnowledgeMapSchema } from "../../domain/knowledgeMap.js";
 import { VaultScanSchema } from "../../domain/vault.js";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { scanVault } from "../../vault/scanner.js";
-import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
-import { buildKnowledgeMapContext } from "../../reviewer/buildReviewerContext.js";
-import { createReviewerModel } from "../../reviewer/createReviewerModel.js";
+import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
+import { buildKnowledgeMapContext } from "../../application/review/buildReviewerContext.js";
+import { createReviewerModel } from "../../application/review/createReviewerModel.js";
 import { renderKnowledgeMapMarkdown } from "../../reports/renderKnowledgeMapMarkdown.js";
 
 // ── Steps ──
@@ -28,14 +28,14 @@ const scanStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional() }),
   outputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const scan = VaultScanSchema.parse(await scanVault({
       vaultPath: inputData.vaultPath,
       scopePath: inputData.scopePath,
       includeHash: false,
       ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**"],
     }));
-    return { ...inputData, scanId: scan.id, _scan: scan, _workspace: workspace };
+    return { ...inputData, scanId: scan.id, _scan: scan, _artifacts: artifacts };
   },
 });
 
@@ -50,7 +50,7 @@ const mapStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const scan = (inputData as any)._scan;
-    const workspace = (inputData as any)._workspace;
+    const artifacts = (inputData as any)._artifacts;
     const context = buildKnowledgeMapContext(scan, {
       maxFiles: 20,
       minSizeBytes: 100,
@@ -62,12 +62,12 @@ const mapStep = createStep({
         options: { maxTopics: 10, maxFilesPerTopic: 8 },
       }),
     );
-    const jsonPath = path.join(workspace.mapsDir, "knowledge-map.json");
-    const markdownPath = path.join(workspace.mapsDir, "knowledge-map.md");
+    const jsonPath = path.join(artifacts.mapsDir, "knowledge-map.json");
+    const markdownPath = path.join(artifacts.mapsDir, "knowledge-map.md");
     const mapMd = renderKnowledgeMapMarkdown(map);
 
-    await writeJsonArtifact({ workspace, artifactPath: jsonPath, value: map });
-    await writeMarkdownArtifact({ workspace, artifactPath: markdownPath, content: mapMd });
+    await writeJsonArtifact({ artifacts, artifactPath: jsonPath, value: map });
+    await writeMarkdownArtifact({ artifacts, artifactPath: markdownPath, content: mapMd });
 
     return { jsonPath, markdownPath, mapJson: JSON.stringify(map), mapMd };
   },

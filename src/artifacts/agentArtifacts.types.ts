@@ -1,4 +1,4 @@
-export type AgentWorkspace = {
+export type AgentArtifacts = {
   rootPath: string;
   configPath: string;
   protocolDir: string;

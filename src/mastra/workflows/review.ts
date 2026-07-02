@@ -6,10 +6,10 @@ import { MaintenanceReviewSchema } from "../../domain/maintenanceReview.js";
 import { VaultScanSchema } from "../../domain/vault.js";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { scanVault } from "../../vault/scanner.js";
-import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
-import { buildMaintenanceReviewContext } from "../../reviewer/buildReviewerContext.js";
-import { createReviewerModel } from "../../reviewer/createReviewerModel.js";
-import { normalizeMaintenanceReview } from "../../reviewer/normalizeMaintenanceReview.js";
+import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
+import { buildMaintenanceReviewContext } from "../../application/review/buildReviewerContext.js";
+import { createReviewerModel } from "../../application/review/createReviewerModel.js";
+import { normalizeMaintenanceReview } from "../../application/review/normalizeMaintenanceReview.js";
 import { renderMaintenanceReviewMarkdown } from "../../reports/renderMaintenanceReviewMarkdown.js";
 import { timestampForFile } from "../../utils/time.js";
 
@@ -30,7 +30,7 @@ const scanStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional() }),
   outputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const scan = VaultScanSchema.parse(await scanVault({
       vaultPath: inputData.vaultPath,
       scopePath: inputData.scopePath,
@@ -38,7 +38,7 @@ const scanStep = createStep({
       ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**"],
     }));
     // Store scan in state for next steps
-    return { ...inputData, scanId: scan.id, _scan: scan, _workspace: workspace };
+    return { ...inputData, scanId: scan.id, _scan: scan, _artifacts: artifacts };
   },
 });
 
@@ -53,7 +53,7 @@ const reviewStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const scan = (inputData as any)._scan;
-    const workspace = (inputData as any)._workspace;
+    const artifacts = (inputData as any)._artifacts;
     const context = buildMaintenanceReviewContext(scan, {
       maxFiles: 20,
       minSizeBytes: 100,
@@ -67,12 +67,12 @@ const reviewStep = createStep({
     );
     const review = MaintenanceReviewSchema.parse(normalizeMaintenanceReview(rawReview));
     const stamp = timestampForFile();
-    const jsonPath = path.join(workspace.reviewsDir, `review-${stamp}.json`);
-    const markdownPath = path.join(workspace.reviewsDir, `review-${stamp}.md`);
+    const jsonPath = path.join(artifacts.reviewsDir, `review-${stamp}.json`);
+    const markdownPath = path.join(artifacts.reviewsDir, `review-${stamp}.md`);
     const reviewMd = renderMaintenanceReviewMarkdown(review);
 
-    await writeJsonArtifact({ workspace, artifactPath: jsonPath, value: review });
-    await writeMarkdownArtifact({ workspace, artifactPath: markdownPath, content: reviewMd });
+    await writeJsonArtifact({ artifacts, artifactPath: jsonPath, value: review });
+    await writeMarkdownArtifact({ artifacts, artifactPath: markdownPath, content: reviewMd });
 
     return { jsonPath, markdownPath, reviewJson: JSON.stringify(review), reviewMd };
   },

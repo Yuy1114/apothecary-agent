@@ -1,5 +1,5 @@
-import type { KnowledgeMap } from "../domain/knowledgeMap.js";
-import type { MaintenanceReview } from "../domain/maintenanceReview.js";
+import type { KnowledgeMap } from "../../domain/knowledgeMap.js";
+import type { MaintenanceReview } from "../../domain/maintenanceReview.js";
 import type { KnowledgeMapContext, MaintenanceReviewContext } from "./reviewerContext.js";
 
 export type KnowledgeMapInput = {

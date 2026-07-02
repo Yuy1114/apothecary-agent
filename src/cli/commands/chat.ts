@@ -2,14 +2,14 @@ import { Agent } from "@mastra/core/agent";
 import readline from "node:readline";
 import { promises as fs } from "node:fs";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
-import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
+import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
 import { indexVault } from "../../mastra/tools/rag.js";
 import { listProposals, applyProposal, hitlConfirm } from "../hitl.js";
 import { initWorkflow } from "../../mastra/workflows/init.js";
 import { reviewWorkflow } from "../../mastra/workflows/review.js";
 import { mapWorkflow } from "../../mastra/workflows/map.js";
-import { runStatusWorkflow } from "../../workflows/statusWorkflow.js";
+import { runStatusWorkflow } from "../../application/status/statusWorkflow.js";
 
 const CHAT_AGENT_INSTRUCTIONS = [
   "You are apothecary-agent, a personal knowledge maintenance assistant.",
@@ -57,12 +57,12 @@ export async function createChatSession(vaultPath?: string): Promise<void> {
   const resolvedVault = await resolveExistingDirectory(
     process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault",
   );
-  const workspace = await ensureAgentWorkspace(resolvedVault);
+  const artifacts = await ensureAgentArtifacts(resolvedVault);
 
   // Check if config exists — if not, auto-init
   let configExists = false;
   try {
-    await fs.access(workspace.configPath);
+    await fs.access(artifacts.configPath);
     configExists = true;
   } catch {
     // config missing

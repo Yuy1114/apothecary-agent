@@ -1,4 +1,4 @@
-import type { VaultFile, VaultScan } from "../domain/vault.js";
+import type { VaultFile, VaultScan } from "../../domain/vault.js";
 import type { KnowledgeMapContext, MaintenanceReviewContext, ReviewerFileContext } from "./reviewerContext.js";
 
 type BuildOptions = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MaintenanceFinding, MaintenanceReview } from "../domain/maintenanceReview.js";
+import type { MaintenanceFinding, MaintenanceReview } from "../../domain/maintenanceReview.js";
 import { normalizeMaintenanceReview } from "./normalizeMaintenanceReview.js";
 
 describe("normalizeMaintenanceReview", () => {

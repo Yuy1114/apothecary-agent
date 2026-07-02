@@ -1,7 +1,7 @@
-import type { KnowledgeMap } from "../domain/knowledgeMap.js";
-import type { MaintenanceReview } from "../domain/maintenanceReview.js";
+import type { KnowledgeMap } from "../../domain/knowledgeMap.js";
+import type { MaintenanceReview } from "../../domain/maintenanceReview.js";
 import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from "./reviewerModel.js";
-import { vaultReviewer } from "../mastra/agents/vault-reviewer.js";
+import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
 
 const MAP_SYSTEM = [
   "You are apothecary-agent. Generate a knowledge map from the provided vault scan context.",

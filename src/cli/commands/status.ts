@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { resolveVaultPath } from "../../config/projectConfig.js";
-import { formatStatus, runStatusWorkflow } from "../../workflows/statusWorkflow.js";
+import { formatStatus, runStatusWorkflow } from "../../application/status/statusWorkflow.js";
 
 export function registerStatusCommand(program: Command): void {
   program

@@ -1,10 +1,10 @@
 import path from "node:path";
-import { writeJsonArtifact } from "../artifacts/writeAgentArtifact.js";
-import { loadConfig } from "../config/config.js";
-import { VaultScanSchema, type VaultScan } from "../domain/vault.js";
-import { resolveExistingDirectory } from "../safety/pathSafety.js";
-import { scanVault } from "../vault/scanner.js";
-import { ensureAgentWorkspace } from "../workspace/agentWorkspace.js";
+import { writeJsonArtifact } from "../../artifacts/writeAgentArtifact.js";
+import { loadConfig } from "../../config/config.js";
+import { VaultScanSchema, type VaultScan } from "../../domain/vault.js";
+import { resolveExistingDirectory } from "../../safety/pathSafety.js";
+import { scanVault } from "../../vault/scanner.js";
+import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 
 export type StatusWorkflowInput = {
   vaultPath: string;
@@ -18,8 +18,8 @@ export type StatusWorkflowResult = {
 
 export async function runStatusWorkflow(input: StatusWorkflowInput): Promise<StatusWorkflowResult> {
   const vaultPath = await resolveExistingDirectory(input.vaultPath);
-  const workspace = await ensureAgentWorkspace(vaultPath);
-  const config = await loadConfig(workspace);
+  const artifacts = await ensureAgentArtifacts(vaultPath);
+  const config = await loadConfig(artifacts);
   const scan = VaultScanSchema.parse(await scanVault({
     vaultPath,
     scopePath: input.scopePath,
@@ -27,8 +27,8 @@ export async function runStatusWorkflow(input: StatusWorkflowInput): Promise<Sta
     ignore: config.scan.ignore,
     recentFilesLimit: config.scan.recent_files_limit,
   }));
-  const lastScanPath = path.join(workspace.metadataDir, "last-scan.json");
-  await writeJsonArtifact({ workspace, artifactPath: lastScanPath, value: scan });
+  const lastScanPath = path.join(artifacts.metadataDir, "last-scan.json");
+  await writeJsonArtifact({ artifacts, artifactPath: lastScanPath, value: scan });
 
   return { scan, lastScanPath };
 }

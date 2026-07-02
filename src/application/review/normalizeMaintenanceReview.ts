@@ -1,4 +1,4 @@
-import type { FindingSeverity, MaintenanceFinding, MaintenanceFindingType, MaintenanceReview } from "../domain/maintenanceReview.js";
+import type { FindingSeverity, MaintenanceFinding, MaintenanceFindingType, MaintenanceReview } from "../../domain/maintenanceReview.js";
 
 const FINDING_TYPE_PRIORITY: Record<MaintenanceFindingType, number> = {
   missing_index: 0,

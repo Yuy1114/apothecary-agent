@@ -1,8 +1,8 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import type { AgentWorkspace } from "../domain/workspace.js";
+import type { AgentArtifacts } from "./agentArtifacts.types.js";
 
-export function getAgentWorkspace(vaultPath: string): AgentWorkspace {
+export function getAgentArtifacts(vaultPath: string): AgentArtifacts {
   const rootPath = path.join(vaultPath, ".agent");
   const protocolDir = path.join(rootPath, "protocol");
 
@@ -19,14 +19,14 @@ export function getAgentWorkspace(vaultPath: string): AgentWorkspace {
   };
 }
 
-export async function ensureAgentWorkspace(vaultPath: string): Promise<AgentWorkspace> {
-  const workspace = getAgentWorkspace(vaultPath);
+export async function ensureAgentArtifacts(vaultPath: string): Promise<AgentArtifacts> {
+  const artifacts = getAgentArtifacts(vaultPath);
   await Promise.all([
-    fs.mkdir(workspace.protocolDir, { recursive: true }),
-    fs.mkdir(workspace.mapsDir, { recursive: true }),
-    fs.mkdir(workspace.reviewsDir, { recursive: true }),
-    fs.mkdir(workspace.metadataDir, { recursive: true }),
-    fs.mkdir(workspace.logsDir, { recursive: true }),
+    fs.mkdir(artifacts.protocolDir, { recursive: true }),
+    fs.mkdir(artifacts.mapsDir, { recursive: true }),
+    fs.mkdir(artifacts.reviewsDir, { recursive: true }),
+    fs.mkdir(artifacts.metadataDir, { recursive: true }),
+    fs.mkdir(artifacts.logsDir, { recursive: true }),
   ]);
-  return workspace;
+  return artifacts;
 }

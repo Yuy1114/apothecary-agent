@@ -7,7 +7,7 @@ import { defaultConfigYaml } from "../../config/config.js";
 import { defaultProtocolMarkdown, defaultProtocolYaml } from "../../protocol/defaultProtocol.js";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { nowIso } from "../../utils/time.js";
-import { ensureAgentWorkspace } from "../../workspace/agentWorkspace.js";
+import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 
 const defaultStructureYaml = `# apothecary-agent vault structure
 # Edit this file to define your vault layout.
@@ -67,8 +67,8 @@ const ensureWorkspaceStep = createStep({
   inputSchema: z.object({ vaultPath: z.string() }),
   outputSchema: z.object({ vaultPath: z.string(), agentPath: z.string() }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
-    return { vaultPath: inputData.vaultPath, agentPath: workspace.rootPath };
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
+    return { vaultPath: inputData.vaultPath, agentPath: artifacts.rootPath };
   },
 });
 
@@ -77,10 +77,10 @@ const writeConfigStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), agentPath: z.string() }),
   outputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const created: string[] = [];
-    if (await writeTextArtifactIfMissing({ workspace, artifactPath: workspace.configPath, content: defaultConfigYaml })) {
-      created.push(path.relative(inputData.vaultPath, workspace.configPath));
+    if (await writeTextArtifactIfMissing({ artifacts, artifactPath: artifacts.configPath, content: defaultConfigYaml })) {
+      created.push(path.relative(inputData.vaultPath, artifacts.configPath));
     }
     return { ...inputData, created };
   },
@@ -91,13 +91,13 @@ const writeProtocolStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   outputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const created = [...inputData.created];
-    if (await writeTextArtifactIfMissing({ workspace, artifactPath: workspace.protocolPath, content: defaultProtocolMarkdown })) {
-      created.push(path.relative(inputData.vaultPath, workspace.protocolPath));
+    if (await writeTextArtifactIfMissing({ artifacts, artifactPath: artifacts.protocolPath, content: defaultProtocolMarkdown })) {
+      created.push(path.relative(inputData.vaultPath, artifacts.protocolPath));
     }
-    if (await writeTextArtifactIfMissing({ workspace, artifactPath: workspace.protocolYamlPath, content: defaultProtocolYaml })) {
-      created.push(path.relative(inputData.vaultPath, workspace.protocolYamlPath));
+    if (await writeTextArtifactIfMissing({ artifacts, artifactPath: artifacts.protocolYamlPath, content: defaultProtocolYaml })) {
+      created.push(path.relative(inputData.vaultPath, artifacts.protocolYamlPath));
     }
     return { ...inputData, created };
   },
@@ -108,9 +108,9 @@ const writeStructureStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   outputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const created = [...inputData.created];
-    const structurePath = path.join(workspace.rootPath, "structure.yaml");
+    const structurePath = path.join(artifacts.rootPath, "structure.yaml");
     const exists = await fs.access(structurePath).then(() => true).catch(() => false);
     if (!exists) {
       await fs.writeFile(structurePath, defaultStructureYaml, "utf8");
@@ -125,9 +125,9 @@ const writeLogStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   outputSchema: z.object({ vaultPath: z.string(), agentPath: z.string(), created: z.array(z.string()) }),
   execute: async ({ inputData }) => {
-    const workspace = await ensureAgentWorkspace(inputData.vaultPath);
-    const logPath = path.join(workspace.logsDir, "init.log");
-    await appendTextArtifact({ workspace, artifactPath: logPath, content: `${nowIso()} initialized apothecary-agent workspace\n` });
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
+    const logPath = path.join(artifacts.logsDir, "init.log");
+    await appendTextArtifact({ artifacts, artifactPath: logPath, content: `${nowIso()} initialized apothecary-agent workspace\n` });
     return inputData;
   },
 });

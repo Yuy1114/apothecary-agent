@@ -41,7 +41,7 @@ export const defaultProtocolYaml = stringify({
   vault_purpose: "Yuy's personal knowledge, project notes, learning notes, reflections, and AI-assisted thinking.",
   reviewer_boundary: {
     read_user_notes: true,
-    write_agent_workspace: true,
+    write_agent_artifacts: true,
     modify_user_notes: false,
     move_files: false,
     delete_files: false,

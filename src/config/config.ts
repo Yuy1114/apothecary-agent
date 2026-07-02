@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { parse, stringify } from "yaml";
 import { ApothecaryConfigSchema, type ApothecaryConfig } from "../domain/config.js";
-import type { AgentWorkspace } from "../domain/workspace.js";
+import type { AgentArtifacts } from "../artifacts/agentArtifacts.types.js";
 
 export const defaultConfig: ApothecaryConfig = {
   version: 1,
@@ -30,9 +30,9 @@ export const defaultConfig: ApothecaryConfig = {
 
 export const defaultConfigYaml = stringify(defaultConfig);
 
-export async function loadConfig(workspace: AgentWorkspace): Promise<ApothecaryConfig> {
+export async function loadConfig(artifacts: AgentArtifacts): Promise<ApothecaryConfig> {
   const raw = await fs
-    .readFile(workspace.configPath, "utf8")
+    .readFile(artifacts.configPath, "utf8")
     .catch((error: unknown) => {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
         return undefined;
