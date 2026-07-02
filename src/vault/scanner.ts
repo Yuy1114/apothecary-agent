@@ -17,6 +17,11 @@ export type ScanVaultOptions = {
   recentFilesLimit?: number;
 };
 
+// Always excluded, regardless of caller-provided `ignore`: OS/VCS/tooling junk
+// that is never vault content (e.g. macOS .DS_Store).
+const ALWAYS_IGNORE = ["**/.DS_Store", "**/._*", "**/node_modules/**", "**/.git/**"];
+const DEFAULT_IGNORE = [".agent/**"];
+
 export async function scanVault(options: ScanVaultOptions): Promise<VaultScan> {
   const vaultPath = path.resolve(options.vaultPath);
   const scopeRoot = options.scopePath ? path.join(vaultPath, options.scopePath) : vaultPath;
@@ -24,7 +29,7 @@ export async function scanVault(options: ScanVaultOptions): Promise<VaultScan> {
     cwd: scopeRoot,
     dot: true,
     onlyFiles: true,
-    ignore: options.ignore ?? [".agent/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
+    ignore: [...ALWAYS_IGNORE, ...(options.ignore ?? DEFAULT_IGNORE)],
     absolute: true,
   });
 

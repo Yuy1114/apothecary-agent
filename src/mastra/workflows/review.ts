@@ -48,7 +48,12 @@ const resolveVaultStep = createStep({
 const scanStep = createStep({
   id: "scan",
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional() }),
-  outputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
+  outputSchema: z.object({
+    vaultPath: z.string(),
+    scopePath: z.string().optional(),
+    scanId: z.string(),
+    scan: VaultScanSchema,
+  }),
   execute: async ({ inputData }) => {
     const scan = VaultScanSchema.parse(await scanVault({
       vaultPath: inputData.vaultPath,
@@ -56,16 +61,21 @@ const scanStep = createStep({
       includeHash: false,
       ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**"],
     }));
-    return { ...inputData, scanId: scan.id, _scan: scan };
+    return { ...inputData, scanId: scan.id, scan };
   },
 });
 
 const draftReviewStep = createStep({
   id: "draft-maintenance-review",
-  inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
+  inputSchema: z.object({
+    vaultPath: z.string(),
+    scopePath: z.string().optional(),
+    scanId: z.string(),
+    scan: VaultScanSchema,
+  }),
   outputSchema: ReviewDraftSchema,
   execute: async ({ inputData }) => {
-    const scan = (inputData as any)._scan;
+    const scan = inputData.scan;
     const context = buildMaintenanceReviewContext(scan, {
       maxFiles: 20,
       minSizeBytes: 100,

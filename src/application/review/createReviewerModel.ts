@@ -1,17 +1,61 @@
+import { z } from "zod";
 import type { KnowledgeMap } from "../../domain/knowledgeMap.js";
 import type { MaintenanceReview } from "../../domain/maintenanceReview.js";
+import {
+  MaintenanceFindingTypeSchema,
+  FindingSeveritySchema,
+} from "../../domain/maintenanceReview.js";
+import {
+  KnowledgeTopicCategorySchema,
+  TopicFileSchema,
+} from "../../domain/knowledgeMap.js";
 import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from "./reviewerModel.js";
 import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
+import { createId } from "../../utils/ids.js";
 
 const MAP_SYSTEM = [
   "You are apothecary-agent. Generate a knowledge map from the provided vault scan context.",
-  "Output valid JSON matching the KnowledgeMap schema. Be concise.",
+  "Group files into meaningful topics. Be concise and specific.",
 ].join("\n");
 
 const REVIEW_SYSTEM = [
   "You are apothecary-agent. Run a maintenance review from the provided vault scan context.",
-  "Output valid JSON matching the MaintenanceReview schema. Be concise.",
+  "Report only substantive, actionable findings. Be concise and specific.",
 ].join("\n");
+
+// ── Lean model-output schemas ──
+// The model only fills substantive content. Metadata it cannot know
+// (ids, vaultPath, scanId, timestamps) is attached deterministically below.
+
+const LeanFindingSchema = z.object({
+  type: MaintenanceFindingTypeSchema,
+  severity: FindingSeveritySchema,
+  filePaths: z.array(z.string()),
+  observation: z.string(),
+  whyItMatters: z.string(),
+  suggestion: z.string(),
+  relatedFiles: z.array(z.string()).optional(),
+  confidence: z.number().min(0).max(1),
+});
+
+const LeanReviewSchema = z.object({
+  findings: z.array(LeanFindingSchema),
+});
+
+const LeanTopicSchema = z.object({
+  title: z.string(),
+  category: KnowledgeTopicCategorySchema,
+  summary: z.string(),
+  keyConcepts: z.array(z.string()),
+  relatedFiles: z.array(TopicFileSchema),
+  openQuestions: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+});
+
+const LeanMapSchema = z.object({
+  topics: z.array(LeanTopicSchema),
+  summary: z.string(),
+});
 
 export function createReviewerModel(_config?: unknown): ReviewerModel {
   return {
@@ -23,16 +67,33 @@ export function createReviewerModel(_config?: unknown): ReviewerModel {
         JSON.stringify(input.context, null, 2),
         "",
         `Constraints: maxTopics=${input.options.maxTopics}, maxFilesPerTopic=${input.options.maxFilesPerTopic}`,
-        "",
-        "Output ONLY valid JSON matching the KnowledgeMap schema.",
       ].join("\n");
 
       const result = await vaultReviewer.generate(prompt, {
         maxSteps: 1,
         system: MAP_SYSTEM,
+        // The full scan context is already in the prompt; this is a pure
+        // structuring pass, so disable tools to force direct JSON output.
+        toolChoice: "none",
+        structuredOutput: { schema: LeanMapSchema, jsonPromptInjection: "system" },
       });
 
-      return JSON.parse(extractJson(result.text)) as KnowledgeMap;
+      const object = result.object;
+      if (!object) {
+        throw new Error(
+          `Reviewer returned no structured knowledge map (finishReason=${result.finishReason}).`,
+        );
+      }
+
+      return {
+        id: createId("map"),
+        vaultPath: input.context.vaultPath,
+        scopePath: input.context.scopePath,
+        generatedAt: new Date().toISOString(),
+        basedOnScanId: input.context.scanId,
+        topics: object.topics.map((topic) => ({ ...topic, id: createId("topic") })),
+        summary: object.summary,
+      };
     },
 
     async generateMaintenanceReview(input: MaintenanceReviewInput): Promise<MaintenanceReview> {
@@ -43,26 +104,38 @@ export function createReviewerModel(_config?: unknown): ReviewerModel {
         JSON.stringify(input.context, null, 2),
         "",
         `Thresholds: longContextWord=${input.options.longContextWordThreshold}, longContextLine=${input.options.longContextLineThreshold}`,
-        "",
-        "Output ONLY valid JSON matching the MaintenanceReview schema.",
       ].join("\n");
 
       const result = await vaultReviewer.generate(prompt, {
         maxSteps: 1,
         system: REVIEW_SYSTEM,
+        // The full scan context is already in the prompt; this is a pure
+        // structuring pass, so disable tools to force direct JSON output.
+        toolChoice: "none",
+        structuredOutput: { schema: LeanReviewSchema, jsonPromptInjection: "system" },
       });
 
-      return JSON.parse(extractJson(result.text)) as MaintenanceReview;
+      const object = result.object;
+      if (!object) {
+        throw new Error(
+          `Reviewer returned no structured maintenance review (finishReason=${result.finishReason}).`,
+        );
+      }
+
+      return {
+        id: createId("review"),
+        vaultPath: input.context.vaultPath,
+        scopePath: input.context.scopePath,
+        generatedAt: new Date().toISOString(),
+        basedOnScanId: input.context.scanId,
+        findings: object.findings.map((finding) => ({
+          ...finding,
+          id: createId("finding"),
+          relatedFiles: finding.relatedFiles ?? [],
+        })),
+        // Normalized/regenerated downstream by normalizeMaintenanceReview.
+        summary: "",
+      };
     },
   };
-}
-
-function extractJson(text: string): string {
-  // Handle markdown code fences
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) return fence[1].trim();
-  // Try raw JSON
-  const brace = text.indexOf("{");
-  if (brace >= 0) return text.slice(brace);
-  return text;
 }

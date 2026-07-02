@@ -26,22 +26,32 @@ const resolveVaultStep = createStep({
 const scanStep = createStep({
   id: "scan",
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional() }),
-  outputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
+  outputSchema: z.object({
+    vaultPath: z.string(),
+    scopePath: z.string().optional(),
+    scanId: z.string(),
+    scan: VaultScanSchema,
+  }),
   execute: async ({ inputData }) => {
-    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
+    await ensureAgentArtifacts(inputData.vaultPath);
     const scan = VaultScanSchema.parse(await scanVault({
       vaultPath: inputData.vaultPath,
       scopePath: inputData.scopePath,
       includeHash: false,
       ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**"],
     }));
-    return { ...inputData, scanId: scan.id, _scan: scan, _artifacts: artifacts };
+    return { ...inputData, scanId: scan.id, scan };
   },
 });
 
 const mapStep = createStep({
   id: "agent-map",
-  inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
+  inputSchema: z.object({
+    vaultPath: z.string(),
+    scopePath: z.string().optional(),
+    scanId: z.string(),
+    scan: VaultScanSchema,
+  }),
   outputSchema: z.object({
     jsonPath: z.string(),
     markdownPath: z.string(),
@@ -49,8 +59,8 @@ const mapStep = createStep({
     mapMd: z.string(),
   }),
   execute: async ({ inputData }) => {
-    const scan = (inputData as any)._scan;
-    const artifacts = (inputData as any)._artifacts;
+    const scan = inputData.scan;
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const context = buildKnowledgeMapContext(scan, {
       maxFiles: 20,
       minSizeBytes: 100,
