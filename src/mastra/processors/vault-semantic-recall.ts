@@ -1,11 +1,14 @@
 import type { ProcessInputArgs, ProcessInputResult, Processor } from "@mastra/core/processors";
 import { queryVault } from "../tools/rag.js";
+import { loadSummaries } from "../../vault/semanticStore.js";
+import type { FileSummaries } from "../../domain/semantic.js";
 
 type VaultSemanticRecallOptions = {
   topK?: number;
 };
 
 const DEFAULT_TOP_K = 5;
+const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
 export class VaultSemanticRecallProcessor implements Processor<"vault-semantic-recall"> {
   readonly id = "vault-semantic-recall" as const;
@@ -25,26 +28,39 @@ export class VaultSemanticRecallProcessor implements Processor<"vault-semantic-r
     const results = await queryVault(query, this.topK);
     if (results.length === 0) return messages;
 
-    messageList.addSystem(formatRecallContext(results), this.id);
+    // Expand each retrieved excerpt with its file's semantic summary so the
+    // model sees what the whole source is about, not just the matched chunk.
+    const summaries = await loadSummaries(VAULT_PATH);
+
+    messageList.addSystem(formatRecallContext(results, summaries), this.id);
     return messageList;
   }
 }
 
 type VaultRecallResult = Awaited<ReturnType<typeof queryVault>>[number];
 
-function formatRecallContext(results: VaultRecallResult[]): string {
+function formatRecallContext(results: VaultRecallResult[], summaries: FileSummaries): string {
   const sections = results.map((result, index) => {
     const headingPath = result.headings && result.headings.length > 0 ? ` > ${result.headings.join(" > ")}` : "";
     const title = result.title ? ` — ${result.title}` : "";
+    const summary = summaries[result.source];
+    const summaryLine = summary
+      ? `File summary: ${summary.gist}` +
+        (summary.topics.length > 0 ? ` (topics: ${summary.topics.join(", ")})` : "")
+      : "";
     return [
       `## Source ${index + 1}: ${result.source}${title}${headingPath}`,
+      summaryLine,
       result.content.trim(),
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   });
 
   return [
     "<vault-semantic-recall>",
     "The following vault excerpts were automatically retrieved for the user's latest question.",
+    "Each source may include a file-level summary (gist + topics) followed by the matched excerpt.",
     "Use them as supporting context, and cite the source file paths when relying on them.",
     "If the excerpts are insufficient, call queryVault or readMarkdown for deeper inspection instead of guessing.",
     "",

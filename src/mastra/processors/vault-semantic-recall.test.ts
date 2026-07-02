@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { VaultSemanticRecallProcessor } from "./vault-semantic-recall.js";
 import { queryVault } from "../tools/rag.js";
+import { loadSummaries } from "../../vault/semanticStore.js";
 
 vi.mock("../tools/rag.js", () => ({
   queryVault: vi.fn(),
+}));
+
+vi.mock("../../vault/semanticStore.js", () => ({
+  loadSummaries: vi.fn(async () => ({})),
 }));
 
 describe("VaultSemanticRecallProcessor", () => {
@@ -31,6 +36,37 @@ describe("VaultSemanticRecallProcessor", () => {
     expect(result).toBe(messageList);
   });
 
+  it("expands a retrieved source with its file summary when available", async () => {
+    vi.mocked(queryVault).mockResolvedValueOnce([
+      {
+        source: "notes/programming/Redis/Redis.md",
+        title: "Redis",
+        headings: [],
+        content: "AOF appends write commands to a log.",
+      },
+    ]);
+    vi.mocked(loadSummaries).mockResolvedValueOnce({
+      "notes/programming/Redis/Redis.md": {
+        path: "notes/programming/Redis/Redis.md",
+        contentHash: "h",
+        generatedAt: "2026-07-02T00:00:00.000Z",
+        title: "Redis",
+        gist: "Overview of Redis persistence and caching.",
+        topics: ["Redis", "Persistence"],
+        concepts: ["AOF", "RDB"],
+        summary: "s",
+      },
+    });
+
+    const messageList = makeMessageList("AOF 是什么");
+    const processor = new VaultSemanticRecallProcessor();
+    await processor.processInput(makeArgs({ messageList, messages: [] }));
+
+    const injected = vi.mocked(messageList.addSystem).mock.calls[0][0] as string;
+    expect(injected).toContain("File summary: Overview of Redis persistence and caching.");
+    expect(injected).toContain("topics: Redis, Persistence");
+  });
+
   it("leaves messages unchanged when there is no recall context", async () => {
     vi.mocked(queryVault).mockResolvedValueOnce([]);
 
@@ -48,7 +84,7 @@ describe("VaultSemanticRecallProcessor", () => {
 function makeMessageList(query: string) {
   const messageList = {
     getLatestUserContent: vi.fn(() => query),
-    addSystem: vi.fn(() => {
+    addSystem: vi.fn((_content: string, _id: string) => {
       return messageList;
     }),
   };
