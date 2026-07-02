@@ -3,19 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
-
-const EditProposalSchema = z.object({
-  id: z.string().min(1),
-  filePath: z.string().min(1),
-  title: z.string().min(1),
-  description: z.string(),
-  currentContent: z.string(),
-  suggestedContent: z.string(),
-  status: z.enum(["proposed", "applied", "rejected"]),
-  createdAt: z.string(),
-});
-
-type EditProposal = z.infer<typeof EditProposalSchema>;
+import { EditProposalSchema, applyProposal } from "../../domain/applyProposal.js";
 
 const ApplyEditStateSchema = z.object({
   vaultPath: z.string(),
@@ -93,25 +81,7 @@ const applyEditStep = createStep({
       };
     }
 
-    const filePath = path.join(vaultPath, proposal.filePath);
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-
-    if (proposal.suggestedContent) {
-      await fs.writeFile(filePath, proposal.suggestedContent, "utf8");
-    }
-
-    await fs.writeFile(
-      path.join(vaultPath, ".agent", "edits", `${proposal.id}.json`),
-      JSON.stringify({ ...proposal, status: "applied" satisfies EditProposal["status"] }, null, 2),
-      "utf8",
-    );
-
-    return {
-      proposalId: proposal.id,
-      filePath: proposal.filePath,
-      applied: true,
-      status: "applied" as const,
-    };
+    return await applyProposal({ vaultPath, proposalId: proposal.id });
   },
 });
 

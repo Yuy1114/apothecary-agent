@@ -2,23 +2,37 @@ import { Agent } from "@mastra/core/agent";
 import { writeReviewTool } from "../tools/write-review.js";
 import { proposeEditTool } from "../tools/propose-edit.js";
 import { moveVaultFileTool } from "../tools/move-vault-file.js";
+import { readReviewTool } from "../tools/read-review.js";
+import { applyEditTool } from "../tools/apply-edit.js";
+import { listProposalsTool } from "../tools/list-proposals.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
+import { apothecaryMemory } from "../memory.js";
 
 export const vaultCurator = new Agent({
   id: "vault-curator",
   name: "Vault Curator",
+  memory: apothecaryMemory,
   description:
-    "Maintains vault quality by running reviews, proposing edits, and reorganizing files.",
+    "Maintains vault quality end-to-end: reviews findings, proposes edits, and applies approved changes.",
   instructions:
     "You are apothecary-curator, responsible for keeping Yuy's vault clean and well-organized. " +
-    "Run maintenance reviews with writeReview, propose specific edits with proposeEdit, " +
-    "and move misclassified files with moveVaultFile. " +
-    "Always explain why each change is suggested. Answer in Chinese.",
+    "You run a closed maintenance loop:\n" +
+    "1. Read the latest maintenance review with readReview (or record a fresh one with writeReview).\n" +
+    "2. For each actionable finding, draft a concrete fix and register it with proposeEdit " +
+    "(include the full suggested content), or fix misclassified locations with moveVaultFile.\n" +
+    "3. Use listProposals to see which proposals are still pending.\n" +
+    "4. Apply a proposal with applyEdit once it is ready — this requires human approval before " +
+    "any user note is changed.\n" +
+    "Always explain why each change is suggested, and never act on low-confidence findings without saying so. " +
+    "You may never delete user files or run shell commands. Answer in Chinese.",
   model: "deepseek/deepseek-v4-flash",
   scorers: agentRuntimeScorers,
   tools: {
+    readReview: readReviewTool,
     writeReview: writeReviewTool,
     proposeEdit: proposeEditTool,
+    listProposals: listProposalsTool,
+    applyEdit: applyEditTool,
     moveVaultFile: moveVaultFileTool,
   },
 });
