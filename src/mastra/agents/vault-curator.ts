@@ -12,6 +12,7 @@ import { listPendingChangesTool } from "../tools/list-pending-changes.js";
 import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { listOperationsTool } from "../tools/list-operations.js";
+import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { apothecaryMemory } from "../memory.js";
 
@@ -42,6 +43,9 @@ export const vaultCurator = new Agent({
     "triaged/edited a specific change; state which ids you are resolving and why. Never dismiss items just because you were asked to list them. " +
     "When the user names the outcome (processed or dismissed), use exactly that — do not silently substitute the other; " +
     "if you believe a different outcome fits better, say so and let the user decide.\n\n" +
+    "Use listDuplicateClusters to review detected duplicates: for harmful_duplicate propose merging into one canonical note and " +
+    "archiving the copy (proposeEdit + moveVaultFile), for contextual_repetition propose a canonical note keeping both, and for " +
+    "evolutionary_duplicate keep both and mark the older one superseded — all via approval-gated tools, never destructively.\n\n" +
     "Always explain why each change or placement is suggested, and never act on low-confidence findings without saying so. " +
     "You may never delete user files or run shell commands. Answer in Chinese.",
   model: "deepseek/deepseek-v4-flash",
@@ -60,5 +64,6 @@ export const vaultCurator = new Agent({
     resolvePendingChanges: resolvePendingChangesTool,
     findRelatedFiles: findRelatedFilesTool,
     listOperations: listOperationsTool,
+    listDuplicateClusters: listDuplicateClustersTool,
   },
 });
