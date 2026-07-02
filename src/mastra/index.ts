@@ -6,7 +6,6 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
 import { PinoLogger } from "@mastra/loggers";
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from "@mastra/observability";
-import { registerApiRoute } from "@mastra/core/server";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
 import { vaultCurator } from "./agents/vault-curator.js";
@@ -22,14 +21,6 @@ import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
 import { applyEditWorkflow } from "./workflows/apply-edit.js";
-import {
-  handleHealth,
-  handleVaultTree,
-  handleReadFile,
-  handleWriteFile,
-  handleRagQuery,
-  handleReindex,
-} from "./routes.js";
 import { EMBEDDING_MODEL } from "./tools/rag.js";
 import { workspace } from "./workspaces.js";
 
@@ -89,29 +80,6 @@ export const mastra = new Mastra({
         workingMemory: { enabled: true },
       },
     }),
-  },
-  server: {
-    port: Number(process.env.APOTHECARY_UI_PORT ?? 8787),
-    apiRoutes: [
-      registerApiRoute("/health", { method: "GET", handler: handleHealth }),
-      registerApiRoute("/vault/tree", {
-        method: "GET",
-        handler: handleVaultTree,
-      }),
-      registerApiRoute("/vault/files", {
-        method: "GET",
-        handler: handleReadFile,
-      }),
-      registerApiRoute("/vault/files", {
-        method: "PUT",
-        handler: handleWriteFile,
-      }),
-      registerApiRoute("/rag/query", {
-        method: "POST",
-        handler: handleRagQuery,
-      }),
-      registerApiRoute("/index", { method: "POST", handler: handleReindex }),
-    ],
   },
 });
 
