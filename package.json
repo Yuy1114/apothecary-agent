@@ -1,17 +1,12 @@
 {
   "name": "apothecary-agent",
   "version": "0.1.0",
-  "description": "Read-only Vault Reviewer for local Markdown knowledge bases.",
+  "description": "Mastra-native agent for local Markdown knowledge bases.",
   "type": "module",
-  "bin": {
-    "apothecary-agent": "dist/cli/index.js"
-  },
   "scripts": {
     "dev": "mastra dev",
-    "cli": "tsx src/cli/index.ts",
     "build": "tsc",
     "check": "tsc --noEmit",
-    "start": "node dist/cli/index.js",
     "test": "vitest",
     "ci": "pnpm run check && pnpm run build && pnpm vitest run"
   },
@@ -27,13 +22,14 @@
     "@ai-sdk/openai": "^4.0.4",
     "@ai-sdk/openai-compatible": "^3.0.2",
     "@mastra/core": "^1.47.0",
+    "@mastra/duckdb": "^1.5.0",
     "@mastra/evals": "^1.5.1",
     "@mastra/libsql": "^1.14.2",
     "@mastra/loggers": "^1.2.0",
     "@mastra/memory": "^1.21.2",
+    "@mastra/observability": "^1.15.2",
     "@mastra/rag": "^2.3.0",
     "ai": "^7.0.8",
-    "commander": "^14.0.2",
     "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
@@ -43,7 +39,6 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   }

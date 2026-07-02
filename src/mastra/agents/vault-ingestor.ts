@@ -5,10 +5,8 @@ import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
-  baseURL:
-    (process.env.APOTHECARY_OPENAI_BASE_URL ?? "https://api.deepseek.com") +
-    "/v1",
-  apiKey: process.env.APOTHECARY_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
+  baseURL: (process.env.APOTHECARY_OPENAI_BASE_URL ?? "") + "/v1",
+  apiKey: process.env.APOTHECARY_OPENAI_API_KEY ?? "",
 });
 
 export const vaultIngestor = new Agent({

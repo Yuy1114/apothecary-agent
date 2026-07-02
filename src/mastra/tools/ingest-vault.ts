@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile } from "./rag.js";
 import { loadStructure, classifyWithStructure } from "./vault-structure.js";
+import { requiresHumanApproval } from "./permissions.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -15,6 +16,7 @@ export const ingestVaultTool = createTool({
   id: "ingestVault",
   description:
     "Ingest new content into the vault. Classifies content using the vault structure config (.agent/structure.yaml), creates a file in the right directory, updates README, and auto-indexes for search.",
+  requireApproval: requiresHumanApproval,
   inputSchema: z.object({
     content: z.string().describe("The full content to ingest."),
     title: z.string().optional().describe("Suggested title."),

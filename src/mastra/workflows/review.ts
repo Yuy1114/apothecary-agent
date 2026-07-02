@@ -13,6 +13,26 @@ import { normalizeMaintenanceReview } from "../../application/review/normalizeMa
 import { renderMaintenanceReviewMarkdown } from "../../reports/renderMaintenanceReviewMarkdown.js";
 import { timestampForFile } from "../../utils/time.js";
 
+const ReviewDraftSchema = z.object({
+  vaultPath: z.string(),
+  scopePath: z.string().optional(),
+  reviewJson: z.string(),
+  reviewMd: z.string(),
+  summary: z.string(),
+  findingsCount: z.number(),
+  highSeverityCount: z.number(),
+});
+
+const ReviewApprovalSchema = ReviewDraftSchema.extend({ approved: z.boolean() });
+
+const ReviewWorkflowOutputSchema = z.object({
+  approved: z.boolean(),
+  jsonPath: z.string().optional(),
+  markdownPath: z.string().optional(),
+  reviewJson: z.string(),
+  reviewMd: z.string(),
+});
+
 // ── Steps ──
 
 const resolveVaultStep = createStep({
@@ -30,30 +50,22 @@ const scanStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional() }),
   outputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
   execute: async ({ inputData }) => {
-    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const scan = VaultScanSchema.parse(await scanVault({
       vaultPath: inputData.vaultPath,
       scopePath: inputData.scopePath,
       includeHash: false,
       ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**"],
     }));
-    // Store scan in state for next steps
-    return { ...inputData, scanId: scan.id, _scan: scan, _artifacts: artifacts };
+    return { ...inputData, scanId: scan.id, _scan: scan };
   },
 });
 
-const reviewStep = createStep({
-  id: "agent-review",
+const draftReviewStep = createStep({
+  id: "draft-maintenance-review",
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional(), scanId: z.string() }),
-  outputSchema: z.object({
-    jsonPath: z.string(),
-    markdownPath: z.string(),
-    reviewJson: z.string(),
-    reviewMd: z.string(),
-  }),
+  outputSchema: ReviewDraftSchema,
   execute: async ({ inputData }) => {
     const scan = (inputData as any)._scan;
-    const artifacts = (inputData as any)._artifacts;
     const context = buildMaintenanceReviewContext(scan, {
       maxFiles: 20,
       minSizeBytes: 100,
@@ -66,15 +78,79 @@ const reviewStep = createStep({
       }),
     );
     const review = MaintenanceReviewSchema.parse(normalizeMaintenanceReview(rawReview));
+    const reviewMd = renderMaintenanceReviewMarkdown(review);
+
+    return {
+      vaultPath: inputData.vaultPath,
+      scopePath: inputData.scopePath,
+      reviewJson: JSON.stringify(review),
+      reviewMd,
+      summary: review.summary,
+      findingsCount: review.findings.length,
+      highSeverityCount: review.findings.filter((finding) => finding.severity === "high").length,
+    };
+  },
+});
+
+const requestReviewApprovalStep = createStep({
+  id: "request-review-approval",
+  inputSchema: ReviewDraftSchema,
+  outputSchema: ReviewApprovalSchema,
+  suspendSchema: z.object({
+    reason: z.string(),
+    summary: z.string(),
+    findingsCount: z.number(),
+    highSeverityCount: z.number(),
+    reviewPreview: z.string(),
+    reviewPreviewTruncated: z.boolean(),
+  }),
+  resumeSchema: z.object({ approved: z.boolean() }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData) {
+      const previewLength = 1200;
+      return await suspend({
+        reason: "Human approval required before persisting the maintenance review artifact.",
+        summary: inputData.summary,
+        findingsCount: inputData.findingsCount,
+        highSeverityCount: inputData.highSeverityCount,
+        reviewPreview: inputData.reviewMd.slice(0, previewLength),
+        reviewPreviewTruncated: inputData.reviewMd.length > previewLength,
+      });
+    }
+
+    return { ...inputData, approved: resumeData.approved };
+  },
+});
+
+const persistReviewStep = createStep({
+  id: "persist-maintenance-review",
+  inputSchema: ReviewApprovalSchema,
+  outputSchema: ReviewWorkflowOutputSchema,
+  execute: async ({ inputData }) => {
+    if (!inputData.approved) {
+      return {
+        approved: false,
+        reviewJson: inputData.reviewJson,
+        reviewMd: inputData.reviewMd,
+      };
+    }
+
+    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const stamp = timestampForFile();
     const jsonPath = path.join(artifacts.reviewsDir, `review-${stamp}.json`);
     const markdownPath = path.join(artifacts.reviewsDir, `review-${stamp}.md`);
-    const reviewMd = renderMaintenanceReviewMarkdown(review);
+    const review = MaintenanceReviewSchema.parse(JSON.parse(inputData.reviewJson));
 
     await writeJsonArtifact({ artifacts, artifactPath: jsonPath, value: review });
-    await writeMarkdownArtifact({ artifacts, artifactPath: markdownPath, content: reviewMd });
+    await writeMarkdownArtifact({ artifacts, artifactPath: markdownPath, content: inputData.reviewMd });
 
-    return { jsonPath, markdownPath, reviewJson: JSON.stringify(review), reviewMd };
+    return {
+      approved: true,
+      jsonPath,
+      markdownPath,
+      reviewJson: inputData.reviewJson,
+      reviewMd: inputData.reviewMd,
+    };
   },
 });
 
@@ -83,14 +159,11 @@ const reviewStep = createStep({
 export const reviewWorkflow = createWorkflow({
   id: "review",
   inputSchema: z.object({ vaultPath: z.string(), scopePath: z.string().optional() }),
-  outputSchema: z.object({
-    jsonPath: z.string(),
-    markdownPath: z.string(),
-    reviewJson: z.string(),
-    reviewMd: z.string(),
-  }),
+  outputSchema: ReviewWorkflowOutputSchema,
 })
   .then(resolveVaultStep)
   .then(scanStep)
-  .then(reviewStep)
+  .then(draftReviewStep)
+  .then(requestReviewApprovalStep)
+  .then(persistReviewStep)
   .commit();

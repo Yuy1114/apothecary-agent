@@ -9,3 +9,5 @@ examples/**/.agent/
 local.db
 local.db-shm
 local.db-wal
+observability.duckdb
+observability.duckdb.wal

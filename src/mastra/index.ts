@@ -1,8 +1,11 @@
 import "dotenv/config";
 import { Mastra } from "@mastra/core/mastra";
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { DuckDBStore } from "@mastra/duckdb";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
 import { PinoLogger } from "@mastra/loggers";
+import { Observability, MastraStorageExporter, SensitiveDataFilter } from "@mastra/observability";
 import { registerApiRoute } from "@mastra/core/server";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
@@ -18,6 +21,7 @@ import {
 import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
+import { applyEditWorkflow } from "./workflows/apply-edit.js";
 import {
   handleHealth,
   handleVaultTree,
@@ -30,11 +34,15 @@ import { EMBEDDING_MODEL } from "./tools/rag.js";
 import { workspace } from "./workspaces.js";
 
 const DB_PATH = "file:./local.db";
+const OBSERVABILITY_DB_PATH = "./observability.duckdb";
 
 // ── Vector store ──
 
 const vaultVector = new LibSQLVector({ id: "vault-chunks", url: DB_PATH });
 setVectorStore(vaultVector);
+
+const applicationStorage = new LibSQLStore({ id: "apothecary-storage", url: DB_PATH });
+const observabilityStorage = new DuckDBStore({ id: "apothecary-observability", path: OBSERVABILITY_DB_PATH });
 
 // ── Mastra instance ──
 
@@ -47,11 +55,31 @@ export const mastra = new Mastra({
     initWorkflow,
     reviewWorkflow,
     mapWorkflow,
+    applyEditWorkflow,
   },
   workspace,
-  storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
+  storage: new MastraCompositeStore({
+    id: "apothecary-composite-storage",
+    default: applicationStorage,
+    domains: {
+      observability: observabilityStorage.observability,
+    },
+  }),
   vectors: { vaultChunks: vaultVector },
   logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "apothecary-agent",
+        exporters: [new MastraStorageExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+        logging: {
+          enabled: true,
+          level: "info",
+        },
+      },
+    },
+  }),
   memory: {
     apothecary: new Memory({
       embedder: EMBEDDING_MODEL,
