@@ -27,6 +27,7 @@ import {
   handleReindex,
 } from "./routes.js";
 import { EMBEDDING_MODEL } from "./tools/rag.js";
+import { workspace } from "./workspaces.js";
 
 const DB_PATH = "file:./local.db";
 
@@ -47,6 +48,7 @@ export const mastra = new Mastra({
     reviewWorkflow,
     mapWorkflow,
   },
+  workspace,
   storage: new LibSQLStore({ id: "apothecary-storage", url: DB_PATH }),
   vectors: { vaultChunks: vaultVector },
   logger: new PinoLogger({ name: "apothecary-agent", level: "info" }),
