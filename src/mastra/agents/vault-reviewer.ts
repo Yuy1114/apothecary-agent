@@ -3,6 +3,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { queryVaultTool } from "../tools/rag.js";
 import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
+import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
@@ -22,6 +23,7 @@ export const vaultReviewer = new Agent({
     "Use queryVault to search for relevant content, scanVault to explore, and readMarkdown to inspect files. " +
     "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: "deepseek/deepseek-v4-flash",
+  scorers: agentRuntimeScorers,
   tools: {
     queryVault: queryVaultTool,
     scanVault: scanVaultTool,

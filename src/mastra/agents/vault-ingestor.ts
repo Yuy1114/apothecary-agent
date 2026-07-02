@@ -1,6 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ingestVaultTool } from "../tools/ingest-vault.js";
+import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
@@ -20,6 +21,7 @@ export const vaultIngestor = new Agent({
     "Use ingestVault to write content with proper classification based on the vault structure config. " +
     "Always include a descriptive title and categorize content appropriately. Answer in Chinese.",
   model: "deepseek/deepseek-v4-flash",
+  scorers: agentRuntimeScorers,
   tools: {
     ingestVault: ingestVaultTool,
   },

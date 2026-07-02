@@ -3,6 +3,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { writeReviewTool } from "../tools/write-review.js";
 import { proposeEditTool } from "../tools/propose-edit.js";
 import { moveVaultFileTool } from "../tools/move-vault-file.js";
+import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 
 const deepseek = createOpenAICompatible({
   name: "deepseek",
@@ -23,6 +24,7 @@ export const vaultCurator = new Agent({
     "and move misclassified files with moveVaultFile. " +
     "Always explain why each change is suggested. Answer in Chinese.",
   model: "deepseek/deepseek-v4-flash",
+  scorers: agentRuntimeScorers,
   tools: {
     writeReview: writeReviewTool,
     proposeEdit: proposeEditTool,

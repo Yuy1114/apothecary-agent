@@ -27,7 +27,7 @@
     "@ai-sdk/openai": "^4.0.4",
     "@ai-sdk/openai-compatible": "^3.0.2",
     "@mastra/core": "^1.47.0",
-    "@mastra/evals": "^1.5.0",
+    "@mastra/evals": "^1.5.1",
     "@mastra/libsql": "^1.14.2",
     "@mastra/loggers": "^1.2.0",
     "@mastra/memory": "^1.21.2",
