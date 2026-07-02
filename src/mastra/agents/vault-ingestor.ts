@@ -1,13 +1,6 @@
 import { Agent } from "@mastra/core/agent";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ingestVaultTool } from "../tools/ingest-vault.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
-
-const deepseek = createOpenAICompatible({
-  name: "deepseek",
-  baseURL: (process.env.APOTHECARY_OPENAI_BASE_URL ?? "") + "/v1",
-  apiKey: process.env.APOTHECARY_OPENAI_API_KEY ?? "",
-});
 
 export const vaultIngestor = new Agent({
   id: "vault-ingestor",

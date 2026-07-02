@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { answerRelevancyScorer } from "../scorers/answer-relevancy.js";
 import { vaultReviewer } from "./vault-reviewer.js";
 
-const hasModelKey = Boolean(process.env.APOTHECARY_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY);
+const hasModelKey = Boolean(process.env.DEEPSEEK_API_KEY);
 
 const describeWithModel = hasModelKey ? describe : describe.skip;
 

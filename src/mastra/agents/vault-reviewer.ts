@@ -1,16 +1,9 @@
 import { Agent } from "@mastra/core/agent";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { queryVaultTool } from "../tools/rag.js";
 import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
-
-const deepseek = createOpenAICompatible({
-  name: "deepseek",
-  baseURL: (process.env.APOTHECARY_OPENAI_BASE_URL ?? "") + "/v1",
-  apiKey: process.env.APOTHECARY_OPENAI_API_KEY ?? "",
-});
 
 export const vaultReviewer = new Agent({
   id: "vault-reviewer",

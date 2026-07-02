@@ -12,15 +12,16 @@ import { MDocument } from "@mastra/rag";
 
 export const EMBEDDING_MODEL = new ModelRouterEmbeddingModel({
   providerId: "aihubmix",
-  modelId: "text-embedding-3-small",
-  url: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
+  modelId: process.env.APOTHECARY_EMBEDDING_MODEL ?? "",
+  url: process.env.APOTHECARY_EMBEDDING_BASE_URL ?? "",
   apiKey: process.env.APOTHECARY_EMBEDDING_API_KEY ?? "",
 });
 
 // ── Constants ──
 
 const INDEX_NAME = "vault_chunks";
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+const VAULT_PATH =
+  process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
 // ── Vector store singleton ──
 
@@ -31,7 +32,10 @@ export function setVectorStore(vs: LibSQLVector): void {
 }
 
 function getVectorStore(): LibSQLVector {
-  if (!store) throw new Error("Vector store not initialized. Call setVectorStore() first.");
+  if (!store)
+    throw new Error(
+      "Vector store not initialized. Call setVectorStore() first."
+    );
   return store;
 }
 
@@ -56,7 +60,9 @@ type SearchResult = {
 
 // ── Plain functions (for workflows, routes, CLI) ──
 
-export async function indexVault(scopePath?: string): Promise<{ indexed: number }> {
+export async function indexVault(
+  scopePath?: string
+): Promise<{ indexed: number }> {
   const scanRoot = scopePath ? path.join(VAULT_PATH, scopePath) : VAULT_PATH;
   const files = await walkMarkdownFiles(scanRoot);
   const chunks: ChunkDraft[] = [];
@@ -75,9 +81,17 @@ export async function indexVault(scopePath?: string): Promise<{ indexed: number 
   const embeddings = await embedChunks(chunks);
   const vs = getVectorStore();
 
-  try { await vs.deleteIndex({ indexName: INDEX_NAME }); } catch { /* not found */ }
+  try {
+    await vs.deleteIndex({ indexName: INDEX_NAME });
+  } catch {
+    /* not found */
+  }
 
-  await vs.createIndex({ indexName: INDEX_NAME, dimension: embeddings[0].length, metric: "cosine" });
+  await vs.createIndex({
+    indexName: INDEX_NAME,
+    dimension: embeddings[0].length,
+    metric: "cosine",
+  });
 
   await vs.upsert({
     indexName: INDEX_NAME,
@@ -89,7 +103,9 @@ export async function indexVault(scopePath?: string): Promise<{ indexed: number 
   return { indexed: chunks.length };
 }
 
-export async function reindexFile(relativePath: string): Promise<{ added: number }> {
+export async function reindexFile(
+  relativePath: string
+): Promise<{ added: number }> {
   const normalizedPath = toPortablePath(relativePath);
   const absolutePath = path.join(VAULT_PATH, normalizedPath);
   const content = await fs.readFile(absolutePath, "utf8");
@@ -115,12 +131,17 @@ export async function reindexFile(relativePath: string): Promise<{ added: number
   return { added: chunks.length };
 }
 
-export async function removeFromIndex(relativePath: string): Promise<{ removed: number }> {
+export async function removeFromIndex(
+  relativePath: string
+): Promise<{ removed: number }> {
   await deleteSourceChunks(toPortablePath(relativePath));
   return { removed: -1 };
 }
 
-export async function queryVault(query: string, topK = 5): Promise<SearchResult[]> {
+export async function queryVault(
+  query: string,
+  topK = 5
+): Promise<SearchResult[]> {
   const cleanedQuery = query.trim();
   if (!cleanedQuery) return [];
 
@@ -128,7 +149,10 @@ export async function queryVault(query: string, topK = 5): Promise<SearchResult[
   const vs = getVectorStore();
 
   try {
-    const { embedding } = await embed({ model: EMBEDDING_MODEL, value: cleanedQuery });
+    const { embedding } = await embed({
+      model: EMBEDDING_MODEL,
+      value: cleanedQuery,
+    });
     const results = await vs.query({
       indexName: INDEX_NAME,
       queryVector: embedding as unknown as number[],
@@ -160,16 +184,22 @@ export const queryVaultTool = createTool({
     "Search the vault for relevant content using semantic search. Returns matching chunks with source file, heading breadcrumb, and content snippet.",
   inputSchema: z.object({
     query: z.string().describe("The search query."),
-    topK: z.number().optional().default(5).describe("Number of results to return."),
+    topK: z
+      .number()
+      .optional()
+      .default(5)
+      .describe("Number of results to return."),
   }),
   outputSchema: z.object({
-    results: z.array(z.object({
-      source: z.string(),
-      title: z.string().optional(),
-      headings: z.array(z.string()).optional(),
-      content: z.string(),
-      score: z.number(),
-    })),
+    results: z.array(
+      z.object({
+        source: z.string(),
+        title: z.string().optional(),
+        headings: z.array(z.string()).optional(),
+        content: z.string(),
+        score: z.number(),
+      })
+    ),
   }),
   execute: async ({ query, topK }) => {
     const results = await queryVault(query, topK);
@@ -179,9 +209,13 @@ export const queryVaultTool = createTool({
 
 export const indexVaultTool = createTool({
   id: "indexVault",
-  description: "Rebuild the vault search index. Use when content is not found or after bulk imports.",
+  description:
+    "Rebuild the vault search index. Use when content is not found or after bulk imports.",
   inputSchema: z.object({
-    scopePath: z.string().optional().describe("Limit indexing to a subdirectory."),
+    scopePath: z
+      .string()
+      .optional()
+      .describe("Limit indexing to a subdirectory."),
   }),
   outputSchema: z.object({ indexed: z.number() }),
   execute: async ({ scopePath }) => indexVault(scopePath),
@@ -189,11 +223,18 @@ export const indexVaultTool = createTool({
 
 // ── Internal: chunking ──
 
-async function buildChunkDrafts(relativePath: string, content: string): Promise<ChunkDraft[]> {
+async function buildChunkDrafts(
+  relativePath: string,
+  content: string
+): Promise<ChunkDraft[]> {
   const title = extractTitle(content, relativePath);
   const headings = extractHeadingTree(content);
   const doc = MDocument.fromMarkdown(content, { type: "md" });
-  const docChunks = await doc.chunk({ strategy: "markdown", maxSize: 800, overlap: 60 });
+  const docChunks = await doc.chunk({
+    strategy: "markdown",
+    maxSize: 800,
+    overlap: 60,
+  });
 
   const chunks: ChunkDraft[] = [];
   for (let chunkIndex = 0; chunkIndex < docChunks.length; chunkIndex++) {
@@ -224,7 +265,10 @@ async function embedChunks(chunks: ChunkDraft[]): Promise<number[][]> {
   const batchSize = 50;
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const result = await embedMany({ model: EMBEDDING_MODEL, values: batch.map((c) => c.content) });
+    const result = await embedMany({
+      model: EMBEDDING_MODEL,
+      values: batch.map((c) => c.content),
+    });
     embeddings.push(...(result.embeddings as unknown as number[][]));
   }
   return embeddings;
@@ -248,23 +292,40 @@ async function ensureIndex(): Promise<void> {
   const vs = getVectorStore();
   const indexes = await vs.listIndexes();
   if (indexes.includes(INDEX_NAME)) return;
-  await vs.createIndex({ indexName: INDEX_NAME, dimension: 1536, metric: "cosine" });
+  await vs.createIndex({
+    indexName: INDEX_NAME,
+    dimension: 1536,
+    metric: "cosine",
+  });
 }
 
 async function ensureIndexSilent(): Promise<void> {
-  try { await ensureIndex(); } catch { /* ignore */ }
+  try {
+    await ensureIndex();
+  } catch {
+    /* ignore */
+  }
 }
 
 async function deleteSourceChunks(relativePath: string): Promise<void> {
   try {
     const vs = getVectorStore();
-    await vs.deleteVectors({ indexName: INDEX_NAME, filter: { source: relativePath } as any });
-  } catch { /* ignore */ }
+    await vs.deleteVectors({
+      indexName: INDEX_NAME,
+      filter: { source: relativePath } as any,
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 // ── Helpers ──
 
-function createChunkId(relativePath: string, chunkIndex: number, contentHash: string): string {
+function createChunkId(
+  relativePath: string,
+  chunkIndex: number,
+  contentHash: string
+): string {
   return hashText(`${relativePath}:${chunkIndex}:${contentHash}`);
 }
 
@@ -280,7 +341,10 @@ function parseHeadings(rawValue: unknown): string[] | undefined {
   if (typeof rawValue !== "string") return undefined;
   try {
     const parsed = JSON.parse(rawValue) as unknown;
-    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : undefined;
+    return Array.isArray(parsed) &&
+      parsed.every((item) => typeof item === "string")
+      ? parsed
+      : undefined;
   } catch {
     return undefined;
   }
@@ -294,13 +358,22 @@ function extractHeadingTree(content: string): HeadingNode[] {
   let pos = 0;
   for (const line of lines) {
     const match = line.match(/^(#{1,6})\s+(.+)/);
-    if (match) nodes.push({ level: match[1].length, text: match[2].trim(), position: pos });
+    if (match)
+      nodes.push({
+        level: match[1].length,
+        text: match[2].trim(),
+        position: pos,
+      });
     pos += line.length + 1;
   }
   return nodes;
 }
 
-function findChunkPosition(content: string, chunks: Array<{ text: string }>, chunkIdx: number): number {
+function findChunkPosition(
+  content: string,
+  chunks: Array<{ text: string }>,
+  chunkIdx: number
+): number {
   let pos = 0;
   for (let i = 0; i < chunkIdx; i++) {
     const idx = content.indexOf(chunks[i].text, pos);
@@ -309,7 +382,10 @@ function findChunkPosition(content: string, chunks: Array<{ text: string }>, chu
   return pos;
 }
 
-function findHeadingBreadcrumb(headings: HeadingNode[], chunkPosition: number): string[] {
+function findHeadingBreadcrumb(
+  headings: HeadingNode[],
+  chunkPosition: number
+): string[] {
   const breadcrumb: string[] = [];
   for (const h of headings) {
     if (h.position > chunkPosition) break;
@@ -337,6 +413,8 @@ async function walkMarkdownFiles(root: string): Promise<string[]> {
         files.push(full);
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return files;
 }
