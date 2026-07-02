@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile, removeFromIndex } from "./rag.js";
+import { recordOperation } from "../../vault/operationLedger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -48,6 +49,13 @@ export async function moveVaultFileCore(from: string, to: string): Promise<MoveV
     await reindexFile(to);
     reindexed = true;
   }
+
+  await recordOperation({
+    type: "move",
+    targetFiles: [from, to],
+    source: "moveVaultFile",
+    detail: `${from} → ${to}`,
+  });
 
   return { moved: true, reindexed };
 }

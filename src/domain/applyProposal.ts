@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { resolveExistingDirectory } from "../safety/pathSafety.js";
+import { recordOperation } from "../vault/operationLedger.js";
 
 export const EditProposalSchema = z.object({
   id: z.string().min(1),
@@ -62,6 +63,14 @@ export async function applyProposal({
     JSON.stringify({ ...proposal, status: "applied" satisfies EditProposal["status"] }, null, 2),
     "utf8",
   );
+
+  await recordOperation({
+    type: "edit",
+    targetFiles: [proposal.filePath],
+    rationale: proposal.title,
+    source: "applyEdit",
+    detail: proposal.description,
+  });
 
   return {
     proposalId: proposal.id,

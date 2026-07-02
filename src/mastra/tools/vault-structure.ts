@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parse, parseDocument } from "yaml";
+import { recordOperation } from "../../vault/operationLedger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -101,6 +102,14 @@ export async function updateDirectoryKeywords(edit: KeywordEdit): Promise<Keywor
   const { yaml, directory, keywords, conflicts } = applyKeywordEdit(raw, edit);
   await fs.writeFile(structurePath, yaml, "utf8");
   cache = null;
+
+  await recordOperation({
+    type: "structure",
+    targetFiles: [".agent/structure.yaml"],
+    source: "updateStructureKeywords",
+    detail: `${directory}: +[${(edit.add ?? []).join(", ")}] -[${(edit.remove ?? []).join(", ")}]`,
+  });
+
   return { directory, keywords, conflicts };
 }
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { reindexFile } from "./rag.js";
 import { loadStructure, classifyWithStructure } from "./vault-structure.js";
 import { requiresHumanApproval } from "./permissions.js";
+import { recordOperation } from "../../vault/operationLedger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -80,6 +81,14 @@ export const ingestVaultTool = createTool({
 
     const relativePath = path.relative(VAULT_PATH, filePath);
     await reindexFile(relativePath);
+
+    await recordOperation({
+      type: "ingest",
+      targetFiles: [relativePath],
+      rationale: title,
+      source: "ingestVault",
+      detail: `topic: ${label}`,
+    });
 
     return { filePath: relativePath, topic: label, title, readmeUpdated };
   },

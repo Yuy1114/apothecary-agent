@@ -6,6 +6,7 @@ import { readFileSummaryTool } from "../tools/read-file-summary.js";
 import { listSemanticTopicsTool } from "../tools/list-semantic-topics.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { generateKnowledgeViewTool } from "../tools/generate-knowledge-view.js";
+import { listOperationsTool } from "../tools/list-operations.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
 import { apothecaryMemory } from "../memory.js";
@@ -35,5 +36,6 @@ export const vaultReviewer = new Agent({
     listSemanticTopics: listSemanticTopicsTool,
     findRelatedFiles: findRelatedFilesTool,
     generateKnowledgeView: generateKnowledgeViewTool,
+    listOperations: listOperationsTool,
   },
 });

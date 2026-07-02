@@ -11,6 +11,7 @@ import { readStructureTool } from "../tools/read-structure.js";
 import { listPendingChangesTool } from "../tools/list-pending-changes.js";
 import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
+import { listOperationsTool } from "../tools/list-operations.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { apothecaryMemory } from "../memory.js";
 
@@ -58,5 +59,6 @@ export const vaultCurator = new Agent({
     listPendingChanges: listPendingChangesTool,
     resolvePendingChanges: resolvePendingChangesTool,
     findRelatedFiles: findRelatedFilesTool,
+    listOperations: listOperationsTool,
   },
 });

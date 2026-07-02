@@ -21,6 +21,7 @@ import {
 } from "./workflows/sync-workflow.js";
 import { startVaultWatcher } from "./workflows/sync-watcher.js";
 import { initChangeLog } from "../vault/changeLog.js";
+import { initOperationLedger } from "../vault/operationLedger.js";
 import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
@@ -50,6 +51,7 @@ const projectRoot = getProjectRoot();
 const DB_PATH = `file:${path.resolve(projectRoot, "sql/local.db")}`;
 const VECTOR_DB_PATH = `file:${path.resolve(projectRoot, "sql/vectors.db")}`;
 const CHANGE_LOG_DB_PATH = `file:${path.resolve(projectRoot, "sql/change-log.db")}`;
+const OPERATIONS_DB_PATH = `file:${path.resolve(projectRoot, "sql/operations.db")}`;
 const OBSERVABILITY_DB_PATH = path.resolve(
   projectRoot,
   "sql/observability.duckdb"
@@ -116,4 +118,6 @@ export const mastra = new Mastra({
 
 initChangeLog(CHANGE_LOG_DB_PATH)
   .catch((error) => console.warn("Change ledger failed to initialize:", error));
+initOperationLedger(OPERATIONS_DB_PATH)
+  .catch((error) => console.warn("Operation ledger failed to initialize:", error));
 startVaultWatcher(mastra);

@@ -11,6 +11,9 @@ local.db
 local.db-shm
 local.db-wal
 change-log.db
+operations.db
+operations.db-shm
+operations.db-wal
 observability.duckdb
 observability.duckdb.wal
 vectors.db
