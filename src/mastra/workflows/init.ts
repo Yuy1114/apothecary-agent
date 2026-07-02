@@ -3,7 +3,7 @@ import { z } from "zod";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { appendTextArtifact, writeTextArtifactIfMissing } from "../../artifacts/writeAgentArtifact.js";
-import { defaultConfigYaml } from "../../config/config.js";
+import { defaultVaultAgentConfigYaml } from "../../config/vaultAgentConfig.js";
 import { defaultProtocolMarkdown, defaultProtocolYaml } from "../../protocol/defaultProtocol.js";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { nowIso } from "../../utils/time.js";
@@ -79,7 +79,7 @@ const writeConfigStep = createStep({
   execute: async ({ inputData }) => {
     const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
     const created: string[] = [];
-    if (await writeTextArtifactIfMissing({ artifacts, artifactPath: artifacts.configPath, content: defaultConfigYaml })) {
+    if (await writeTextArtifactIfMissing({ artifacts, artifactPath: artifacts.configPath, content: defaultVaultAgentConfigYaml })) {
       created.push(path.relative(inputData.vaultPath, artifacts.configPath));
     }
     return { ...inputData, created };

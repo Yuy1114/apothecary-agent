@@ -3,7 +3,7 @@ import { parse, stringify } from "yaml";
 import { ApothecaryConfigSchema, type ApothecaryConfig } from "../domain/config.js";
 import type { AgentArtifacts } from "../artifacts/agentArtifacts.types.js";
 
-export const defaultConfig: ApothecaryConfig = {
+export const defaultVaultAgentConfig: ApothecaryConfig = {
   version: 1,
   reviewer: {
     provider: "mastra",
@@ -28,9 +28,9 @@ export const defaultConfig: ApothecaryConfig = {
   },
 };
 
-export const defaultConfigYaml = stringify(defaultConfig);
+export const defaultVaultAgentConfigYaml = stringify(defaultVaultAgentConfig);
 
-export async function loadConfig(artifacts: AgentArtifacts): Promise<ApothecaryConfig> {
+export async function loadVaultAgentConfig(artifacts: AgentArtifacts): Promise<ApothecaryConfig> {
   const raw = await fs
     .readFile(artifacts.configPath, "utf8")
     .catch((error: unknown) => {
@@ -40,7 +40,7 @@ export async function loadConfig(artifacts: AgentArtifacts): Promise<ApothecaryC
       throw error;
     });
 
-  if (!raw) return defaultConfig;
+  if (!raw) return defaultVaultAgentConfig;
 
   const parsed = parse(raw) as unknown;
   return ApothecaryConfigSchema.parse(parsed);

@@ -6,9 +6,13 @@ import { TOOL_APPROVAL_POLICIES, requiresHumanApproval } from "./permissions.js"
 describe("tool permission policy", () => {
   it("classifies sensitive user-vault mutations as approval-gated", () => {
     expect(TOOL_APPROVAL_POLICIES.readVault).toBe("allow");
+    expect(TOOL_APPROVAL_POLICIES.writeAgentArtifact).toBe("allow");
+    expect(TOOL_APPROVAL_POLICIES.proposeUserNoteChange).toBe("allow");
+    expect(TOOL_APPROVAL_POLICIES.persistMaintenanceReview).toBe("ask");
     expect(TOOL_APPROVAL_POLICIES.writeUserNote).toBe("ask");
     expect(TOOL_APPROVAL_POLICIES.moveUserFile).toBe("ask");
     expect(TOOL_APPROVAL_POLICIES.deleteUserFile).toBe("deny");
+    expect(TOOL_APPROVAL_POLICIES.executeCommand).toBe("deny");
   });
 
   it("requires Mastra tool approval before writing or moving user vault content", () => {

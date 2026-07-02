@@ -1,12 +1,6 @@
-export const TOOL_APPROVAL_POLICIES = {
-  readVault: "allow",
-  writeAgentArtifact: "allow",
-  proposeUserNoteChange: "allow",
-  writeUserNote: "ask",
-  moveUserFile: "ask",
-  deleteUserFile: "deny",
-  executeCommand: "deny",
-} as const;
+import { VAULT_PERMISSION_POLICY } from "../../domain/permissionPolicy.js";
+
+export const TOOL_APPROVAL_POLICIES = VAULT_PERMISSION_POLICY;
 
 export function requiresHumanApproval(): true {
   return true;

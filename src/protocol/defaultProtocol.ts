@@ -1,30 +1,51 @@
 import { stringify } from "yaml";
+import { PERMISSION_DECISION_MEANINGS, VAULT_PERMISSION_POLICY } from "../domain/permissionPolicy.js";
+
+const REVIEW_PRIORITIES = [
+  "stale_note",
+  "long_context",
+  "unassimilated_ai_output",
+  "orphan_note",
+  "missing_index",
+] as const;
 
 export const defaultProtocolMarkdown = `# Personal Knowledge Protocol
 
-This protocol tells apothecary-agent how this vault should be reviewed.
+This protocol tells apothecary-agent how this vault should be maintained.
 
 ## Purpose
 
 This vault stores Yuy's personal knowledge, project notes, learning notes, reflections, and AI-assisted thinking.
 
-## v0.1 Reviewer Boundary
+## Permission Policy
 
-apothecary-agent v0.1 is read-only for user notes.
+The agent follows a three-level permission policy:
 
-Allowed:
+- \`allow\`: allowed without human approval.
+- \`ask\`: requires human approval before execution or persistence.
+- \`deny\`: not allowed for this agent runtime.
 
-- read Markdown files;
-- scan metadata;
-- generate \`.agent/\` maps, reviews, metadata, and logs.
+Current policy:
 
-Blocked:
+| Action | Decision |
+| --- | --- |
+| Read user vault content | \`${VAULT_PERMISSION_POLICY.readVault}\` |
+| Write agent-owned \`.agent/\` artifacts | \`${VAULT_PERMISSION_POLICY.writeAgentArtifact}\` |
+| Propose user note changes | \`${VAULT_PERMISSION_POLICY.proposeUserNoteChange}\` |
+| Persist maintenance review artifact | \`${VAULT_PERMISSION_POLICY.persistMaintenanceReview}\` |
+| Write user notes | \`${VAULT_PERMISSION_POLICY.writeUserNote}\` |
+| Move user files | \`${VAULT_PERMISSION_POLICY.moveUserFile}\` |
+| Delete user files | \`${VAULT_PERMISSION_POLICY.deleteUserFile}\` |
+| Execute shell commands | \`${VAULT_PERMISSION_POLICY.executeCommand}\` |
 
-- moving user files;
-- renaming user files;
-- deleting user files;
-- rewriting user notes;
-- modifying user note frontmatter.
+## Operational Rules
+
+- Reading, scanning, indexing, and semantic retrieval are allowed.
+- Agent-owned artifacts under \`.agent/\` may be written by default.
+- Maintenance review persistence is approval-gated because it records a user-visible judgement artifact.
+- Proposed edits are allowed, but applying those edits to user notes is approval-gated.
+- Moving user files is approval-gated.
+- Deleting user files and executing shell commands are denied.
 
 ## Review Priorities
 
@@ -39,19 +60,15 @@ When reviewing the vault, prioritize:
 
 export const defaultProtocolYaml = stringify({
   vault_purpose: "Yuy's personal knowledge, project notes, learning notes, reflections, and AI-assisted thinking.",
-  reviewer_boundary: {
-    read_user_notes: true,
-    write_agent_artifacts: true,
-    modify_user_notes: false,
-    move_files: false,
-    delete_files: false,
-    rename_files: false,
-  },
-  review_priorities: [
-    "stale_note",
-    "long_context",
-    "unassimilated_ai_output",
-    "orphan_note",
-    "missing_index",
+  permission_policy: VAULT_PERMISSION_POLICY,
+  permission_decision_meanings: PERMISSION_DECISION_MEANINGS,
+  operational_rules: [
+    "Reading, scanning, indexing, and semantic retrieval are allowed.",
+    "Agent-owned artifacts under .agent/ may be written by default.",
+    "Maintenance review persistence is approval-gated because it records a user-visible judgement artifact.",
+    "Proposed edits are allowed, but applying those edits to user notes is approval-gated.",
+    "Moving user files is approval-gated.",
+    "Deleting user files and executing shell commands are denied.",
   ],
+  review_priorities: REVIEW_PRIORITIES,
 });
