@@ -1,17 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { reindexFile } from "./rag.js";
-import { loadStructure, classifyWithStructure } from "./vault-structure.js";
 import { requiresHumanApproval } from "./permissions.js";
-import { recordOperation } from "../../vault/operationLedger.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-
-function slugify(text: string): string {
-  return text.replace(/[^\w\u4e00-\u9fff\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 60);
-}
+import { writeVaultNote } from "./ingest-core.js";
 
 export const ingestVaultTool = createTool({
   id: "ingestVault",
@@ -29,67 +19,6 @@ export const ingestVaultTool = createTool({
     title: z.string(),
     readmeUpdated: z.boolean(),
   }),
-  execute: async ({ content, title: suggestedTitle, topic: suggestedTopic }) => {
-    const structure = await loadStructure();
-
-    let dir = "inbox";
-    let label = "未分类";
-
-    if (suggestedTopic) {
-      if (structure.directories[suggestedTopic]) {
-        dir = suggestedTopic;
-        label = structure.directories[suggestedTopic].description;
-      } else {
-        for (const [d, def] of Object.entries(structure.directories)) {
-          if (!def.keywords) continue;
-          if (def.keywords.some((kw) => suggestedTopic.toLowerCase().includes(kw))) {
-            dir = d;
-            label = def.description;
-            break;
-          }
-        }
-      }
-    }
-
-    if (dir === "inbox") {
-      ({ dir, label } = classifyWithStructure(content, structure));
-    }
-
-    const headingMatch = content.match(/^#\s+(.+)/m);
-    const title = suggestedTitle ?? headingMatch?.[1] ?? content.split("\n")[0]?.slice(0, 60) ?? "untitled";
-    const fileName = `${slugify(title)}.md`;
-    const dirPath = path.join(VAULT_PATH, dir);
-    await fs.mkdir(dirPath, { recursive: true });
-
-    const timestamp = new Date().toISOString().split("T")[0];
-    const fileContent = `---\ntitle: "${title}"\ntopic: "${label}"\ncreated: ${timestamp}\ntype: note\n---\n\n${content}`;
-    const filePath = path.join(dirPath, fileName);
-    await fs.writeFile(filePath, fileContent, "utf8");
-
-    let readmeUpdated = false;
-    const readmePath = path.join(dirPath, "README.md");
-    try {
-      const existing = await fs.readFile(readmePath, "utf8");
-      if (!existing.includes(fileName)) {
-        await fs.appendFile(readmePath, `- [${title}](${fileName}) — ${new Date().toLocaleDateString("zh-CN")}\n`, "utf8");
-        readmeUpdated = true;
-      }
-    } catch {
-      await fs.writeFile(readmePath, `# ${label}\n\n## 笔记索引\n\n- [${title}](${fileName}) — ${new Date().toLocaleDateString("zh-CN")}\n`, "utf8");
-      readmeUpdated = true;
-    }
-
-    const relativePath = path.relative(VAULT_PATH, filePath);
-    await reindexFile(relativePath);
-
-    await recordOperation({
-      type: "ingest",
-      targetFiles: [relativePath],
-      rationale: title,
-      source: "ingestVault",
-      detail: `topic: ${label}`,
-    });
-
-    return { filePath: relativePath, topic: label, title, readmeUpdated };
-  },
+  execute: async ({ content, title, topic }) =>
+    writeVaultNote({ content, title, topic, noteType: "note", source: "ingestVault", operationType: "ingest" }),
 });

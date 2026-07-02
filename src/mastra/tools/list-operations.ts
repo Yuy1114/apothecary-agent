@@ -10,7 +10,7 @@ export const listOperationsTool = createTool({
     "Use this to answer what changed, when, and why — e.g. the history of a specific file.",
   inputSchema: z.object({
     filePath: z.string().optional().describe("Only operations touching this vault path"),
-    type: z.enum(["edit", "move", "structure", "ingest"]).optional(),
+    type: z.enum(["edit", "move", "structure", "ingest", "capture"]).optional(),
     limit: z.number().optional().describe("Max records (default 50)"),
   }),
   outputSchema: z.object({

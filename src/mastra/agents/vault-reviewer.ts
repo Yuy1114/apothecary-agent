@@ -7,6 +7,7 @@ import { listSemanticTopicsTool } from "../tools/list-semantic-topics.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { generateKnowledgeViewTool } from "../tools/generate-knowledge-view.js";
 import { listOperationsTool } from "../tools/list-operations.js";
+import { captureInsightTool } from "../tools/capture-insight.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
 import { apothecaryMemory } from "../memory.js";
@@ -24,6 +25,10 @@ export const vaultReviewer = new Agent({
     "Use readFileSummary to get a file's semantic summary (gist, topics, concepts) without reading the whole file. " +
     "Use listSemanticTopics for a birds-eye view of the vault's topics/concepts, and findRelatedFiles to find notes related to a given file. " +
     "When the user asks for an overview or knowledge system of some direction/subject, use generateKnowledgeView to build a structured view. " +
+    "When a durable insight surfaces worth keeping long-term (a decision, principle, learning conclusion, or job-evidence point), you may offer to save it. " +
+    "When the user asks to save an insight or accepts your offer, CALL captureInsight (synthesize clean note content + a topic hint) — do NOT ask for confirmation in prose. " +
+    "captureInsight has a built-in approval step that shows the content and lets the user approve or reject before anything is written; that step IS the confirmation. " +
+    "Do not capture trivial or transient chatter. " +
     "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: "deepseek/deepseek-v4-flash",
   inputProcessors: [new VaultSemanticRecallProcessor()],
@@ -37,5 +42,6 @@ export const vaultReviewer = new Agent({
     findRelatedFiles: findRelatedFilesTool,
     generateKnowledgeView: generateKnowledgeViewTool,
     listOperations: listOperationsTool,
+    captureInsight: captureInsightTool,
   },
 });
