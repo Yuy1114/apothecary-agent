@@ -29,6 +29,7 @@ import { applyEditWorkflow } from "./workflows/apply-edit.js";
 import { reorganizeWorkflow } from "./workflows/reorganize.js";
 import { refreshSemanticsWorkflow } from "./workflows/refresh-semantics.js";
 import { detectDuplicatesWorkflow } from "./workflows/detect-duplicates.js";
+import { refreshProfileWorkflow } from "./workflows/refresh-profile.js";
 import { workspace } from "./workspaces.js";
 import { apothecaryMemory } from "./memory.js";
 import path from "path";
@@ -89,6 +90,7 @@ export const mastra = new Mastra({
     reorganizeWorkflow,
     refreshSemanticsWorkflow,
     detectDuplicatesWorkflow,
+    refreshProfileWorkflow,
   },
   workspace,
   storage: new MastraCompositeStore({

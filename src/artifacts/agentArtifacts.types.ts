@@ -10,4 +10,5 @@ export type AgentArtifacts = {
   logsDir: string;
   semanticDir: string;
   viewsDir: string;
+  profileDir: string;
 };

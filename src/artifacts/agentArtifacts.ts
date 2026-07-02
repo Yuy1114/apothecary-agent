@@ -18,6 +18,7 @@ export function getAgentArtifacts(vaultPath: string): AgentArtifacts {
     logsDir: path.join(rootPath, "logs"),
     semanticDir: path.join(rootPath, "semantic"),
     viewsDir: path.join(rootPath, "views"),
+    profileDir: path.join(rootPath, "profile"),
   };
 }
 
@@ -31,6 +32,7 @@ export async function ensureAgentArtifacts(vaultPath: string): Promise<AgentArti
     fs.mkdir(artifacts.logsDir, { recursive: true }),
     fs.mkdir(artifacts.semanticDir, { recursive: true }),
     fs.mkdir(artifacts.viewsDir, { recursive: true }),
+    fs.mkdir(artifacts.profileDir, { recursive: true }),
   ]);
   return artifacts;
 }

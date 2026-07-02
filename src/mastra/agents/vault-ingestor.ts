@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { ingestVaultTool } from "../tools/ingest-vault.js";
 import { readStructureTool } from "../tools/read-structure.js";
 import { updateStructureKeywordsTool } from "../tools/update-structure-keywords.js";
+import { readKnowledgeProfileTool } from "../tools/read-knowledge-profile.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { apothecaryMemory } from "../memory.js";
 
@@ -29,5 +30,6 @@ export const vaultIngestor = new Agent({
     ingestVault: ingestVaultTool,
     readStructure: readStructureTool,
     updateStructureKeywords: updateStructureKeywordsTool,
+    readKnowledgeProfile: readKnowledgeProfileTool,
   },
 });

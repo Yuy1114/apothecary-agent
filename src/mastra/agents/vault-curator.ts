@@ -13,6 +13,7 @@ import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { listOperationsTool } from "../tools/list-operations.js";
 import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
+import { readKnowledgeProfileTool } from "../tools/read-knowledge-profile.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { apothecaryMemory } from "../memory.js";
 
@@ -65,5 +66,6 @@ export const vaultCurator = new Agent({
     findRelatedFiles: findRelatedFilesTool,
     listOperations: listOperationsTool,
     listDuplicateClusters: listDuplicateClustersTool,
+    readKnowledgeProfile: readKnowledgeProfileTool,
   },
 });

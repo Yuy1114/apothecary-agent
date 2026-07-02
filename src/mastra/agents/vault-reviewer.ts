@@ -8,6 +8,7 @@ import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { generateKnowledgeViewTool } from "../tools/generate-knowledge-view.js";
 import { listOperationsTool } from "../tools/list-operations.js";
 import { captureInsightTool } from "../tools/capture-insight.js";
+import { readKnowledgeProfileTool } from "../tools/read-knowledge-profile.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
 import { apothecaryMemory } from "../memory.js";
@@ -43,5 +44,6 @@ export const vaultReviewer = new Agent({
     generateKnowledgeView: generateKnowledgeViewTool,
     listOperations: listOperationsTool,
     captureInsight: captureInsightTool,
+    readKnowledgeProfile: readKnowledgeProfileTool,
   },
 });
