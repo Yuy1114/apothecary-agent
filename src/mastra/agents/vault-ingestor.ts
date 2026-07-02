@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { ingestVaultTool } from "../tools/ingest-vault.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
+import { apothecaryMemory } from "../memory.js";
 
 export const vaultIngestor = new Agent({
   id: "vault-ingestor",
   name: "Vault Ingestor",
+  memory: apothecaryMemory,
   description:
     "Ingests new knowledge into the vault with automatic classification and indexing.",
   instructions:

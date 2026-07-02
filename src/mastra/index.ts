@@ -3,7 +3,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { MastraCompositeStore } from "@mastra/core/storage";
 import { DuckDBStore } from "@mastra/duckdb";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
-import { Memory } from "@mastra/memory";
 import { PinoLogger } from "@mastra/loggers";
 import {
   Observability,
@@ -16,17 +15,17 @@ import { vaultCurator } from "./agents/vault-curator.js";
 import { vaultIngestor } from "./agents/vault-ingestor.js";
 import { setVectorStore } from "./tools/rag.js";
 import {
-  startVaultWatcher,
   fullReindexWorkflow,
   fileChangedWorkflow,
   fileDeletedWorkflow,
 } from "./workflows/sync-workflow.js";
+import { startVaultWatcher } from "./workflows/sync-watcher.js";
 import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
 import { applyEditWorkflow } from "./workflows/apply-edit.js";
-import { EMBEDDING_MODEL } from "./tools/rag.js";
 import { workspace } from "./workspaces.js";
+import { apothecaryMemory } from "./memory.js";
 import path from "path";
 
 function getProjectRoot() {
@@ -105,15 +104,8 @@ export const mastra = new Mastra({
     },
   }),
   memory: {
-    apothecary: new Memory({
-      embedder: EMBEDDING_MODEL as any,
-      options: {
-        lastMessages: 20,
-        observationalMemory: true,
-        workingMemory: { enabled: true },
-      },
-    }),
+    apothecary: apothecaryMemory,
   },
 });
 
-startVaultWatcher();
+startVaultWatcher(mastra);

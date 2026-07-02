@@ -4,10 +4,12 @@ import { scanVaultTool } from "../tools/scan-vault.js";
 import { readMarkdownTool } from "../tools/read-markdown.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
+import { apothecaryMemory } from "../memory.js";
 
 export const vaultReviewer = new Agent({
   id: "vault-reviewer",
   name: "Vault Reviewer",
+  memory: apothecaryMemory,
   description:
     "Answers questions about Yuy's vault by searching and reading markdown files.",
   instructions:
