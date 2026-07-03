@@ -143,3 +143,16 @@ $("#knowledge-chat-button").addEventListener("click", () => { navigate("chat"); 
 $("#proposal-filter").addEventListener("click", (event) => { const button = event.target.closest("button[data-status]"); if (!button) return; state.proposalStatus = button.dataset.status; document.querySelectorAll("#proposal-filter button").forEach((node) => node.classList.toggle("active", node === button)); loadProposals(); });
 
 loadDashboard().catch((error) => toast(error.message));
+
+// The watcher updates the ledger in the background; poll so the badges (and the
+// changes list, when open) reflect external edits without needing to navigate.
+// Skipped while an action is in flight to avoid stacking on top of it.
+setInterval(async () => {
+  if (document.body.classList.contains("loading")) return;
+  try {
+    await loadDashboard();
+    if (state.view === "changes") await loadChanges();
+  } catch {
+    /* transient read error — the next tick will retry */
+  }
+}, 4000);
