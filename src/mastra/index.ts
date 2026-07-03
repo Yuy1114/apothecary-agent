@@ -29,6 +29,7 @@ import { applyEditWorkflow } from "./workflows/apply-edit.js";
 import { reorganizeWorkflow } from "./workflows/reorganize.js";
 import { refreshSemanticsWorkflow } from "./workflows/refresh-semantics.js";
 import { syncSemanticsWorkflow } from "./workflows/sync-semantics.js";
+import { manualSyncWorkflow } from "./workflows/manual-sync.js";
 import { detectDuplicatesWorkflow } from "./workflows/detect-duplicates.js";
 import { refreshProfileWorkflow } from "./workflows/refresh-profile.js";
 import { workspace } from "./workspaces.js";
@@ -91,6 +92,7 @@ export const mastra = new Mastra({
     reorganizeWorkflow,
     refreshSemanticsWorkflow,
     syncSemanticsWorkflow,
+    manualSyncWorkflow,
     detectDuplicatesWorkflow,
     refreshProfileWorkflow,
   },

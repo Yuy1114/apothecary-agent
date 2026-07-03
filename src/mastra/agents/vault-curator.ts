@@ -10,6 +10,7 @@ import { readStructureTool } from "../tools/read-structure.js";
 import { listPendingChangesTool } from "../tools/list-pending-changes.js";
 import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
 import { syncSemanticsTool } from "../tools/sync-semantics.js";
+import { manualSyncTool } from "../tools/manual-sync.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { listOperationsTool } from "../tools/list-operations.js";
 import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
@@ -53,6 +54,9 @@ export const vaultCurator = new Agent({
     "syncSemantics refreshes the agent's own semantic layer (file summaries + topic/concept graph) for the changed files. " +
     "It does not touch user notes and does not clear the pending-change queue, so it is always safe to run — use it after " +
     "notes have changed (or before duplicate/profile work) so later reasoning sees up-to-date understanding.\n\n" +
+    "If the vault may have changed while the app was down or the watcher missed events (e.g. a bulk import, or " +
+    "pending changes look incomplete), run manualSync: it diffs the vault against its snapshot to recover " +
+    "created/modified/deleted notes into the pending queue and re-sync the index and semantic layer. It never modifies notes.\n\n" +
     "Always explain why each change or placement is suggested, and never act on low-confidence findings without saying so. " +
     "You may never delete user files or run shell commands. Answer in Chinese.",
   model: "deepseek/deepseek-v4-flash",
@@ -69,6 +73,7 @@ export const vaultCurator = new Agent({
     listPendingChanges: listPendingChangesTool,
     resolvePendingChanges: resolvePendingChangesTool,
     syncSemantics: syncSemanticsTool,
+    manualSync: manualSyncTool,
     findRelatedFiles: findRelatedFilesTool,
     listOperations: listOperationsTool,
     listDuplicateClusters: listDuplicateClustersTool,
