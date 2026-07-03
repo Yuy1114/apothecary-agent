@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { KnowledgeProfileSchema } from "../../domain/knowledgeProfile.js";
+import { loadProfileRefreshState } from "../../vault/profileState.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -16,6 +17,8 @@ export const readKnowledgeProfileTool = createTool({
   inputSchema: z.object({}),
   outputSchema: z.object({
     found: z.boolean(),
+    /** True when the semantic layer changed since the profile was last generated. */
+    stale: z.boolean(),
     generatedAt: z.string().optional(),
     overview: z.string().optional(),
     topTopics: z.array(z.object({ label: z.string(), fileCount: z.number() })).optional(),
@@ -27,10 +30,12 @@ export const readKnowledgeProfileTool = createTool({
   }),
   execute: async () => {
     const profilePath = path.join(getAgentArtifacts(VAULT_PATH).profileDir, "knowledge-profile.json");
+    const { dirty } = await loadProfileRefreshState(VAULT_PATH);
     try {
       const profile = KnowledgeProfileSchema.parse(JSON.parse(await fs.readFile(profilePath, "utf8")));
       return {
         found: true,
+        stale: dirty,
         generatedAt: profile.generatedAt,
         overview: profile.overview,
         topTopics: profile.stats.topTopics,
@@ -41,7 +46,7 @@ export const readKnowledgeProfileTool = createTool({
         recommendations: profile.recommendations,
       };
     } catch {
-      return { found: false };
+      return { found: false, stale: dirty };
     }
   },
 });

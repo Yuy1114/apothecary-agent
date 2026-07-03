@@ -6,6 +6,7 @@ import {
   saveRelations,
   saveCanonicalCandidates,
 } from "../../vault/semanticStore.js";
+import { markProfileDirty } from "../../vault/profileState.js";
 
 /**
  * Rebuild and persist the derived relation artifacts from the current graph and
@@ -24,6 +25,9 @@ export async function refreshRelations(
 
   const candidates = buildCanonicalCandidates(graph, relations);
   await saveCanonicalCandidates(vaultPath, candidates);
+
+  // The semantic layer changed, so the standing profile is now stale.
+  await markProfileDirty(vaultPath);
 
   return { relations: relations.relations.length, canonicalCandidates: candidates.candidates.length };
 }

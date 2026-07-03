@@ -7,6 +7,7 @@ import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { loadSummaries, loadGraph, loadDuplicateReport } from "../../vault/semanticStore.js";
 import { generateKnowledgeProfile } from "../../application/profile/generateKnowledgeProfile.js";
 import { renderKnowledgeProfileMarkdown } from "../../reports/renderKnowledgeProfileMarkdown.js";
+import { clearProfileDirty } from "../../vault/profileState.js";
 
 const OutputSchema = z.object({
   fileCount: z.number(),
@@ -51,6 +52,9 @@ const buildStep = createStep({
       renderKnowledgeProfileMarkdown(profile),
       "utf8",
     );
+
+    // The profile now reflects the current semantic layer.
+    await clearProfileDirty(vaultPath);
 
     return {
       fileCount: profile.stats.fileCount,

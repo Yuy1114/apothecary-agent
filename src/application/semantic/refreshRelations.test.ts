@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { refreshRelations } from "./refreshRelations.js";
 import { loadRelations, loadCanonicalCandidates } from "../../vault/semanticStore.js";
+import { loadProfileRefreshState } from "../../vault/profileState.js";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import type { SemanticGraph } from "../../domain/semantic.js";
 import type { DuplicateReport } from "../../domain/duplicateDetection.js";
@@ -42,6 +43,9 @@ describe("refreshRelations", () => {
 
     const { relations } = await loadRelations(vault);
     expect(relations[0]).toMatchObject({ from: "a.md", to: "b.md", type: "related_to" });
+
+    // A semantic-layer change marks the standing profile stale.
+    expect((await loadProfileRefreshState(vault)).dirty).toBe(true);
   });
 
   it("also persists canonical candidates for concepts spread across enough files", async () => {
