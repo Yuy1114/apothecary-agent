@@ -1,5 +1,7 @@
 # Apothecary Agent v1 项目进展 Review
 
+> **历史说明：** 本文记录 `624f5c7` 时的阶段 review。文中的 75–80% 与未完成项已被后续 closure 工作取代；当前最终状态见 [`v1-completion-report.md`](./v1-completion-report.md)。
+
 > Review 日期：2026-07-03  
 > Review 基线：`624f5c7`（`main` / `origin/main`）  
 > 产品依据：[`v1-product-boundary-and-roadmap.md`](./v1-product-boundary-and-roadmap.md)

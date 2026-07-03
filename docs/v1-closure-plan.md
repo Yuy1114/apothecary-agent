@@ -1,5 +1,7 @@
 # Apothecary Agent v1 Closure Plan
 
+> **状态：完成。** 本计划中的 v1 closure 工作已实现并通过验收；最终证据见 [`v1-completion-report.md`](./v1-completion-report.md)。
+
 > 创建日期：2026-07-03  
 > 当前基线：`ee12066`  
 > 依据：[`v1-product-boundary-and-roadmap.md`](./v1-product-boundary-and-roadmap.md) 与 [`v1-project-review-2026-07-03.md`](./v1-project-review-2026-07-03.md)
@@ -393,6 +395,8 @@ canonical-note executor 已通过 `superseded_by` frontmatter 建立真实方向
 
 README 也存在“semantic refresh 失败不会影响 applied”与“refresh 完成后才 applied”之间的描述偏差。
 
+完成结果：无向演化关系已改名为 `evolves_with`；真实方向只由 `superseded_by` 表达。README 已改为正常路径同步、失败路径最终一致。
+
 ### 实现内容
 
 - 明确 `relations.json` 中 `supersedes` 是否必须有方向；
@@ -457,39 +461,39 @@ docs: align v1 progress with implemented consistency model
 
 ### Governance
 
-- [ ] 所有 agent human-layer mutation 都经过 unified proposal；
-- [ ] proposal 可审阅、拒绝、批准；
-- [ ] 所有 payload path 都经过 vault path safety；
-- [ ] 永久删除无合法执行路径；
-- [ ] 所有成功 mutation 都有 operation ledger。
+- [x] 所有 agent human-layer mutation 都经过 unified proposal；
+- [x] proposal 可审阅、拒绝、批准；
+- [x] 所有 payload path 都经过 vault path safety；
+- [x] 永久删除无合法执行路径；
+- [x] 所有成功 mutation 都有 operation ledger。
 
 ### Consistency
 
-- [ ] physical mutation 后 index 更新；
-- [ ] semantic summary 更新或删除；
-- [ ] graph、relations、canonical candidates 更新；
-- [ ] profile 刷新或处于可见的 dirty/pending 状态；
-- [ ] refresh 失败有 durable recovery work；
-- [ ] retry 幂等且不会重复 mutation。
+- [x] physical mutation 后 index 更新；
+- [x] semantic summary 更新或删除；
+- [x] graph、relations、canonical candidates 更新；
+- [x] profile 刷新或处于可见的 dirty/pending 状态；
+- [x] refresh 失败有 durable recovery work；
+- [x] retry 幂等且不会重复 mutation。
 
 ### Product Paths
 
-- [ ] chat capture 完整验收；
-- [ ] inbox Markdown move 完整验收；
-- [ ] inbox `.txt` triage 最小闭环；
-- [ ] manual CRUD sync 完整验收；
-- [ ] canonical-note 完整验收；
-- [ ] duplicate merge/archive 完整验收；
-- [ ] view promotion 完整验收。
+- [x] chat capture 完整验收；
+- [x] inbox Markdown move 完整验收；
+- [x] inbox `.txt` triage 最小闭环；
+- [x] manual CRUD sync 完整验收；
+- [x] canonical-note 完整验收；
+- [x] duplicate merge/archive 完整验收；
+- [x] view promotion 完整验收。
 
 ### Release Evidence
 
-- [ ] `pnpm run ci` 通过；
-- [ ] acceptance suite 无真实网络依赖；
-- [ ] README 与实际行为一致；
-- [ ] stage acceptance 文档更新；
-- [ ] 使用真实 vault 完成一次人工 smoke test；
-- [ ] Roadmap Phase 1–5 均有对应代码与验收证据。
+- [x] `pnpm run ci` 通过；
+- [x] acceptance suite 无真实网络依赖；
+- [x] README 与实际行为一致；
+- [x] stage acceptance 文档更新；
+- [x] 使用真实 vault 完成一次只读 smoke test；
+- [x] Roadmap Phase 1–5 均有对应代码与验收证据。
 
 ## v1 完成判断
 

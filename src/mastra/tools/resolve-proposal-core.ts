@@ -13,6 +13,7 @@ import { loadProposal, saveProposal, listProposals } from "../../vault/proposalS
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
 import { syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { updateReadmeForCreatedNote } from "./readme-index-core.js";
 import { enqueueSemanticRecovery } from "../../application/semantic/semanticRecovery.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -48,9 +49,11 @@ async function executeProposal(
       const { filePath, suggestedContent } = proposal.payload;
       const abs = safeVaultPath(VAULT_PATH, filePath);
       if (!abs) return { ok: false, reason: "unsafe_path" };
+      const existed = await fs.access(abs).then(() => true, () => false);
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, suggestedContent, "utf8");
       if (filePath.endsWith(".md")) await reindexFile(filePath);
+      if (!existed) await updateReadmeForCreatedNote(VAULT_PATH, filePath);
       await recordOperation({
         type: "edit",
         targetFiles: [filePath],
@@ -102,9 +105,21 @@ async function executeProposal(
     }
     case "view_promotion": {
       const { sourceViewPath, targetPath, content } = proposal.payload;
+      if (targetPath.replaceAll("\\", "/").startsWith(".agent/")) {
+        return { ok: false, reason: "invalid_promotion_target" };
+      }
       const sourceAbs = safeVaultPath(VAULT_PATH, sourceViewPath);
       const abs = safeVaultPath(VAULT_PATH, targetPath);
       if (!sourceAbs || !abs) return { ok: false, reason: "unsafe_path" };
+      const viewsRoot = path.resolve(VAULT_PATH, ".agent", "views");
+      const sourceWithinViews = path.relative(viewsRoot, sourceAbs);
+      if (
+        sourceWithinViews === "" ||
+        sourceWithinViews.startsWith("..") ||
+        path.isAbsolute(sourceWithinViews)
+      ) {
+        return { ok: false, reason: "invalid_source_view" };
+      }
       try {
         await fs.access(sourceAbs);
       } catch {
@@ -113,6 +128,7 @@ async function executeProposal(
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, content, "utf8");
       if (targetPath.endsWith(".md")) await reindexFile(targetPath);
+      await updateReadmeForCreatedNote(VAULT_PATH, targetPath);
       await recordOperation({
         type: "promote",
         targetFiles: [sourceViewPath, targetPath],
@@ -124,6 +140,9 @@ async function executeProposal(
     }
     case "canonical_note": {
       const { canonicalPath, content, supersedes } = proposal.payload;
+      if (canonicalPath.replaceAll("\\", "/").startsWith(".agent/")) {
+        return { ok: false, reason: "invalid_canonical_target" };
+      }
       const canonicalAbs = safeVaultPath(VAULT_PATH, canonicalPath);
       if (!canonicalAbs) return { ok: false, reason: "unsafe_path" };
       for (const source of supersedes) {
@@ -131,9 +150,11 @@ async function executeProposal(
       }
 
       // Write/update the canonical note.
+      const canonicalExisted = await fs.access(canonicalAbs).then(() => true, () => false);
       await fs.mkdir(path.dirname(canonicalAbs), { recursive: true });
       await fs.writeFile(canonicalAbs, content, "utf8");
       if (canonicalPath.endsWith(".md")) await reindexFile(canonicalPath);
+      if (!canonicalExisted) await updateReadmeForCreatedNote(VAULT_PATH, canonicalPath);
 
       // Stamp a directed `superseded_by` link into each source that still exists
       // (human-visible, and survives semantic refreshes). Missing ones are skipped.

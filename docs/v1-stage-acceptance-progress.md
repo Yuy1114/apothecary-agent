@@ -6,11 +6,11 @@
 
 依据文档：[`docs/v1-product-boundary-and-roadmap.md`](./v1-product-boundary-and-roadmap.md)。
 
-当前结论：**v1 主干已经成型，但还不能判定为全部功能完成。**
+当前结论：**v1 已完成。**
 
 更准确的状态是：
 
-> 6 个 Capability 都已经有实现入口或主路径，但部分 roadmap 验收项仍停留在骨架、人工约定或局部实现阶段。当前项目处于 v1 alpha / closure pass 前状态。
+> 6 个 Capability 已形成可运行、可审阅、可补偿、可审计的主路径。最终验收见 [`v1-completion-report.md`](./v1-completion-report.md)。本文其余内容保留为 closure 前的历史快照，不再代表当前 HEAD。
 
 ## 当前验收快照
 

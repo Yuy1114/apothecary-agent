@@ -71,7 +71,7 @@ describe("buildRelations", () => {
       ]),
     );
     expect(r.relations).toHaveLength(1);
-    expect(r.relations[0]).toMatchObject({ from: "x.md", to: "y.md", type: "supersedes" });
+    expect(r.relations[0]).toMatchObject({ from: "x.md", to: "y.md", type: "evolves_with" });
   });
 
   it("maps contextual_repetition to related_to and ignores not_duplicate", () => {

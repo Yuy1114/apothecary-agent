@@ -30,7 +30,7 @@ describe("buildCanonicalCandidates", () => {
         files: ["a.md", "b.md", "c.md"],
         fileCount: 3,
         duplicatePairs: 0,
-        supersedesPairs: 0,
+        evolutionPairs: 0,
         score: 3,
       },
     ]);
@@ -46,16 +46,16 @@ describe("buildCanonicalCandidates", () => {
     expect(buildCanonicalCandidates(g, relations([]), { minFiles: 2 }).candidates).toHaveLength(1);
   });
 
-  it("weights duplicate/supersedes edges among the concept's files", () => {
+  it("weights duplicate/evolution edges among the concept's files", () => {
     const g = graph([{ label: "DB", files: ["a.md", "b.md", "c.md"] }]);
     const r = relations([
       rel("a.md", "b.md", "duplicates"),
-      rel("b.md", "c.md", "supersedes"),
+      rel("b.md", "c.md", "evolves_with"),
       rel("a.md", "c.md", "related_to"), // not counted
       rel("a.md", "z.md", "duplicates"), // z not in the concept's files
     ]);
     const [candidate] = buildCanonicalCandidates(g, r).candidates;
-    expect(candidate).toMatchObject({ duplicatePairs: 1, supersedesPairs: 1, score: 3 + 2 + 2 });
+    expect(candidate).toMatchObject({ duplicatePairs: 1, evolutionPairs: 1, score: 3 + 2 + 2 });
   });
 
   it("ranks higher-scoring concepts first", () => {

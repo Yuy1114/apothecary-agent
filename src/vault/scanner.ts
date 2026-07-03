@@ -8,6 +8,7 @@ import { classifyLayer } from "./classifyLayer.js";
 import { hashFile } from "./hash.js";
 import { parseMarkdownSnapshot } from "./markdown.js";
 import { relativeVaultPath, toPosixPath } from "./paths.js";
+import { safeVaultPath } from "../safety/pathSafety.js";
 
 export type ScanVaultOptions = {
   vaultPath: string;
@@ -24,7 +25,8 @@ const DEFAULT_IGNORE = [".agent/**"];
 
 export async function scanVault(options: ScanVaultOptions): Promise<VaultScan> {
   const vaultPath = path.resolve(options.vaultPath);
-  const scopeRoot = options.scopePath ? path.join(vaultPath, options.scopePath) : vaultPath;
+  const scopeRoot = options.scopePath ? safeVaultPath(vaultPath, options.scopePath) : vaultPath;
+  if (!scopeRoot) throw new Error("unsafe_scope_path");
   const entries = await fg(["**/*"], {
     cwd: scopeRoot,
     dot: true,

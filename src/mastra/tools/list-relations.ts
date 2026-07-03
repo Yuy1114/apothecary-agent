@@ -9,7 +9,7 @@ export const listRelationsTool = createTool({
   id: "listRelations",
   description:
     "List typed relationships between notes from the semantic relation layer (.agent/semantic/relations.json): " +
-    "related_to (shared concepts), duplicates (harmful copy), supersedes (evolutionary chain). Each edge has a weight " +
+    "related_to (shared concepts), duplicates (harmful copy), evolves_with (undirected evolutionary pair). Each edge has a weight " +
     "and the shared topics/concepts. Filter by a file (edges touching it) and/or type. Read-only — use it to spot " +
     "duplicate/superseded notes and explore the knowledge network. Returns empty until the semantic layer has been built.",
   inputSchema: z.object({

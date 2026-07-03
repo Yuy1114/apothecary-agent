@@ -1,7 +1,18 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { promises as fs } from "node:fs";
+import path from "node:path";
 import { parseMarkdownSnapshot } from "../../vault/markdown.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
+
+export async function readMarkdown(vaultPath: string, filePath: string) {
+  const absolutePath = safeVaultPath(vaultPath, filePath);
+  const extension = path.extname(filePath).toLowerCase();
+  if (!absolutePath) throw new Error("unsafe_path");
+  if (extension !== ".md" && extension !== ".markdown") throw new Error("unsupported_markdown_type");
+  const content = await fs.readFile(absolutePath, "utf8");
+  return parseMarkdownSnapshot(filePath, content);
+}
 
 export const readMarkdownTool = createTool({
   id: "readMarkdown",
@@ -19,9 +30,7 @@ export const readMarkdownTool = createTool({
   }),
   execute: async ({ filePath }) => {
     const vaultPath = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-    const absolutePath = `${vaultPath}/${filePath}`;
-    const content = await fs.readFile(absolutePath, "utf8");
-    const snapshot = parseMarkdownSnapshot(filePath, content);
+    const snapshot = await readMarkdown(vaultPath, filePath);
     return {
       filePath,
       title: snapshot.title,

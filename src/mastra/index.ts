@@ -25,7 +25,6 @@ import { initOperationLedger } from "../vault/operationLedger.js";
 import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
-import { reorganizeWorkflow } from "./workflows/reorganize.js";
 import { refreshSemanticsWorkflow } from "./workflows/refresh-semantics.js";
 import { syncSemanticsWorkflow } from "./workflows/sync-semantics.js";
 import { manualSyncWorkflow } from "./workflows/manual-sync.js";
@@ -87,7 +86,6 @@ export const mastra = new Mastra({
     initWorkflow,
     reviewWorkflow,
     mapWorkflow,
-    reorganizeWorkflow,
     refreshSemanticsWorkflow,
     syncSemanticsWorkflow,
     manualSyncWorkflow,

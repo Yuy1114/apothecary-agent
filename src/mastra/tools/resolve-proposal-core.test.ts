@@ -184,6 +184,32 @@ describe("resolveProposalById", () => {
 
     expect(result.status).toBe("applied");
     expect(await read("notes/ai-eng.md")).toBe("# AI Engineering\n\npromoted");
+    expect(await read("notes/README.md")).toContain("(ai-eng.md)");
+  });
+
+  it("refuses view promotion from outside .agent/views", async () => {
+    await writeFile(abs("notes/not-a-view.md"), "# nope", "utf8");
+    const p = await propose("view_promotion", {
+      sourceViewPath: "notes/not-a-view.md",
+      targetPath: "notes/copied.md",
+      content: "# copied",
+    });
+    expect(await resolve(p.id, "approve")).toMatchObject({
+      resolved: false,
+      reason: "invalid_source_view",
+    });
+  });
+
+  it("refuses a view path that enters .agent/views then traverses back out", async () => {
+    const p = await propose("view_promotion", {
+      sourceViewPath: ".agent/views/../../notes/not-a-view.md",
+      targetPath: "notes/copied.md",
+      content: "# copied",
+    });
+    expect(await resolve(p.id, "approve")).toMatchObject({
+      resolved: false,
+      reason: "invalid_source_view",
+    });
   });
 
   it("approving a canonical_note writes it and stamps superseded_by on the sources", async () => {

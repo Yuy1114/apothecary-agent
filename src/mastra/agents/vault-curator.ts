@@ -5,7 +5,7 @@ import { listChangeProposalsTool } from "../tools/list-change-proposals.js";
 import { resolveProposalTool } from "../tools/resolve-proposal.js";
 import { readReviewTool } from "../tools/read-review.js";
 import { scanVaultTool } from "../tools/scan-vault.js";
-import { readMarkdownTool } from "../tools/read-markdown.js";
+import { readVaultTextTool } from "../tools/read-vault-text.js";
 import { readStructureTool } from "../tools/read-structure.js";
 import { listPendingChangesTool } from "../tools/list-pending-changes.js";
 import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
@@ -45,7 +45,8 @@ export const vaultCurator = new Agent({
     "finding into a proposeChange proposal and resolve it. listMaintenanceFindings gives a fast prioritized worklist — " +
     "superseded notes still active (→ archive) and scattered concepts (→ canonical_note) — each already mapped to its action.\n\n" +
     "Inbox triage (files waiting to be classified): read the layout with readStructure, list pending files with scanVault " +
-    "(scopePath: \"inbox\"), read each with readMarkdown, pick the best target directory, and proposeChange a move to it.\n\n" +
+    "(scopePath: \"inbox\"), read each .md/.markdown/.txt file with readVaultText, use structure plus semantic/profile context " +
+    "to pick the best target directory, and proposeChange a move to it. Preserve .txt as .txt unless Yuy separately approves a conversion.\n\n" +
     "Use listDuplicateClusters to review detected duplicates, then propose the fix by class:\n" +
     "- harmful_duplicate → proposeChange type 'merge' (read both notes, compose the combined canonicalContent).\n" +
     "- contextual_repetition → keep both; proposeChange an 'edit' that creates/updates a canonical note and adds references. Do NOT archive.\n" +
@@ -54,7 +55,7 @@ export const vaultCurator = new Agent({
     "Use listCanonicalCandidates to see concepts scattered across many notes that would benefit from a single canonical note; " +
     "for a high-priority candidate, proposeChange a 'canonical_note' (canonicalPath + the synthesized content + supersedes = " +
     "the older notes it replaces) — it writes the canonical note and stamps each superseded note with a superseded_by link. " +
-    "listRelations shows the typed edges (related_to/duplicates/supersedes) for context.\n\n" +
+    "listRelations shows the undirected typed edges (related_to/duplicates/evolves_with) for context; authoritative directed supersession lives in superseded_by frontmatter.\n\n" +
     "The file watcher records changed/created/deleted notes as pending work. listPendingChanges is read-only inspection — " +
     "showing the list must NOT change anything. Only call resolvePendingChanges when the user explicitly asks to clear items, " +
     "or right after you have actually triaged a specific change; state which ids you are resolving and why. Never dismiss " +
@@ -78,7 +79,7 @@ export const vaultCurator = new Agent({
     resolveProposal: resolveProposalTool,
     readStructure: readStructureTool,
     scanVault: scanVaultTool,
-    readMarkdown: readMarkdownTool,
+    readVaultText: readVaultTextTool,
     listPendingChanges: listPendingChangesTool,
     resolvePendingChanges: resolvePendingChangesTool,
     syncSemantics: syncSemanticsTool,

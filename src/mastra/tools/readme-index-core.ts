@@ -18,6 +18,32 @@ async function readOrNull(filePath: string): Promise<string | null> {
   return fs.readFile(filePath, "utf8").catch(() => null);
 }
 
+/** Add a newly-created Markdown note to its directory README index. */
+export async function updateReadmeForCreatedNote(vaultPath: string, notePath: string): Promise<string | null> {
+  if (!notePath.endsWith(".md") || path.posix.basename(notePath) === "README.md") return null;
+
+  const dir = dirOf(notePath);
+  const base = path.posix.basename(notePath);
+  const noteContent = (await readOrNull(path.join(vaultPath, notePath))) ?? "";
+  const title = parseMarkdownSnapshot(notePath, noteContent).title ?? base;
+  const structure = await loadStructure();
+  const structureKey = dir === "" ? "" : `${dir}/`;
+  const fallbackLabel = dir === "" ? "笔记索引" : (dir.split("/").at(-1) ?? dir);
+  const label = structure.directories[structureKey]?.description ?? fallbackLabel;
+  const readmePath = readmeAbs(vaultPath, dir);
+  const existing = await readOrNull(readmePath);
+  const next = addReadmeEntry(existing, {
+    title,
+    fileName: base,
+    date: new Date().toLocaleDateString("zh-CN"),
+    label,
+  });
+  if (next === existing) return null;
+  await fs.mkdir(path.dirname(readmePath), { recursive: true });
+  await fs.writeFile(readmePath, next, "utf8");
+  return path.posix.join(dir, "README.md");
+}
+
 /**
  * Keep directory note-indexes consistent after a note moves: drop the entry from
  * the source directory's README and add it to the destination's (scaffolding one
@@ -25,9 +51,7 @@ async function readOrNull(filePath: string): Promise<string | null> {
  */
 export async function updateReadmesForMove(vaultPath: string, from: string, to: string): Promise<void> {
   const fromDir = dirOf(from);
-  const toDir = dirOf(to);
   const fromBase = path.posix.basename(from);
-  const toBase = path.posix.basename(to);
 
   // Remove the stale link from the source directory's index.
   const srcReadme = readmeAbs(vaultPath, fromDir);
@@ -38,19 +62,5 @@ export async function updateReadmesForMove(vaultPath: string, from: string, to: 
   }
 
   // Add the note to the destination directory's index.
-  const movedContent = (await readOrNull(path.join(vaultPath, to))) ?? "";
-  const title = parseMarkdownSnapshot(to, movedContent).title ?? toBase;
-  const structure = await loadStructure();
-  const structureKey = toDir === "" ? "" : `${toDir}/`;
-  const fallbackLabel = toDir === "" ? "笔记索引" : (toDir.split("/").at(-1) ?? toDir);
-  const label = structure.directories[structureKey]?.description ?? fallbackLabel;
-  const date = new Date().toLocaleDateString("zh-CN");
-
-  const destReadme = readmeAbs(vaultPath, toDir);
-  const destContent = await readOrNull(destReadme);
-  const nextDest = addReadmeEntry(destContent, { title, fileName: toBase, date, label });
-  if (nextDest !== destContent) {
-    await fs.mkdir(path.dirname(destReadme), { recursive: true });
-    await fs.writeFile(destReadme, nextDest, "utf8");
-  }
+  await updateReadmeForCreatedNote(vaultPath, to);
 }

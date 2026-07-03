@@ -7,7 +7,7 @@ const candidate = (concept: string, files: string[]): CanonicalCandidate => ({
   files,
   fileCount: files.length,
   duplicatePairs: 0,
-  supersedesPairs: 0,
+  evolutionPairs: 0,
   score: files.length,
 });
 

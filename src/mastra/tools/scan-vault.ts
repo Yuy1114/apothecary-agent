@@ -24,6 +24,7 @@ export const scanVaultTool = createTool({
     }),
     files: z.array(z.object({
       path: z.string(),
+      mediaType: z.enum(["markdown", "text"]),
       title: z.string().optional(),
       headingTitles: z.array(z.string()),
       excerpt: z.string().optional(),
@@ -52,9 +53,10 @@ export const scanVaultTool = createTool({
         otherFiles: parsed.stats.otherFiles,
       },
       files: parsed.files
-        .filter((f) => f.mediaType === "markdown")
+        .filter((f) => f.mediaType === "markdown" || f.extension === ".txt")
         .map((f) => ({
           path: f.path,
+          mediaType: f.mediaType as "markdown" | "text",
           title: f.title,
           headingTitles: f.headings?.map((h) => h.text) ?? [],
           excerpt: f.excerpt?.slice(0, 300),
