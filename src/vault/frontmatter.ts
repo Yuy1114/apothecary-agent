@@ -10,3 +10,8 @@ export function setFrontmatterKey(content: string, key: string, value: string): 
   const parsed = matter(content);
   return matter.stringify(parsed.content, { ...parsed.data, [key]: value });
 }
+
+/** Read a single frontmatter key from a note's content (undefined if absent). */
+export function getFrontmatterKey(content: string, key: string): unknown {
+  return matter(content).data[key];
+}

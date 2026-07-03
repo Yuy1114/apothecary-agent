@@ -48,8 +48,12 @@ function formatRecallContext(results: VaultRecallResult[], summaries: FileSummar
       ? `File summary: ${summary.gist}` +
         (summary.topics.length > 0 ? ` (topics: ${summary.topics.join(", ")})` : "")
       : "";
+    const supersededLine = result.supersededBy
+      ? `⚠ Superseded by ${result.supersededBy} — prefer the canonical note; treat this as historical context.`
+      : "";
     return [
       `## Source ${index + 1}: ${result.source}${title}${headingPath}`,
+      supersededLine,
       summaryLine,
       result.content.trim(),
     ]

@@ -67,6 +67,25 @@ describe("VaultSemanticRecallProcessor", () => {
     expect(injected).toContain("topics: Redis, Persistence");
   });
 
+  it("annotates a superseded source so the model prefers the canonical note", async () => {
+    vi.mocked(queryVault).mockResolvedValueOnce([
+      {
+        source: "notes/old.md",
+        title: "Old",
+        headings: [],
+        content: "an outdated take",
+        supersededBy: "notes/canonical.md",
+      },
+    ]);
+
+    const messageList = makeMessageList("旧观点");
+    const processor = new VaultSemanticRecallProcessor();
+    await processor.processInput(makeArgs({ messageList, messages: [] }));
+
+    const injected = vi.mocked(messageList.addSystem).mock.calls[0][0] as string;
+    expect(injected).toContain("Superseded by notes/canonical.md");
+  });
+
   it("leaves messages unchanged when there is no recall context", async () => {
     vi.mocked(queryVault).mockResolvedValueOnce([]);
 

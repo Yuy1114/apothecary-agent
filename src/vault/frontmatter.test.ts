@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import matter from "gray-matter";
-import { setFrontmatterKey } from "./frontmatter.js";
+import { setFrontmatterKey, getFrontmatterKey } from "./frontmatter.js";
 
 describe("setFrontmatterKey", () => {
   it("adds a key to a note that already has frontmatter, preserving the body", () => {
@@ -22,5 +22,16 @@ describe("setFrontmatterKey", () => {
     const input = "---\nsuperseded_by: notes/first.md\n---\nx";
     const out = setFrontmatterKey(input, "superseded_by", "notes/second.md");
     expect(matter(out).data.superseded_by).toBe("notes/second.md");
+  });
+});
+
+describe("getFrontmatterKey", () => {
+  it("reads an existing key", () => {
+    expect(getFrontmatterKey("---\nsuperseded_by: notes/c.md\n---\nx", "superseded_by")).toBe("notes/c.md");
+  });
+
+  it("returns undefined when the key or frontmatter is absent", () => {
+    expect(getFrontmatterKey("# no frontmatter", "superseded_by")).toBeUndefined();
+    expect(getFrontmatterKey("---\ntitle: X\n---\nx", "superseded_by")).toBeUndefined();
   });
 });

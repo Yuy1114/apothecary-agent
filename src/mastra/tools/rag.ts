@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { createVectorQueryTool, MDocument } from "@mastra/rag";
+import { getFrontmatterKey } from "../../vault/frontmatter.js";
 
 // ── Embedding model ──
 
@@ -65,7 +66,21 @@ type SearchResult = {
   content: string;
   title?: string;
   headings?: string[];
+  /** Set when the source note has a `superseded_by` frontmatter link. */
+  supersededBy?: string;
 };
+
+/**
+ * Stable canonical-aware re-rank: keep vector order but push notes that have
+ * been superseded (retired in favour of a canonical note) to the end, so
+ * current content outranks stale content without dropping it entirely.
+ */
+export function demoteSuperseded<T extends { supersededBy?: string }>(results: T[]): T[] {
+  return [
+    ...results.filter((result) => !result.supersededBy),
+    ...results.filter((result) => result.supersededBy),
+  ];
+}
 
 // ── Plain functions (for workflows and processors) ──
 
@@ -168,7 +183,7 @@ export async function queryVault(
       topK,
     });
 
-    return results
+    const mapped = results
       .map((result): SearchResult | null => {
         const meta = result.metadata;
         if (!meta?.source) return null;
@@ -180,9 +195,28 @@ export async function queryVault(
         };
       })
       .filter((item): item is SearchResult => item !== null);
+
+    // Canonical-aware: flag results whose note was superseded, then demote them
+    // so the answer prefers the current/canonical content.
+    const enriched = await Promise.all(mapped.map((result) => withSupersededBy(result)));
+    return demoteSuperseded(enriched);
   } catch {
     return [];
   }
+}
+
+/** Attach `supersededBy` by reading the source note's frontmatter (best-effort). */
+async function withSupersededBy(result: SearchResult): Promise<SearchResult> {
+  try {
+    const content = await fs.readFile(path.join(VAULT_PATH, result.source), "utf8");
+    const supersededBy = getFrontmatterKey(content, "superseded_by");
+    if (typeof supersededBy === "string" && supersededBy.trim()) {
+      return { ...result, supersededBy };
+    }
+  } catch {
+    // Unreadable note → treat as not superseded.
+  }
+  return result;
 }
 
 // ── Mastra tools (for agents) ──
