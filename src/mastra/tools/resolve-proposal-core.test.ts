@@ -14,6 +14,11 @@ vi.mock("./rag.js", () => ({
 let vault: string;
 let resolveProposalById: typeof import("./resolve-proposal-core.js").resolveProposalById;
 
+// Stub the LLM-backed post-apply semantic refresh; it is exercised separately.
+const refreshDeps = { postApplyRefresh: vi.fn(async () => {}) };
+const resolve = (id: string, decision: "approve" | "reject", note?: string) =>
+  resolveProposalById(id, decision, note, refreshDeps);
+
 const abs = (rel: string) => path.join(vault, rel);
 const read = (rel: string) => readFile(abs(rel), "utf8");
 const exists = async (rel: string) =>
@@ -47,11 +52,28 @@ describe("resolveProposalById", () => {
   it("approving an edit proposal writes the file and marks it applied", async () => {
     const p = await propose("edit", { filePath: "notes/a.md", suggestedContent: "# A\n\nnew" });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result).toMatchObject({ resolved: true, type: "edit", status: "applied" });
     expect(await read("notes/a.md")).toBe("# A\n\nnew");
     expect((await loadProposal(vault, p.id))?.status).toBe("applied");
+    // The semantic layer is refreshed for the changed file before applied.
+    expect(refreshDeps.postApplyRefresh).toHaveBeenCalledWith(vault, ["notes/a.md"]);
+  });
+
+  it("still marks applied when the post-apply refresh fails (best-effort)", async () => {
+    const p = await propose("edit", { filePath: "notes/resilient.md", suggestedContent: "x" });
+    const throwingDeps = {
+      postApplyRefresh: vi.fn(async () => {
+        throw new Error("refresh boom");
+      }),
+    };
+
+    const result = await resolveProposalById(p.id, "approve", undefined, throwingDeps);
+
+    // The file change already succeeded, so a refresh failure must not undo it.
+    expect(result.status).toBe("applied");
+    expect(await read("notes/resilient.md")).toBe("x");
   });
 
   it("approving a move proposal relocates the file", async () => {
@@ -59,7 +81,7 @@ describe("resolveProposalById", () => {
     await writeFile(abs("inbox/x.md"), "x", "utf8");
     const p = await propose("move", { from: "inbox/x.md", to: "notes/x.md" });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result.status).toBe("applied");
     expect(await exists("inbox/x.md")).toBe(false);
@@ -71,7 +93,7 @@ describe("resolveProposalById", () => {
     await writeFile(abs("notes/old.md"), "old", "utf8");
     const p = await propose("archive", { from: "notes/old.md" });
 
-    await resolveProposalById(p.id, "approve");
+    await resolve(p.id, "approve");
 
     expect(await exists("notes/old.md")).toBe(false);
     expect(await exists("archive/notes/old.md")).toBe(true);
@@ -87,7 +109,7 @@ describe("resolveProposalById", () => {
       canonicalContent: "keep + merged",
     });
 
-    await resolveProposalById(p.id, "approve");
+    await resolve(p.id, "approve");
 
     expect(await read("notes/keep.md")).toBe("keep + merged");
     expect(await exists("archive/notes/dupe.md")).toBe(true);
@@ -96,7 +118,7 @@ describe("resolveProposalById", () => {
   it("rejecting a proposal records the decision without touching files", async () => {
     const p = await propose("edit", { filePath: "notes/never.md", suggestedContent: "nope" });
 
-    const result = await resolveProposalById(p.id, "reject", "not needed");
+    const result = await resolve(p.id, "reject", "not needed");
 
     expect(result).toMatchObject({ resolved: true, status: "rejected" });
     expect(await exists("notes/never.md")).toBe(false);
@@ -106,14 +128,14 @@ describe("resolveProposalById", () => {
 
   it("refuses to re-resolve an already-resolved proposal", async () => {
     const p = await propose("edit", { filePath: "notes/once.md", suggestedContent: "one" });
-    await resolveProposalById(p.id, "approve");
+    await resolve(p.id, "approve");
 
-    const again = await resolveProposalById(p.id, "approve");
+    const again = await resolve(p.id, "approve");
     expect(again).toMatchObject({ resolved: false, reason: "not_pending", status: "applied" });
   });
 
   it("reports not_found for an unknown id", async () => {
-    expect(await resolveProposalById("prop-nope", "approve")).toMatchObject({
+    expect(await resolve("prop-nope", "approve")).toMatchObject({
       resolved: false,
       reason: "not_found",
     });
@@ -122,7 +144,7 @@ describe("resolveProposalById", () => {
   it("approving a capture proposal writes a classified note", async () => {
     const p = await propose("capture", { content: "# 复盘\n\n今天的反思与总结", topic: "reflections/" });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result).toMatchObject({ resolved: true, type: "capture", status: "applied" });
     // Lands in the hinted directory and its README index is created.
@@ -132,7 +154,7 @@ describe("resolveProposalById", () => {
   it("approving a structure proposal adds keywords to structure.yaml", async () => {
     const p = await propose("structure", { directory: "reflections/", add: ["复盘"] });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result.status).toBe("applied");
     expect(await read(".agent/structure.yaml")).toContain("复盘");
@@ -141,7 +163,7 @@ describe("resolveProposalById", () => {
   it("leaves a structure proposal pending when the directory is unknown", async () => {
     const p = await propose("structure", { directory: "nope/", add: ["x"] });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result.resolved).toBe(false);
     expect(result.reason).toMatch(/not defined/);
@@ -157,7 +179,7 @@ describe("resolveProposalById", () => {
       content: "# AI Engineering\n\npromoted",
     });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result.status).toBe("applied");
     expect(await read("notes/ai-eng.md")).toBe("# AI Engineering\n\npromoted");
@@ -167,7 +189,7 @@ describe("resolveProposalById", () => {
     const escapeTarget = path.join(vault, "..", "escaped.md");
     const p = await propose("edit", { filePath: "../escaped.md", suggestedContent: "pwned" });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result).toMatchObject({ resolved: false, reason: "unsafe_path" });
     await expect(access(escapeTarget)).rejects.toBeDefined();
@@ -176,7 +198,7 @@ describe("resolveProposalById", () => {
 
   it("refuses a move proposal with a traversal source or target", async () => {
     const p = await propose("move", { from: "../secret.md", to: "notes/x.md" });
-    expect(await resolveProposalById(p.id, "approve")).toMatchObject({
+    expect(await resolve(p.id, "approve")).toMatchObject({
       resolved: false,
       reason: "unsafe_path",
     });
@@ -190,7 +212,7 @@ describe("resolveProposalById", () => {
       targetPath: "../../evil.md",
       content: "x",
     });
-    expect(await resolveProposalById(p.id, "approve")).toMatchObject({
+    expect(await resolve(p.id, "approve")).toMatchObject({
       resolved: false,
       reason: "unsafe_path",
     });
@@ -203,7 +225,7 @@ describe("resolveProposalById", () => {
       content: "x",
     });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result).toMatchObject({ resolved: false, reason: "missing_source_view" });
     expect(await exists("notes/ghost.md")).toBe(false);
@@ -212,7 +234,7 @@ describe("resolveProposalById", () => {
   it("leaves the proposal open when the executor fails (e.g. missing source)", async () => {
     const p = await propose("archive", { from: "notes/ghost.md" });
 
-    const result = await resolveProposalById(p.id, "approve");
+    const result = await resolve(p.id, "approve");
 
     expect(result).toMatchObject({ resolved: false, reason: "missing_source" });
     // Still pending, so it can be retried after fixing the cause.

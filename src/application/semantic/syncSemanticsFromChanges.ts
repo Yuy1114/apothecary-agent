@@ -96,9 +96,25 @@ export async function syncSemanticsFromChanges(
 ): Promise<SemanticSyncReport> {
   const changes = await deps.listPendingChanges();
   if (changes.length === 0) return EMPTY_REPORT;
+  return syncSemanticsForPaths(
+    { vaultPath: input.vaultPath, paths: changes.map((c) => c.path) },
+    { summarize: deps.summarize },
+  );
+}
 
-  // The ledger dedupes pending rows per path, but collapse defensively anyway.
-  const paths = [...new Set(changes.map((c) => c.path))];
+/**
+ * Refresh the semantic layer for an explicit set of paths instead of the pending
+ * queue — the shared core behind change-driven sync and the proposal post-apply
+ * pipeline. Same rules: new/edited files re-summarized, deleted pruned, graph +
+ * relations rebuilt; idempotent via content hash.
+ */
+export async function syncSemanticsForPaths(
+  input: { vaultPath: string; paths: string[] },
+  deps: { summarize: typeof generateFileSummary } = { summarize: generateFileSummary },
+): Promise<SemanticSyncReport> {
+  // Dedupe (the ledger already dedupes, but direct callers may not).
+  const paths = [...new Set(input.paths)];
+  if (paths.length === 0) return EMPTY_REPORT;
 
   const gathered = await mapWithConcurrency(paths, CONCURRENCY, (relPath) =>
     gatherFile(input.vaultPath, relPath),

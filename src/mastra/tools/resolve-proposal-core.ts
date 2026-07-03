@@ -11,8 +11,17 @@ import { safeVaultPath } from "../../safety/pathSafety.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
+import { syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+
+/**
+ * Post-apply consistency hook: refresh the semantic layer for the changed files.
+ * Injectable so tests can stub the LLM-backed refresh.
+ */
+type PostApplyRefresh = (vaultPath: string, paths: string[]) => Promise<unknown>;
+const defaultPostApplyRefresh: PostApplyRefresh = (vaultPath, paths) =>
+  syncSemanticsForPaths({ vaultPath, paths });
 
 export type ResolveProposalResult = {
   resolved: boolean;
@@ -29,7 +38,9 @@ export type ResolveProposalResult = {
  * applied when it did. The cores each record their own operation-ledger entry
  * (merge records a `merge` op, etc.), so applying stays fully audited.
  */
-async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reason?: string }> {
+async function executeProposal(
+  proposal: Proposal,
+): Promise<{ ok: boolean; reason?: string; affected?: string[] }> {
   switch (proposal.type) {
     case "edit": {
       const { filePath, suggestedContent } = proposal.payload;
@@ -45,31 +56,37 @@ async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reaso
         source: "resolveProposal",
         detail: proposal.rationale,
       });
-      return { ok: true };
+      return { ok: true, affected: [filePath] };
     }
     case "move": {
       const r = await moveVaultFileCore(proposal.payload.from, proposal.payload.to);
-      return r.moved ? { ok: true } : { ok: false, reason: r.reason };
+      return r.moved
+        ? { ok: true, affected: [proposal.payload.from, proposal.payload.to] }
+        : { ok: false, reason: r.reason };
     }
     case "archive": {
       const r = await archiveVaultFileCore(proposal.payload.from, { reason: proposal.rationale });
-      return r.archived ? { ok: true } : { ok: false, reason: r.reason };
+      return r.archived
+        ? { ok: true, affected: [proposal.payload.from] }
+        : { ok: false, reason: r.reason };
     }
     case "merge": {
       const r = await mergeNotesCore({ ...proposal.payload, reason: proposal.rationale });
-      return r.merged ? { ok: true } : { ok: false, reason: r.reason };
+      return r.merged
+        ? { ok: true, affected: [proposal.payload.sourcePath, proposal.payload.canonicalPath] }
+        : { ok: false, reason: r.reason };
     }
     case "capture": {
       // writeVaultNote classifies, writes frontmatter'd note, updates the
       // directory README, reindexes and records a `capture` op.
-      await writeVaultNote({
+      const captured = await writeVaultNote({
         content: proposal.payload.content,
         topic: proposal.payload.topic,
         noteType: "insight",
         source: "conversation",
         operationType: "capture",
       });
-      return { ok: true };
+      return { ok: true, affected: [captured.filePath] };
     }
     case "structure": {
       // updateDirectoryKeywords validates the directory exists (throws otherwise)
@@ -79,7 +96,7 @@ async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reaso
         add: proposal.payload.add,
         remove: proposal.payload.remove,
       });
-      return { ok: true };
+      return { ok: true, affected: [] };
     }
     case "view_promotion": {
       const { sourceViewPath, targetPath, content } = proposal.payload;
@@ -101,7 +118,7 @@ async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reaso
         source: "resolveProposal",
         detail: `promoted ${sourceViewPath} → ${targetPath}`,
       });
-      return { ok: true };
+      return { ok: true, affected: [targetPath] };
     }
   }
 }
@@ -115,6 +132,7 @@ export async function resolveProposalById(
   id: string,
   decision: "approve" | "reject",
   note?: string,
+  deps: { postApplyRefresh: PostApplyRefresh } = { postApplyRefresh: defaultPostApplyRefresh },
 ): Promise<ResolveProposalResult> {
   const proposal = await loadProposal(VAULT_PATH, id);
   if (!proposal) return { resolved: false, proposalId: id, reason: "not_found" };
@@ -130,7 +148,7 @@ export async function resolveProposalById(
 
   // Executors report expected failures via {ok:false}; some (e.g. structure)
   // throw on invalid input. Either way, leave the proposal open to fix and retry.
-  let outcome: { ok: boolean; reason?: string };
+  let outcome: { ok: boolean; reason?: string; affected?: string[] };
   try {
     outcome = await executeProposal(proposal);
   } catch (error) {
@@ -143,6 +161,15 @@ export async function resolveProposalById(
   }
   if (!outcome.ok) {
     return { resolved: false, proposalId: id, type: proposal.type, reason: outcome.reason ?? "apply_failed" };
+  }
+
+  // Bring the semantic layer in step with the change before the proposal counts
+  // as applied. Best-effort: the file change already succeeded, so a refresh
+  // failure must not block `applied` (the watcher debounce is the fallback).
+  try {
+    await deps.postApplyRefresh(VAULT_PATH, outcome.affected ?? []);
+  } catch (error) {
+    console.warn(`resolveProposal: post-apply semantic refresh failed for ${id}:`, error);
   }
 
   const applied = resolveProposalRecord(proposal, "applied", note, nowIso());
