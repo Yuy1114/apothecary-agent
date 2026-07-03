@@ -38,6 +38,31 @@ async function resolveFreeArchivePath(from: string): Promise<string> {
 }
 
 /**
+ * Collision-safe, non-destructive move of a note into `archive/`, with NO index
+ * or ledger side effects. The reusable mechanics behind archiving — shared by
+ * archiveVaultFileCore and mergeNotesCore, so merge can retire the absorbed copy
+ * without emitting a separate `archive` audit record.
+ */
+export async function moveToArchive(
+  from: string,
+): Promise<{ ok: true; to: string } | { ok: false; reason: "missing_source" | "already_archived" }> {
+  if (isArchivedPath(from)) return { ok: false, reason: "already_archived" };
+
+  const fromAbs = path.join(VAULT_PATH, from);
+  try {
+    await fs.access(fromAbs);
+  } catch {
+    return { ok: false, reason: "missing_source" };
+  }
+
+  const to = await resolveFreeArchivePath(from);
+  const toAbs = path.join(VAULT_PATH, to);
+  await fs.mkdir(path.dirname(toAbs), { recursive: true });
+  await fs.rename(fromAbs, toAbs);
+  return { ok: true, to };
+}
+
+/**
  * Archive a vault note: move it under `archive/` (preserving its structure),
  * drop it from the search index, and record the operation. Non-destructive —
  * the file still exists on disk, it just leaves the active knowledge picture.
@@ -50,22 +75,10 @@ export async function archiveVaultFileCore(
   from: string,
   opts: { reason?: string } = {},
 ): Promise<ArchiveVaultFileResult> {
-  if (isArchivedPath(from)) {
-    return { archived: false, from, reindexed: false, reason: "already_archived" };
+  const moved = await moveToArchive(from);
+  if (!moved.ok) {
+    return { archived: false, from, reindexed: false, reason: moved.reason };
   }
-
-  const fromAbs = path.join(VAULT_PATH, from);
-  try {
-    await fs.access(fromAbs);
-  } catch {
-    return { archived: false, from, reindexed: false, reason: "missing_source" };
-  }
-
-  const to = await resolveFreeArchivePath(from);
-  const toAbs = path.join(VAULT_PATH, to);
-
-  await fs.mkdir(path.dirname(toAbs), { recursive: true });
-  await fs.rename(fromAbs, toAbs);
 
   // Archived notes must not surface in RAG. Remove the old path; deliberately do
   // NOT index the archived copy (the archive subtree is excluded everywhere).
@@ -77,11 +90,11 @@ export async function archiveVaultFileCore(
 
   await recordOperation({
     type: "archive",
-    targetFiles: [from, to],
+    targetFiles: [from, moved.to],
     rationale: opts.reason ?? "",
     source: "archiveVaultFile",
-    detail: `${from} → ${to}`,
+    detail: `${from} → ${moved.to}`,
   });
 
-  return { archived: true, from, to, reindexed };
+  return { archived: true, from, to: moved.to, reindexed };
 }

@@ -3,6 +3,7 @@ import { writeReviewTool } from "../tools/write-review.js";
 import { proposeEditTool } from "../tools/propose-edit.js";
 import { moveVaultFileTool } from "../tools/move-vault-file.js";
 import { archiveVaultFileTool } from "../tools/archive-vault-file.js";
+import { mergeNotesTool } from "../tools/merge-notes.js";
 import { readReviewTool } from "../tools/read-review.js";
 import { applyEditTool } from "../tools/apply-edit.js";
 import { listProposalsTool } from "../tools/list-proposals.js";
@@ -50,8 +51,10 @@ export const vaultCurator = new Agent({
     "It does not touch user notes and does not clear the pending-change queue, so it is always safe to run — use it after " +
     "notes have changed (or before duplicate/profile work) so later reasoning sees up-to-date understanding.\n\n" +
     "Use listDuplicateClusters to review detected duplicates and EXECUTE the fix with approval-gated, non-destructive tools:\n" +
-    "- harmful_duplicate → merge: write the combined content into the canonical note (proposeEdit then applyEdit), then " +
-    "archiveVaultFile the absorbed copy with reason 'merged into <canonical>'. archiveVaultFile retires the copy without deleting it.\n" +
+    "- harmful_duplicate → merge: read both notes, compose the combined content, and call mergeNotes (sourcePath = the " +
+    "copy to absorb, canonicalPath = the note to keep, canonicalContent = the full merged text). mergeNotes writes the " +
+    "canonical and archives the copy in ONE approval and one linked audit record — prefer it over doing proposeEdit + " +
+    "archiveVaultFile separately.\n" +
     "- contextual_repetition → keep both; create/update a canonical note and add references. Do NOT archive either file.\n" +
     "- evolutionary_duplicate → keep the chain; mark the older note superseded (proposeEdit its frontmatter/header), and only " +
     "archiveVaultFile it if it is fully absorbed. Never permanently delete — archiveVaultFile is the retirement path.\n\n" +
@@ -70,6 +73,7 @@ export const vaultCurator = new Agent({
     readMarkdown: readMarkdownTool,
     moveVaultFile: moveVaultFileTool,
     archiveVaultFile: archiveVaultFileTool,
+    mergeNotes: mergeNotesTool,
     listPendingChanges: listPendingChangesTool,
     resolvePendingChanges: resolvePendingChangesTool,
     syncSemantics: syncSemanticsTool,
