@@ -16,6 +16,7 @@ import { listOperationsTool } from "../tools/list-operations.js";
 import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
 import { listRelationsTool } from "../tools/list-relations.js";
 import { listCanonicalCandidatesTool } from "../tools/list-canonical-candidates.js";
+import { listMaintenanceFindingsTool } from "../tools/list-maintenance-findings.js";
 import { readKnowledgeProfileTool } from "../tools/read-knowledge-profile.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { apothecaryMemory } from "../memory.js";
@@ -40,7 +41,8 @@ export const vaultCurator = new Agent({
     "'reject' records the decision and touches nothing. If an approve fails (e.g. the source moved), the proposal stays " +
     "pending so you can fix and retry.\n\n" +
     "Maintenance loop: read the latest review with readReview (or record one with writeReview), then turn each actionable " +
-    "finding into a proposeChange proposal and resolve it.\n\n" +
+    "finding into a proposeChange proposal and resolve it. listMaintenanceFindings gives a fast prioritized worklist — " +
+    "superseded notes still active (→ archive) and scattered concepts (→ canonical_note) — each already mapped to its action.\n\n" +
     "Inbox triage (files waiting to be classified): read the layout with readStructure, list pending files with scanVault " +
     "(scopePath: \"inbox\"), read each with readMarkdown, pick the best target directory, and proposeChange a move to it.\n\n" +
     "Use listDuplicateClusters to review detected duplicates, then propose the fix by class:\n" +
@@ -85,6 +87,7 @@ export const vaultCurator = new Agent({
     listDuplicateClusters: listDuplicateClustersTool,
     listRelations: listRelationsTool,
     listCanonicalCandidates: listCanonicalCandidatesTool,
+    listMaintenanceFindings: listMaintenanceFindingsTool,
     readKnowledgeProfile: readKnowledgeProfileTool,
   },
 });
