@@ -37,7 +37,12 @@ async function createService(): Promise<DesktopService> {
     projectRoot: runtimeRoot,
     deps: {
       chat: async (messages) => {
-        const result = await apothecaryAgent.generate(formatConversation(messages), { memory });
+        // Allow enough tool-call steps to actually finish a maintenance task
+        // (scan + read several files + produce proposals) in one turn.
+        const result = await apothecaryAgent.generate(formatConversation(messages), {
+          memory,
+          maxSteps: 20,
+        });
         return result.text;
       },
     },

@@ -1,5 +1,5 @@
 const api = window.apothecary;
-const state = { view: "chat", messages: [], proposalStatus: "proposed", inbox: [] };
+const state = { view: "chat", messages: [], proposalStatus: "proposed", inbox: [], chatBusy: false };
 const titles = {
   chat: ["UNIFIED AGENT", "和你的知识药柜对话"],
   changes: ["CHANGE AWARENESS", "处理药柜变更"],
@@ -57,12 +57,29 @@ function appendMessage(role, content) {
   const bubble = el("div", "bubble"); bubble.append(el("strong", "", role === "user" ? "YOU" : "APOTHECARY"), el("p", "", content)); row.append(bubble);
   $("#chat-messages").append(row); $("#chat-messages").scrollTop = $("#chat-messages").scrollHeight;
 }
+function appendPending() {
+  const row = el("div", "message assistant pending"); row.append(el("div", "avatar", "A"));
+  const bubble = el("div", "bubble"); const p = el("p", "", "正在检索并思考…"); bubble.append(el("strong", "", "APOTHECARY"), p); row.append(bubble);
+  $("#chat-messages").append(row); $("#chat-messages").scrollTop = $("#chat-messages").scrollHeight;
+  return { row, setText: (text) => { p.textContent = text; row.classList.remove("pending"); } };
+}
 async function sendChat(text) {
-  if (!text.trim()) return;
-  appendMessage("user", text.trim()); $("#chat-input").value = ""; setLoading(true);
-  try { appendMessage("assistant", await api.chat(state.messages)); await loadDashboard(); }
-  catch (error) { appendMessage("assistant", `暂时无法完成：${error.message}`); }
-  finally { setLoading(false); }
+  // Chat is a long, multi-step agent turn — keep it LOCAL to the chat panel so
+  // the rest of the app stays usable (no global freeze), and guard re-entry.
+  if (!text.trim() || state.chatBusy) return;
+  state.chatBusy = true;
+  appendMessage("user", text.trim()); $("#chat-input").value = "";
+  const pending = appendPending(); const sendButton = $("#chat-form button[type=submit]");
+  if (sendButton) sendButton.disabled = true;
+  try {
+    const reply = await api.chat(state.messages);
+    pending.setText(reply); state.messages.push({ role: "assistant", content: reply });
+    await loadDashboard();
+  } catch (error) {
+    pending.setText(`暂时无法完成：${error.message}`); pending.row.classList.add("error");
+  } finally {
+    state.chatBusy = false; if (sendButton) sendButton.disabled = false;
+  }
 }
 
 function dataCard({ title, description, pills = [], actions = [] }) {
