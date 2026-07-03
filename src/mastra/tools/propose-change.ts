@@ -20,19 +20,32 @@ function buildPayload(type: ProposalType, input: Record<string, unknown>): unkno
         canonicalPath: input.canonicalPath,
         canonicalContent: input.canonicalContent,
       };
+    case "capture":
+      return { content: input.content, topic: input.topic };
+    case "structure":
+      return { directory: input.directory, add: input.add, remove: input.remove };
+    case "view_promotion":
+      return {
+        sourceViewPath: input.sourceViewPath,
+        targetPath: input.targetPath,
+        content: input.content,
+      };
   }
 }
 
 export const proposeChangeTool = createTool({
   id: "proposeChange",
   description:
-    "Create a reviewable proposal for a change to the human-readable vault — the unified, audited way to propose any " +
-    "edit/move/archive/merge. It is NOT applied automatically: it is saved for the user to review (listChangeProposals) " +
-    "and then approve or reject (resolveProposal). Provide the fields for the chosen type:\n" +
+    "Create a reviewable proposal for a change to the human-readable vault — the unified, audited way to propose ANY " +
+    "change. It is NOT applied automatically: it is saved for the user to review (listChangeProposals) and then approve " +
+    "or reject (resolveProposal). Provide the fields for the chosen type:\n" +
     "- edit: filePath + suggestedContent (full new content)\n" +
     "- move: from + to\n" +
     "- archive: from\n" +
     "- merge: sourcePath + canonicalPath + canonicalContent (full merged content)\n" +
+    "- capture: content (the synthesized note) + optional topic (directory hint)\n" +
+    "- structure: directory + add and/or remove (classification keywords)\n" +
+    "- view_promotion: sourceViewPath (.agent/views/...) + targetPath + content (the note to write)\n" +
     "Always give a clear title and rationale.",
   inputSchema: z.object({
     type: ProposalTypeSchema,
@@ -45,6 +58,13 @@ export const proposeChangeTool = createTool({
     sourcePath: z.string().optional().describe("merge: duplicate to absorb"),
     canonicalPath: z.string().optional().describe("merge: note to keep"),
     canonicalContent: z.string().optional().describe("merge: full merged content"),
+    content: z.string().optional().describe("capture/view_promotion: the note content to write"),
+    topic: z.string().optional().describe("capture: directory hint, e.g. 'reflections/'"),
+    directory: z.string().optional().describe("structure: exact directory key"),
+    add: z.array(z.string()).optional().describe("structure: keywords to add"),
+    remove: z.array(z.string()).optional().describe("structure: keywords to remove"),
+    sourceViewPath: z.string().optional().describe("view_promotion: source .agent/views path"),
+    targetPath: z.string().optional().describe("view_promotion: target vault note path"),
   }),
   outputSchema: z.object({
     proposalId: z.string(),

@@ -7,6 +7,7 @@ export type OperationType =
   | "move"
   | "archive"
   | "merge"
+  | "promote"
   | "structure"
   | "ingest"
   | "capture";

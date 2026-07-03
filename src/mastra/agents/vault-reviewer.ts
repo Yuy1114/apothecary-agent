@@ -7,7 +7,9 @@ import { listSemanticTopicsTool } from "../tools/list-semantic-topics.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { generateKnowledgeViewTool } from "../tools/generate-knowledge-view.js";
 import { listOperationsTool } from "../tools/list-operations.js";
-import { captureInsightTool } from "../tools/capture-insight.js";
+import { proposeChangeTool } from "../tools/propose-change.js";
+import { listChangeProposalsTool } from "../tools/list-change-proposals.js";
+import { resolveProposalTool } from "../tools/resolve-proposal.js";
 import { readKnowledgeProfileTool } from "../tools/read-knowledge-profile.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { VaultSemanticRecallProcessor } from "../processors/vault-semantic-recall.js";
@@ -25,11 +27,11 @@ export const vaultReviewer = new Agent({
     "Use queryVault to search for more content, scanVault to explore, and readMarkdown to inspect files. " +
     "Use readFileSummary to get a file's semantic summary (gist, topics, concepts) without reading the whole file. " +
     "Use listSemanticTopics for a birds-eye view of the vault's topics/concepts, and findRelatedFiles to find notes related to a given file. " +
-    "When the user asks for an overview or knowledge system of some direction/subject, use generateKnowledgeView to build a structured view. " +
-    "When a durable insight surfaces worth keeping long-term (a decision, principle, learning conclusion, or job-evidence point), you may offer to save it. " +
-    "When the user asks to save an insight or accepts your offer, CALL captureInsight (synthesize clean note content + a topic hint) — do NOT ask for confirmation in prose. " +
-    "captureInsight has a built-in approval step that shows the content and lets the user approve or reject before anything is written; that step IS the confirmation. " +
-    "Do not capture trivial or transient chatter. " +
+    "When the user asks for an overview or knowledge system of some direction/subject, use generateKnowledgeView to build a structured view (written to .agent/views/). " +
+    "Every change to the vault goes through the unified proposal flow — never write a note directly:\n" +
+    "- To save a durable insight (a decision, principle, learning conclusion, or job-evidence point), synthesize clean standalone note content and call proposeChange type 'capture' (content + a topic hint). Do not capture trivial or transient chatter.\n" +
+    "- To turn a generated view into a permanent vault note, call proposeChange type 'view_promotion' (sourceViewPath = the .agent/views file, targetPath, content).\n" +
+    "proposeChange only records a reviewable proposal; then apply it with resolveProposal ('approve' has a built-in approval step that shows the change and writes it, 'reject' discards it) — that approval step IS the confirmation, so do not also ask in prose. Use listChangeProposals to show what is pending. " +
     "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: "deepseek/deepseek-v4-flash",
   inputProcessors: [new VaultSemanticRecallProcessor()],
@@ -43,7 +45,9 @@ export const vaultReviewer = new Agent({
     findRelatedFiles: findRelatedFilesTool,
     generateKnowledgeView: generateKnowledgeViewTool,
     listOperations: listOperationsTool,
-    captureInsight: captureInsightTool,
+    proposeChange: proposeChangeTool,
+    listChangeProposals: listChangeProposalsTool,
+    resolveProposal: resolveProposalTool,
     readKnowledgeProfile: readKnowledgeProfileTool,
   },
 });

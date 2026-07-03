@@ -28,6 +28,12 @@ async function propose(type: ProposalType, payload: unknown, title = "t", ration
 
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-proposal-test-"));
+  await mkdir(path.join(vault, ".agent"), { recursive: true });
+  await writeFile(
+    path.join(vault, ".agent", "structure.yaml"),
+    "directories:\n  reflections/:\n    description: 反思\n    keywords:\n      - 反思\n  notes/:\n    description: 笔记\naliases: {}\n",
+    "utf8",
+  );
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   ({ resolveProposalById } = await import("./resolve-proposal-core.js"));
 });
@@ -111,6 +117,63 @@ describe("resolveProposalById", () => {
       resolved: false,
       reason: "not_found",
     });
+  });
+
+  it("approving a capture proposal writes a classified note", async () => {
+    const p = await propose("capture", { content: "# 复盘\n\n今天的反思与总结", topic: "reflections/" });
+
+    const result = await resolveProposalById(p.id, "approve");
+
+    expect(result).toMatchObject({ resolved: true, type: "capture", status: "applied" });
+    // Lands in the hinted directory and its README index is created.
+    expect(await exists("reflections/README.md")).toBe(true);
+  });
+
+  it("approving a structure proposal adds keywords to structure.yaml", async () => {
+    const p = await propose("structure", { directory: "reflections/", add: ["复盘"] });
+
+    const result = await resolveProposalById(p.id, "approve");
+
+    expect(result.status).toBe("applied");
+    expect(await read(".agent/structure.yaml")).toContain("复盘");
+  });
+
+  it("leaves a structure proposal pending when the directory is unknown", async () => {
+    const p = await propose("structure", { directory: "nope/", add: ["x"] });
+
+    const result = await resolveProposalById(p.id, "approve");
+
+    expect(result.resolved).toBe(false);
+    expect(result.reason).toMatch(/not defined/);
+    expect((await loadProposal(vault, p.id))?.status).toBe("proposed");
+  });
+
+  it("approving a view_promotion writes the target note", async () => {
+    await mkdir(abs(".agent/views"), { recursive: true });
+    await writeFile(abs(".agent/views/ai-eng.md"), "# view", "utf8");
+    const p = await propose("view_promotion", {
+      sourceViewPath: ".agent/views/ai-eng.md",
+      targetPath: "notes/ai-eng.md",
+      content: "# AI Engineering\n\npromoted",
+    });
+
+    const result = await resolveProposalById(p.id, "approve");
+
+    expect(result.status).toBe("applied");
+    expect(await read("notes/ai-eng.md")).toBe("# AI Engineering\n\npromoted");
+  });
+
+  it("refuses a view_promotion whose source view is missing", async () => {
+    const p = await propose("view_promotion", {
+      sourceViewPath: ".agent/views/ghost.md",
+      targetPath: "notes/ghost.md",
+      content: "x",
+    });
+
+    const result = await resolveProposalById(p.id, "approve");
+
+    expect(result).toMatchObject({ resolved: false, reason: "missing_source_view" });
+    expect(await exists("notes/ghost.md")).toBe(false);
   });
 
   it("leaves the proposal open when the executor fails (e.g. missing source)", async () => {

@@ -32,6 +32,20 @@ describe("deriveTargetFiles", () => {
       }),
     ).toEqual(["a.md", "b.md"]);
   });
+
+  it("derives files for the knowledge-entry types", () => {
+    expect(deriveTargetFiles({ type: "capture", payload: { content: "x", topic: "reflections/" } })).toEqual([
+      "reflections/",
+    ]);
+    expect(deriveTargetFiles({ type: "capture", payload: { content: "x" } })).toEqual([]);
+    expect(deriveTargetFiles({ type: "structure", payload: { directory: "notes/db/" } })).toEqual(["notes/db/"]);
+    expect(
+      deriveTargetFiles({
+        type: "view_promotion",
+        payload: { sourceViewPath: ".agent/views/x.md", targetPath: "notes/x.md", content: "c" },
+      }),
+    ).toEqual([".agent/views/x.md", "notes/x.md"]);
+  });
 });
 
 describe("ProposalSchema", () => {

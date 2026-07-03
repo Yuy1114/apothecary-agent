@@ -4,6 +4,8 @@ import { reindexFile } from "./rag.js";
 import { moveVaultFileCore } from "./move-vault-file-core.js";
 import { archiveVaultFileCore } from "./archive-vault-file-core.js";
 import { mergeNotesCore } from "./merge-notes-core.js";
+import { writeVaultNote } from "./ingest-core.js";
+import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
@@ -55,6 +57,48 @@ async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reaso
       const r = await mergeNotesCore({ ...proposal.payload, reason: proposal.rationale });
       return r.merged ? { ok: true } : { ok: false, reason: r.reason };
     }
+    case "capture": {
+      // writeVaultNote classifies, writes frontmatter'd note, updates the
+      // directory README, reindexes and records a `capture` op.
+      await writeVaultNote({
+        content: proposal.payload.content,
+        topic: proposal.payload.topic,
+        noteType: "insight",
+        source: "conversation",
+        operationType: "capture",
+      });
+      return { ok: true };
+    }
+    case "structure": {
+      // updateDirectoryKeywords validates the directory exists (throws otherwise)
+      // and records a `structure` op.
+      await updateDirectoryKeywords({
+        directory: proposal.payload.directory,
+        add: proposal.payload.add,
+        remove: proposal.payload.remove,
+      });
+      return { ok: true };
+    }
+    case "view_promotion": {
+      const { sourceViewPath, targetPath, content } = proposal.payload;
+      try {
+        await fs.access(path.join(VAULT_PATH, sourceViewPath));
+      } catch {
+        return { ok: false, reason: "missing_source_view" };
+      }
+      const abs = path.join(VAULT_PATH, targetPath);
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, content, "utf8");
+      if (targetPath.endsWith(".md")) await reindexFile(targetPath);
+      await recordOperation({
+        type: "promote",
+        targetFiles: [sourceViewPath, targetPath],
+        rationale: proposal.title,
+        source: "resolveProposal",
+        detail: `promoted ${sourceViewPath} → ${targetPath}`,
+      });
+      return { ok: true };
+    }
   }
 }
 
@@ -80,9 +124,20 @@ export async function resolveProposalById(
     return { resolved: true, proposalId: id, type: proposal.type, status: "rejected" };
   }
 
-  const outcome = await executeProposal(proposal);
+  // Executors report expected failures via {ok:false}; some (e.g. structure)
+  // throw on invalid input. Either way, leave the proposal open to fix and retry.
+  let outcome: { ok: boolean; reason?: string };
+  try {
+    outcome = await executeProposal(proposal);
+  } catch (error) {
+    return {
+      resolved: false,
+      proposalId: id,
+      type: proposal.type,
+      reason: error instanceof Error ? error.message : "apply_failed",
+    };
+  }
   if (!outcome.ok) {
-    // Leave the proposal open so it can be fixed and retried, not silently lost.
     return { resolved: false, proposalId: id, type: proposal.type, reason: outcome.reason ?? "apply_failed" };
   }
 

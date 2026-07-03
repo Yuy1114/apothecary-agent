@@ -6,11 +6,20 @@ import { z } from "zod";
  * (proposed → applied | rejected). This is the governance record: it holds not
  * just what was proposed but how it was resolved (approval/rejection + note).
  *
- * v1 covers the maintenance-execution actions that have executors:
- * edit / move / archive / merge. Others in the roadmap (capture, canonical,
- * structure, view_promotion) can be added as new discriminated variants.
+ * Covers every action that has an executor: the maintenance actions
+ * (edit / move / archive / merge) plus the knowledge-entry actions
+ * (capture / structure / view_promotion). `canonical_note` is the remaining
+ * roadmap type still to be added.
  */
-export const ProposalTypeSchema = z.enum(["edit", "move", "archive", "merge"]);
+export const ProposalTypeSchema = z.enum([
+  "edit",
+  "move",
+  "archive",
+  "merge",
+  "capture",
+  "structure",
+  "view_promotion",
+]);
 export type ProposalType = z.infer<typeof ProposalTypeSchema>;
 
 export const ProposalStatusSchema = z.enum(["proposed", "applied", "rejected"]);
@@ -32,6 +41,24 @@ export const MergePayloadSchema = z.object({
   canonicalPath: z.string().min(1),
   canonicalContent: z.string().min(1),
 });
+/** Capture a synthesized insight into a new note; destination classified at apply time. */
+export const CapturePayloadSchema = z.object({
+  content: z.string().min(1),
+  /** Optional directory hint/key; the note's title is derived from the content. */
+  topic: z.string().optional(),
+});
+/** Update classification keywords for an existing directory in structure.yaml. */
+export const StructurePayloadSchema = z.object({
+  directory: z.string().min(1),
+  add: z.array(z.string()).optional(),
+  remove: z.array(z.string()).optional(),
+});
+/** Promote a generated `.agent/views/` view into a permanent vault note. */
+export const ViewPromotionPayloadSchema = z.object({
+  sourceViewPath: z.string().min(1),
+  targetPath: z.string().min(1),
+  content: z.string().min(1),
+});
 
 /** Per-type payload validators, used when assembling a proposal from raw input. */
 export const PAYLOAD_SCHEMAS = {
@@ -39,6 +66,9 @@ export const PAYLOAD_SCHEMAS = {
   move: MovePayloadSchema,
   archive: ArchivePayloadSchema,
   merge: MergePayloadSchema,
+  capture: CapturePayloadSchema,
+  structure: StructurePayloadSchema,
+  view_promotion: ViewPromotionPayloadSchema,
 } as const satisfies Record<ProposalType, z.ZodTypeAny>;
 
 const baseFields = {
@@ -57,6 +87,9 @@ export const ProposalSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move"), payload: MovePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("archive"), payload: ArchivePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("merge"), payload: MergePayloadSchema, ...baseFields }),
+  z.object({ type: z.literal("capture"), payload: CapturePayloadSchema, ...baseFields }),
+  z.object({ type: z.literal("structure"), payload: StructurePayloadSchema, ...baseFields }),
+  z.object({ type: z.literal("view_promotion"), payload: ViewPromotionPayloadSchema, ...baseFields }),
 ]);
 export type Proposal = z.infer<typeof ProposalSchema>;
 
@@ -81,6 +114,13 @@ export function deriveTargetFiles(input: ProposalAction): string[] {
       return [input.payload.from];
     case "merge":
       return [input.payload.sourcePath, input.payload.canonicalPath];
+    case "capture":
+      // The exact filename is decided at apply time; show the directory hint if given.
+      return input.payload.topic ? [input.payload.topic] : [];
+    case "structure":
+      return [input.payload.directory];
+    case "view_promotion":
+      return [input.payload.sourceViewPath, input.payload.targetPath];
   }
 }
 
