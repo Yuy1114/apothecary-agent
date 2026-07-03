@@ -32,6 +32,13 @@ export function createDesktopRuntime(projectRoot: string) {
     memory: { apothecary: apothecaryMemory },
   });
 
-  startVaultWatcher(runtime);
+  // Live change awareness is on by default (the packaged app owns its own
+  // databases, so there is no conflict). Set APOTHECARY_DESKTOP_WATCH=0 when
+  // running `desktop:dev` alongside `mastra dev`, which shares the repo's sql/
+  // and its watcher — then this process observes via the shared ledgers instead
+  // of starting a second, redundant watcher.
+  if (process.env.APOTHECARY_DESKTOP_WATCH !== "0") {
+    startVaultWatcher(runtime);
+  }
   return runtime;
 }

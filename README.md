@@ -82,6 +82,7 @@ Configuration is via environment variables (a `.env` is loaded):
 | `APOTHECARY_EMBEDDING_API_KEY` / `OPENAI_API_KEY` | Embeddings for the vector index | — |
 | `APOTHECARY_EMBEDDING_BASE_URL` / `_MODEL` | Embedding endpoint / model | aihubmix / `text-embedding-3-small` |
 | `APOTHECARY_SEMANTIC_SYNC_DEBOUNCE_MS` | Watcher → semantic-sync debounce | `8000` |
+| `APOTHECARY_DESKTOP_WATCH` | Set to `0` to skip the desktop's vault watcher (use when running `desktop:dev` next to `mastra dev` so a single watcher owns change detection) | on |
 
 The vault-local `.agent/config.yaml` controls scan-ignore patterns, hash behaviour, recent-file limits, map size limits, and deterministic review thresholds.
 
