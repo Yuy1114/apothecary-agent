@@ -13,6 +13,7 @@ import { loadProposal, saveProposal, listProposals } from "../../vault/proposalS
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
 import { syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { enqueueSemanticRecovery } from "../../application/semantic/semanticRecovery.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -208,11 +209,13 @@ export async function resolveProposalById(
 
   // Bring the semantic layer in step with the change before the proposal counts
   // as applied. Best-effort: the file change already succeeded, so a refresh
-  // failure must not block `applied` (the watcher debounce is the fallback).
+  // failure must not block `applied`. Instead of losing it in a warning, record
+  // durable recovery work (drained by manual sync / retrySemanticRecovery).
   try {
     await deps.postApplyRefresh(VAULT_PATH, outcome.affected ?? []);
   } catch (error) {
     console.warn(`resolveProposal: post-apply semantic refresh failed for ${id}:`, error);
+    await enqueueSemanticRecovery(outcome.affected ?? []);
   }
 
   const applied = resolveProposalRecord(proposal, "applied", note, nowIso());

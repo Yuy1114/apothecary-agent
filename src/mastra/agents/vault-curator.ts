@@ -11,6 +11,7 @@ import { listPendingChangesTool } from "../tools/list-pending-changes.js";
 import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
 import { syncSemanticsTool } from "../tools/sync-semantics.js";
 import { manualSyncTool } from "../tools/manual-sync.js";
+import { retrySemanticRecoveryTool } from "../tools/retry-semantic-recovery.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { listOperationsTool } from "../tools/list-operations.js";
 import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
@@ -82,6 +83,7 @@ export const vaultCurator = new Agent({
     resolvePendingChanges: resolvePendingChangesTool,
     syncSemantics: syncSemanticsTool,
     manualSync: manualSyncTool,
+    retrySemanticRecovery: retrySemanticRecoveryTool,
     findRelatedFiles: findRelatedFilesTool,
     listOperations: listOperationsTool,
     listDuplicateClusters: listDuplicateClustersTool,

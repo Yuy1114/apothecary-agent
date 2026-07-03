@@ -3,7 +3,7 @@ import { createId } from "../utils/ids.js";
 import { nowIso } from "../utils/time.js";
 
 export type ChangeType = "created" | "modified" | "deleted";
-export type ChangeSource = "watcher" | "manual";
+export type ChangeSource = "watcher" | "manual" | "proposal";
 export type ChangeStatus = "pending" | "processed" | "dismissed";
 
 export type PendingChange = {

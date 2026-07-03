@@ -43,10 +43,12 @@ On **approve**, the executor:
 
 - validates every payload path stays inside the vault (`safeVaultPath`) — an escaping path is refused;
 - applies the change and keeps the vector index in sync;
-- runs a **synchronous post-apply refresh** of the semantic layer for the affected files *before* the proposal is marked applied;
+- runs a **post-apply refresh** of the semantic layer (summaries, graph, relations, canonical candidates) for the affected files before the proposal is marked applied;
 - records the operation in the ledger.
 
 If the underlying action fails, the proposal stays `proposed` so it can be fixed and retried — it is never silently lost.
+
+**Consistency is synchronous on the happy path, eventual on failure.** The file change and vector index are always in sync when a proposal is `applied`. The semantic-layer refresh normally completes synchronously too; if it fails (model/network/process exit), the proposal still counts as `applied` (the file change is done) but the affected paths are recorded as durable recovery work (`source: proposal` in the change ledger), retried idempotently by manual sync or `retrySemanticRecovery` — never re-running the file mutation.
 
 ### Canonicalization
 
