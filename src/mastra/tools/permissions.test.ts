@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ingestVaultTool } from "./ingest-vault.js";
-import { moveVaultFileTool } from "./move-vault-file.js";
+import { resolveProposalTool } from "./resolve-proposal.js";
+import { proposeChangeTool } from "./propose-change.js";
 import { TOOL_APPROVAL_POLICIES, requiresHumanApproval } from "./permissions.js";
 
 describe("tool permission policy", () => {
@@ -15,9 +15,11 @@ describe("tool permission policy", () => {
     expect(TOOL_APPROVAL_POLICIES.executeCommand).toBe("deny");
   });
 
-  it("requires Mastra tool approval before writing or moving user vault content", () => {
-    expect(moveVaultFileTool.requireApproval).toBe(requiresHumanApproval);
-    expect(ingestVaultTool.requireApproval).toBe(requiresHumanApproval);
+  it("gates applying a proposal behind human approval, while proposing stays free", () => {
+    // The unified apply path is the only way to mutate user notes, and it is
+    // approval-gated; creating a proposal (writing to .agent) is not.
+    expect(resolveProposalTool.requireApproval).toBe(requiresHumanApproval);
+    expect(proposeChangeTool.requireApproval).not.toBe(requiresHumanApproval);
     expect(requiresHumanApproval()).toBe(true);
   });
 });
