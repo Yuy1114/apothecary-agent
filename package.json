@@ -1,6 +1,7 @@
 {
   "name": "apothecary-agent",
-  "version": "0.1.0",
+  "version": "1.1.0",
+  "main": "dist/desktop/main.js",
   "description": "Mastra-native agent for local Markdown knowledge bases.",
   "type": "module",
   "scripts": {
@@ -8,7 +9,10 @@
     "build": "tsc",
     "check": "tsc --noEmit",
     "test": "vitest",
-    "ci": "pnpm run check && pnpm run build && pnpm vitest run"
+    "ci": "pnpm run check && pnpm run build && pnpm vitest run",
+    "desktop:dev": "pnpm run build && electron .",
+    "desktop:pack": "pnpm run build && electron-builder --dir",
+    "desktop:dist": "pnpm run build && electron-builder"
   },
   "keywords": [
     "agent",
@@ -41,6 +45,29 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "vitest": "^4.0.15"
+  },
+  "build": {
+    "appId": "com.yuy.apothecary-agent",
+    "productName": "Apothecary",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "src/desktop/renderer",
+        "to": "renderer"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg", "zip"]
+    }
   }
 }

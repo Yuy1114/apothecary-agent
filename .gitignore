@@ -19,3 +19,12 @@ observability.duckdb.wal
 vectors.db
 vectors.db-shm
 vectors.db-wal
+
+# Electron build output
+release/
+
+# Local runtime databases
+sql/
+
+# pnpm content-addressable store
+.pnpm-store/
