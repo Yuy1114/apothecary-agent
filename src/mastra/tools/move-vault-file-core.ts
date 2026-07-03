@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile, removeFromIndex } from "./rag.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { updateReadmesForMove } from "./readme-index-core.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -48,6 +49,16 @@ export async function moveVaultFileCore(from: string, to: string): Promise<MoveV
   if (to.endsWith(".md")) {
     await reindexFile(to);
     reindexed = true;
+  }
+
+  // Keep directory note-indexes consistent (a README.md is itself an index, so
+  // don't index the index). Best-effort: never let it fail the completed move.
+  if (from.endsWith(".md") && to.endsWith(".md") && path.posix.basename(to) !== "README.md") {
+    try {
+      await updateReadmesForMove(VAULT_PATH, from, to);
+    } catch (error) {
+      console.warn(`moveVaultFile: README index update failed for ${from} → ${to}:`, error);
+    }
   }
 
   await recordOperation({

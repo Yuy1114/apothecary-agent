@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile } from "./rag.js";
 import { loadStructure, classifyWithStructure, type VaultStructure } from "./vault-structure.js";
+import { addReadmeEntry } from "../../vault/readmeIndex.js";
 import { recordOperation, type OperationType } from "../../vault/operationLedger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -71,23 +72,12 @@ export async function writeVaultNote(params: {
   const filePath = path.join(dirPath, fileName);
   await fs.writeFile(filePath, fileContent, "utf8");
 
-  let readmeUpdated = false;
   const readmePath = path.join(dirPath, "README.md");
   const dateLabel = new Date().toLocaleDateString("zh-CN");
-  try {
-    const existing = await fs.readFile(readmePath, "utf8");
-    if (!existing.includes(fileName)) {
-      await fs.appendFile(readmePath, `- [${title}](${fileName}) — ${dateLabel}\n`, "utf8");
-      readmeUpdated = true;
-    }
-  } catch {
-    await fs.writeFile(
-      readmePath,
-      `# ${label}\n\n## 笔记索引\n\n- [${title}](${fileName}) — ${dateLabel}\n`,
-      "utf8",
-    );
-    readmeUpdated = true;
-  }
+  const existing = await fs.readFile(readmePath, "utf8").catch(() => null);
+  const nextReadme = addReadmeEntry(existing, { title, fileName, date: dateLabel, label });
+  const readmeUpdated = nextReadme !== existing;
+  if (readmeUpdated) await fs.writeFile(readmePath, nextReadme, "utf8");
 
   const relativePath = path.relative(VAULT_PATH, filePath);
   await reindexFile(relativePath);
