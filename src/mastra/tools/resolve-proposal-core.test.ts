@@ -163,6 +163,39 @@ describe("resolveProposalById", () => {
     expect(await read("notes/ai-eng.md")).toBe("# AI Engineering\n\npromoted");
   });
 
+  it("refuses an edit proposal whose path escapes the vault and writes nothing outside", async () => {
+    const escapeTarget = path.join(vault, "..", "escaped.md");
+    const p = await propose("edit", { filePath: "../escaped.md", suggestedContent: "pwned" });
+
+    const result = await resolveProposalById(p.id, "approve");
+
+    expect(result).toMatchObject({ resolved: false, reason: "unsafe_path" });
+    await expect(access(escapeTarget)).rejects.toBeDefined();
+    expect((await loadProposal(vault, p.id))?.status).toBe("proposed");
+  });
+
+  it("refuses a move proposal with a traversal source or target", async () => {
+    const p = await propose("move", { from: "../secret.md", to: "notes/x.md" });
+    expect(await resolveProposalById(p.id, "approve")).toMatchObject({
+      resolved: false,
+      reason: "unsafe_path",
+    });
+  });
+
+  it("refuses a view_promotion whose target escapes the vault", async () => {
+    await mkdir(abs(".agent/views"), { recursive: true });
+    await writeFile(abs(".agent/views/v.md"), "# v", "utf8");
+    const p = await propose("view_promotion", {
+      sourceViewPath: ".agent/views/v.md",
+      targetPath: "../../evil.md",
+      content: "x",
+    });
+    expect(await resolveProposalById(p.id, "approve")).toMatchObject({
+      resolved: false,
+      reason: "unsafe_path",
+    });
+  });
+
   it("refuses a view_promotion whose source view is missing", async () => {
     const p = await propose("view_promotion", {
       sourceViewPath: ".agent/views/ghost.md",

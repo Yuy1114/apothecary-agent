@@ -4,6 +4,7 @@ import { reindexFile, removeFromIndex } from "./rag.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { isArchivedPath } from "../../vault/archive.js";
 import { moveToArchive } from "./archive-vault-file-core.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -17,7 +18,8 @@ export type MergeNotesResult = {
     | "empty_content"
     | "canonical_archived"
     | "source_archived"
-    | "missing_source";
+    | "missing_source"
+    | "unsafe_path";
 };
 
 /**
@@ -50,7 +52,9 @@ export async function mergeNotesCore(input: {
   if (isArchivedPath(canonicalPath)) return fail("canonical_archived");
   if (isArchivedPath(sourcePath)) return fail("source_archived");
 
-  const sourceAbs = path.join(VAULT_PATH, sourcePath);
+  const sourceAbs = safeVaultPath(VAULT_PATH, sourcePath);
+  const canonicalAbs = safeVaultPath(VAULT_PATH, canonicalPath);
+  if (!sourceAbs || !canonicalAbs) return fail("unsafe_path");
   try {
     await fs.access(sourceAbs);
   } catch {
@@ -60,7 +64,6 @@ export async function mergeNotesCore(input: {
   // 1. Write the merged content into the canonical note (create or overwrite).
   //    The source's original content survives via the archive step below, so no
   //    information is lost even when the canonical is one of the merged pair.
-  const canonicalAbs = path.join(VAULT_PATH, canonicalPath);
   await fs.mkdir(path.dirname(canonicalAbs), { recursive: true });
   await fs.writeFile(canonicalAbs, canonicalContent, "utf8");
 

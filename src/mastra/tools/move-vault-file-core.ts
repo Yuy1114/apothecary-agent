@@ -3,13 +3,14 @@ import path from "node:path";
 import { reindexFile, removeFromIndex } from "./rag.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { updateReadmesForMove } from "./readme-index-core.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
 export type MoveVaultFileResult = {
   moved: boolean;
   reindexed: boolean;
-  reason?: "missing_source" | "collision";
+  reason?: "missing_source" | "collision" | "unsafe_path";
 };
 
 /**
@@ -20,8 +21,9 @@ export type MoveVaultFileResult = {
  * never deletes the source directory (structural folders must persist).
  */
 export async function moveVaultFileCore(from: string, to: string): Promise<MoveVaultFileResult> {
-  const fromAbs = path.join(VAULT_PATH, from);
-  const toAbs = path.join(VAULT_PATH, to);
+  const fromAbs = safeVaultPath(VAULT_PATH, from);
+  const toAbs = safeVaultPath(VAULT_PATH, to);
+  if (!fromAbs || !toAbs) return { moved: false, reindexed: false, reason: "unsafe_path" };
 
   try {
     await fs.access(fromAbs);

@@ -3,6 +3,7 @@ import path from "node:path";
 import { reindexFile } from "./rag.js";
 import { loadStructure, classifyWithStructure, type VaultStructure } from "./vault-structure.js";
 import { addReadmeEntry } from "../../vault/readmeIndex.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
 import { recordOperation, type OperationType } from "../../vault/operationLedger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -63,13 +64,17 @@ export async function writeVaultNote(params: {
   const headingMatch = params.content.match(/^#\s+(.+)/m);
   const title =
     params.title ?? headingMatch?.[1] ?? params.content.split("\n")[0]?.slice(0, 60) ?? "untitled";
+  // The target dir comes from the structure (or inbox) and the filename is
+  // slugified (no separators), so this is safe by construction — guard anyway so
+  // no note-writing path can ever land outside the vault.
   const fileName = `${slugify(title)}.md`;
-  const dirPath = path.join(VAULT_PATH, dir);
+  const filePath = safeVaultPath(VAULT_PATH, path.join(dir, fileName));
+  if (!filePath) throw new Error(`Refusing to write note outside the vault: ${dir}/${fileName}`);
+  const dirPath = path.dirname(filePath);
   await fs.mkdir(dirPath, { recursive: true });
 
   const timestamp = new Date().toISOString().split("T")[0];
   const fileContent = `---\ntitle: "${title}"\ntopic: "${label}"\ncreated: ${timestamp}\ntype: ${params.noteType}\nsource: ${params.source}\n---\n\n${params.content}`;
-  const filePath = path.join(dirPath, fileName);
   await fs.writeFile(filePath, fileContent, "utf8");
 
   const readmePath = path.join(dirPath, "README.md");

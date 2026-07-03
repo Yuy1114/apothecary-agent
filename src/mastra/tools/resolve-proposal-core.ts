@@ -7,6 +7,7 @@ import { mergeNotesCore } from "./merge-notes-core.js";
 import { writeVaultNote } from "./ingest-core.js";
 import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
@@ -32,7 +33,8 @@ async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reaso
   switch (proposal.type) {
     case "edit": {
       const { filePath, suggestedContent } = proposal.payload;
-      const abs = path.join(VAULT_PATH, filePath);
+      const abs = safeVaultPath(VAULT_PATH, filePath);
+      if (!abs) return { ok: false, reason: "unsafe_path" };
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, suggestedContent, "utf8");
       if (filePath.endsWith(".md")) await reindexFile(filePath);
@@ -81,12 +83,14 @@ async function executeProposal(proposal: Proposal): Promise<{ ok: boolean; reaso
     }
     case "view_promotion": {
       const { sourceViewPath, targetPath, content } = proposal.payload;
+      const sourceAbs = safeVaultPath(VAULT_PATH, sourceViewPath);
+      const abs = safeVaultPath(VAULT_PATH, targetPath);
+      if (!sourceAbs || !abs) return { ok: false, reason: "unsafe_path" };
       try {
-        await fs.access(path.join(VAULT_PATH, sourceViewPath));
+        await fs.access(sourceAbs);
       } catch {
         return { ok: false, reason: "missing_source_view" };
       }
-      const abs = path.join(VAULT_PATH, targetPath);
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, content, "utf8");
       if (targetPath.endsWith(".md")) await reindexFile(targetPath);

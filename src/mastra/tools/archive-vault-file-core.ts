@@ -7,6 +7,7 @@ import {
   isArchivedPath,
   withCollisionSuffix,
 } from "../../vault/archive.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -15,7 +16,7 @@ export type ArchiveVaultFileResult = {
   from: string;
   to?: string;
   reindexed: boolean;
-  reason?: "missing_source" | "already_archived";
+  reason?: "missing_source" | "already_archived" | "unsafe_path";
 };
 
 /** First archive path under the archive root that is not already taken on disk. */
@@ -45,10 +46,13 @@ async function resolveFreeArchivePath(from: string): Promise<string> {
  */
 export async function moveToArchive(
   from: string,
-): Promise<{ ok: true; to: string } | { ok: false; reason: "missing_source" | "already_archived" }> {
+): Promise<
+  { ok: true; to: string } | { ok: false; reason: "missing_source" | "already_archived" | "unsafe_path" }
+> {
   if (isArchivedPath(from)) return { ok: false, reason: "already_archived" };
 
-  const fromAbs = path.join(VAULT_PATH, from);
+  const fromAbs = safeVaultPath(VAULT_PATH, from);
+  if (!fromAbs) return { ok: false, reason: "unsafe_path" };
   try {
     await fs.access(fromAbs);
   } catch {

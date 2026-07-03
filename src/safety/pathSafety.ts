@@ -29,3 +29,19 @@ export function assertInsideDirectory(parentDir: string, targetPath: string): vo
 export function assertAgentArtifactsWrite(agentRootPath: string, targetPath: string): void {
   assertInsideDirectory(agentRootPath, targetPath);
 }
+
+/**
+ * Resolve a vault-relative path to an absolute path, but only if it stays inside
+ * the vault. Returns `null` for anything unsafe — an absolute input, a `..`
+ * traversal that escapes the root, or the vault root itself. This is the guard
+ * every proposal executor runs on payload paths so an approved change can never
+ * touch a file outside the vault.
+ */
+export function safeVaultPath(vaultPath: string, relPath: string): string | null {
+  if (!relPath || path.isAbsolute(relPath)) return null;
+  const root = path.resolve(vaultPath);
+  const resolved = path.resolve(root, relPath);
+  const relative = path.relative(root, resolved);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  return resolved;
+}
