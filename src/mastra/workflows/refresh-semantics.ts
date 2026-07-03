@@ -14,6 +14,7 @@ import {
   pruneMissing,
 } from "../../vault/semanticStore.js";
 import { buildSemanticGraph } from "../../domain/semanticGraph.js";
+import { refreshRelations } from "../../application/semantic/refreshRelations.js";
 import { generateFileSummary } from "../../application/semantic/generateFileSummary.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
 
@@ -105,6 +106,7 @@ const refreshStep = createStep({
     // Rebuild the derived semantic graph from the final summaries (deterministic, cheap).
     const graph = buildSemanticGraph(pruneResult.summaries);
     await saveGraph(vaultPath, graph);
+    await refreshRelations(vaultPath, graph);
 
     return {
       refreshed,

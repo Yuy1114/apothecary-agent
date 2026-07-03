@@ -11,6 +11,7 @@ import {
   type DuplicateReport,
 } from "../../domain/duplicateDetection.js";
 import { classifyDuplicate } from "../../application/duplicates/classifyDuplicate.js";
+import { refreshRelations } from "../../application/semantic/refreshRelations.js";
 import { renderDuplicateReportMarkdown } from "../../reports/renderDuplicateReportMarkdown.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
 
@@ -90,6 +91,9 @@ const detectStep = createStep({
       renderDuplicateReportMarkdown(report),
       "utf8",
     );
+
+    // Fold the fresh classifications into the typed relation layer.
+    await refreshRelations(vaultPath, graph);
 
     const count = (c: DuplicateCluster["classification"]) =>
       clusters.filter((cluster) => cluster.classification === c).length;

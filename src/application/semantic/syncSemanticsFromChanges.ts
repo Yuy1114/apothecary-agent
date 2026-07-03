@@ -10,6 +10,7 @@ import {
   upsertSummary,
 } from "../../vault/semanticStore.js";
 import { buildSemanticGraph } from "../../domain/semanticGraph.js";
+import { refreshRelations } from "./refreshRelations.js";
 import { generateFileSummary } from "./generateFileSummary.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
 import { planSemanticSync, type ChangedFileState } from "./planSemanticSync.js";
@@ -152,6 +153,7 @@ export async function syncSemanticsFromChanges(
   if (refreshed > 0 || plan.toPrune.length > 0) {
     await saveSummaries(input.vaultPath, summaries);
     await saveGraph(input.vaultPath, graph);
+    await refreshRelations(input.vaultPath, graph);
   }
 
   return {

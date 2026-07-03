@@ -4,10 +4,12 @@ import { getAgentArtifacts } from "../artifacts/agentArtifacts.js";
 import { FileSummariesSchema, type FileSummaries, type FileSummary } from "../domain/semantic.js";
 import { SemanticGraphSchema, type SemanticGraph } from "../domain/semantic.js";
 import { DuplicateReportSchema, type DuplicateReport } from "../domain/duplicateDetection.js";
+import { RelationsArtifactSchema, type RelationsArtifact } from "../domain/relations.js";
 
 const FILE = "file-summaries.json";
 const GRAPH_FILE = "semantic-graph.json";
 const DUPLICATES_FILE = "duplicate-clusters.json";
+const RELATIONS_FILE = "relations.json";
 
 function summariesPath(vaultPath: string): string {
   return path.join(getAgentArtifacts(vaultPath).semanticDir, FILE);
@@ -32,6 +34,24 @@ export async function saveGraph(vaultPath: string, graph: SemanticGraph): Promis
   const filePath = graphPath(vaultPath);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify(graph, null, 2), "utf8");
+}
+
+function relationsPath(vaultPath: string): string {
+  return path.join(getAgentArtifacts(vaultPath).semanticDir, RELATIONS_FILE);
+}
+
+export async function loadRelations(vaultPath: string): Promise<RelationsArtifact> {
+  try {
+    return RelationsArtifactSchema.parse(JSON.parse(await fs.readFile(relationsPath(vaultPath), "utf8")));
+  } catch {
+    return { generatedAt: "", relations: [] };
+  }
+}
+
+export async function saveRelations(vaultPath: string, artifact: RelationsArtifact): Promise<void> {
+  const filePath = relationsPath(vaultPath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(artifact, null, 2), "utf8");
 }
 
 export async function loadDuplicateReport(vaultPath: string): Promise<DuplicateReport> {
