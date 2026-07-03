@@ -15,6 +15,7 @@ import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { listOperationsTool } from "../tools/list-operations.js";
 import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
 import { listRelationsTool } from "../tools/list-relations.js";
+import { listCanonicalCandidatesTool } from "../tools/list-canonical-candidates.js";
 import { readKnowledgeProfileTool } from "../tools/read-knowledge-profile.js";
 import { agentRuntimeScorers } from "../scorers/answer-relevancy.js";
 import { apothecaryMemory } from "../memory.js";
@@ -47,6 +48,9 @@ export const vaultCurator = new Agent({
     "- contextual_repetition → keep both; proposeChange an 'edit' that creates/updates a canonical note and adds references. Do NOT archive.\n" +
     "- evolutionary_duplicate → keep the chain; proposeChange an 'edit' marking the older note superseded, and only proposeChange an " +
     "'archive' for it if it is fully absorbed. Never permanently delete — archive is the retirement path.\n\n" +
+    "Use listCanonicalCandidates to see concepts scattered across many notes that would benefit from a single canonical note; " +
+    "for a high-priority candidate, propose creating or updating that canonical note (an 'edit' proposal, or 'merge' when it " +
+    "absorbs a duplicate), citing the covering notes. listRelations shows the typed edges (related_to/duplicates/supersedes) for context.\n\n" +
     "The file watcher records changed/created/deleted notes as pending work. listPendingChanges is read-only inspection — " +
     "showing the list must NOT change anything. Only call resolvePendingChanges when the user explicitly asks to clear items, " +
     "or right after you have actually triaged a specific change; state which ids you are resolving and why. Never dismiss " +
@@ -79,6 +83,7 @@ export const vaultCurator = new Agent({
     listOperations: listOperationsTool,
     listDuplicateClusters: listDuplicateClustersTool,
     listRelations: listRelationsTool,
+    listCanonicalCandidates: listCanonicalCandidatesTool,
     readKnowledgeProfile: readKnowledgeProfileTool,
   },
 });

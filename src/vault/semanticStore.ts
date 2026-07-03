@@ -5,11 +5,16 @@ import { FileSummariesSchema, type FileSummaries, type FileSummary } from "../do
 import { SemanticGraphSchema, type SemanticGraph } from "../domain/semantic.js";
 import { DuplicateReportSchema, type DuplicateReport } from "../domain/duplicateDetection.js";
 import { RelationsArtifactSchema, type RelationsArtifact } from "../domain/relations.js";
+import {
+  CanonicalCandidatesArtifactSchema,
+  type CanonicalCandidatesArtifact,
+} from "../domain/canonicalCandidates.js";
 
 const FILE = "file-summaries.json";
 const GRAPH_FILE = "semantic-graph.json";
 const DUPLICATES_FILE = "duplicate-clusters.json";
 const RELATIONS_FILE = "relations.json";
+const CANONICAL_CANDIDATES_FILE = "canonical-candidates.json";
 
 function summariesPath(vaultPath: string): string {
   return path.join(getAgentArtifacts(vaultPath).semanticDir, FILE);
@@ -50,6 +55,29 @@ export async function loadRelations(vaultPath: string): Promise<RelationsArtifac
 
 export async function saveRelations(vaultPath: string, artifact: RelationsArtifact): Promise<void> {
   const filePath = relationsPath(vaultPath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(artifact, null, 2), "utf8");
+}
+
+function canonicalCandidatesPath(vaultPath: string): string {
+  return path.join(getAgentArtifacts(vaultPath).semanticDir, CANONICAL_CANDIDATES_FILE);
+}
+
+export async function loadCanonicalCandidates(vaultPath: string): Promise<CanonicalCandidatesArtifact> {
+  try {
+    return CanonicalCandidatesArtifactSchema.parse(
+      JSON.parse(await fs.readFile(canonicalCandidatesPath(vaultPath), "utf8")),
+    );
+  } catch {
+    return { generatedAt: "", candidates: [] };
+  }
+}
+
+export async function saveCanonicalCandidates(
+  vaultPath: string,
+  artifact: CanonicalCandidatesArtifact,
+): Promise<void> {
+  const filePath = canonicalCandidatesPath(vaultPath);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify(artifact, null, 2), "utf8");
 }
