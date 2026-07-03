@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { enqueueChange } from "./../../vault/changeLog.js";
+import { isArchivedPath } from "../../vault/archive.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -27,7 +28,9 @@ function isMarkdownPath(p: string): boolean {
 }
 
 function isIgnoredPath(relativePath: string): boolean {
-  return relativePath.startsWith(".");
+  // Dotfiles/dirs (.agent, .obsidian, …) and the archive subtree are not active
+  // vault content — archived notes must not re-enter the change→semantic pipeline.
+  return relativePath.startsWith(".") || isArchivedPath(relativePath);
 }
 
 // Mastra.getWorkflow() resolves by registration key (see index.ts), NOT the

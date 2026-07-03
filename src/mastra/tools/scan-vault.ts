@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { scanVault } from "../../vault/scanner.js";
-import { parseMarkdownSnapshot } from "../../vault/markdown.js";
+import { VAULT_IGNORE_GLOBS } from "../../vault/ignore.js";
 import { VaultScanSchema } from "../../domain/vault.js";
 
 export const scanVaultTool = createTool({
@@ -37,7 +37,7 @@ export const scanVaultTool = createTool({
       vaultPath: process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault",
       scopePath,
       includeHash: false,
-      ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
+      ignore: VAULT_IGNORE_GLOBS,
     });
     const parsed = VaultScanSchema.parse(result);
     return {

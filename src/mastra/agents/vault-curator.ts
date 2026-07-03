@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { writeReviewTool } from "../tools/write-review.js";
 import { proposeEditTool } from "../tools/propose-edit.js";
 import { moveVaultFileTool } from "../tools/move-vault-file.js";
+import { archiveVaultFileTool } from "../tools/archive-vault-file.js";
 import { readReviewTool } from "../tools/read-review.js";
 import { applyEditTool } from "../tools/apply-edit.js";
 import { listProposalsTool } from "../tools/list-proposals.js";
@@ -48,9 +49,12 @@ export const vaultCurator = new Agent({
     "syncSemantics refreshes the agent's own semantic layer (file summaries + topic/concept graph) for the changed files. " +
     "It does not touch user notes and does not clear the pending-change queue, so it is always safe to run — use it after " +
     "notes have changed (or before duplicate/profile work) so later reasoning sees up-to-date understanding.\n\n" +
-    "Use listDuplicateClusters to review detected duplicates: for harmful_duplicate propose merging into one canonical note and " +
-    "archiving the copy (proposeEdit + moveVaultFile), for contextual_repetition propose a canonical note keeping both, and for " +
-    "evolutionary_duplicate keep both and mark the older one superseded — all via approval-gated tools, never destructively.\n\n" +
+    "Use listDuplicateClusters to review detected duplicates and EXECUTE the fix with approval-gated, non-destructive tools:\n" +
+    "- harmful_duplicate → merge: write the combined content into the canonical note (proposeEdit then applyEdit), then " +
+    "archiveVaultFile the absorbed copy with reason 'merged into <canonical>'. archiveVaultFile retires the copy without deleting it.\n" +
+    "- contextual_repetition → keep both; create/update a canonical note and add references. Do NOT archive either file.\n" +
+    "- evolutionary_duplicate → keep the chain; mark the older note superseded (proposeEdit its frontmatter/header), and only " +
+    "archiveVaultFile it if it is fully absorbed. Never permanently delete — archiveVaultFile is the retirement path.\n\n" +
     "Always explain why each change or placement is suggested, and never act on low-confidence findings without saying so. " +
     "You may never delete user files or run shell commands. Answer in Chinese.",
   model: "deepseek/deepseek-v4-flash",
@@ -65,6 +69,7 @@ export const vaultCurator = new Agent({
     scanVault: scanVaultTool,
     readMarkdown: readMarkdownTool,
     moveVaultFile: moveVaultFileTool,
+    archiveVaultFile: archiveVaultFileTool,
     listPendingChanges: listPendingChangesTool,
     resolvePendingChanges: resolvePendingChangesTool,
     syncSemantics: syncSemanticsTool,

@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { parse, stringify } from "yaml";
 import { ApothecaryConfigSchema, type ApothecaryConfig } from "../domain/config.js";
+import { VAULT_IGNORE_GLOBS } from "../vault/ignore.js";
 import type { AgentArtifacts } from "../artifacts/agentArtifacts.types.js";
 
 export const defaultVaultAgentConfig: ApothecaryConfig = {
@@ -11,7 +12,7 @@ export const defaultVaultAgentConfig: ApothecaryConfig = {
     baseURL: "https://api.deepseek.com",
   },
   scan: {
-    ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**", "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
+    ignore: [...VAULT_IGNORE_GLOBS, "**/.DS_Store", "**/node_modules/**", "**/.git/**"],
     include_hash: true,
     recent_files_limit: 10,
   },

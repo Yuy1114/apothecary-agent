@@ -2,7 +2,7 @@ import { createClient, type Client } from "@libsql/client";
 import { createId } from "../utils/ids.js";
 import { nowIso } from "../utils/time.js";
 
-export type OperationType = "edit" | "move" | "structure" | "ingest" | "capture";
+export type OperationType = "edit" | "move" | "archive" | "structure" | "ingest" | "capture";
 
 export type OperationRecord = {
   id: string;

@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import { VaultScanSchema } from "../../domain/vault.js";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { scanVault } from "../../vault/scanner.js";
+import { VAULT_IGNORE_GLOBS } from "../../vault/ignore.js";
 import {
   loadSummaries,
   saveSummaries,
@@ -48,7 +49,7 @@ const scanStep = createStep({
         vaultPath: inputData.vaultPath,
         scopePath: inputData.scopePath,
         includeHash: true,
-        ignore: [".agent/**", ".apothecary/**", ".obsidian/**", ".trash/**"],
+        ignore: VAULT_IGNORE_GLOBS,
       }),
     );
     return { vaultPath: inputData.vaultPath, scan };
