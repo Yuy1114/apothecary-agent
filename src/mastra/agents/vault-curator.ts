@@ -10,6 +10,7 @@ import { readMarkdownTool } from "../tools/read-markdown.js";
 import { readStructureTool } from "../tools/read-structure.js";
 import { listPendingChangesTool } from "../tools/list-pending-changes.js";
 import { resolvePendingChangesTool } from "../tools/resolve-pending-changes.js";
+import { syncSemanticsTool } from "../tools/sync-semantics.js";
 import { findRelatedFilesTool } from "../tools/find-related-files.js";
 import { listOperationsTool } from "../tools/list-operations.js";
 import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
@@ -44,6 +45,9 @@ export const vaultCurator = new Agent({
     "triaged/edited a specific change; state which ids you are resolving and why. Never dismiss items just because you were asked to list them. " +
     "When the user names the outcome (processed or dismissed), use exactly that — do not silently substitute the other; " +
     "if you believe a different outcome fits better, say so and let the user decide.\n\n" +
+    "syncSemantics refreshes the agent's own semantic layer (file summaries + topic/concept graph) for the changed files. " +
+    "It does not touch user notes and does not clear the pending-change queue, so it is always safe to run — use it after " +
+    "notes have changed (or before duplicate/profile work) so later reasoning sees up-to-date understanding.\n\n" +
     "Use listDuplicateClusters to review detected duplicates: for harmful_duplicate propose merging into one canonical note and " +
     "archiving the copy (proposeEdit + moveVaultFile), for contextual_repetition propose a canonical note keeping both, and for " +
     "evolutionary_duplicate keep both and mark the older one superseded — all via approval-gated tools, never destructively.\n\n" +
@@ -63,6 +67,7 @@ export const vaultCurator = new Agent({
     moveVaultFile: moveVaultFileTool,
     listPendingChanges: listPendingChangesTool,
     resolvePendingChanges: resolvePendingChangesTool,
+    syncSemantics: syncSemanticsTool,
     findRelatedFiles: findRelatedFilesTool,
     listOperations: listOperationsTool,
     listDuplicateClusters: listDuplicateClustersTool,
