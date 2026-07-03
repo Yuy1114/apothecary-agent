@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { DesktopService, type DesktopChatMessage } from "../application/desktop/desktopService.js";
 import { createDesktopRuntime } from "./runtime.js";
 import { registerDesktopIpc } from "./ipc.js";
@@ -27,12 +28,16 @@ async function createService(): Promise<DesktopService> {
   const runtimeRoot = app.isPackaged ? app.getPath("userData") : projectRoot;
   const desktopRuntime = createDesktopRuntime(runtimeRoot);
   const apothecaryAgent = desktopRuntime.getAgent("apothecaryAgent");
+  // The agent's memory (observational + working) is thread-scoped, so generate()
+  // needs a thread + resource. Give this desktop session one identity so memory
+  // has a valid thread; a fresh thread per launch keeps sessions clean.
+  const memory = { resource: "apothecary-desktop", thread: `desktop-${randomUUID()}` };
   const service = new DesktopService({
     vaultPath,
     projectRoot: runtimeRoot,
     deps: {
       chat: async (messages) => {
-        const result = await apothecaryAgent.generate(formatConversation(messages));
+        const result = await apothecaryAgent.generate(formatConversation(messages), { memory });
         return result.text;
       },
     },
