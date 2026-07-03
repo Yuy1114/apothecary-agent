@@ -49,8 +49,9 @@ export const vaultCurator = new Agent({
     "- evolutionary_duplicate → keep the chain; proposeChange an 'edit' marking the older note superseded, and only proposeChange an " +
     "'archive' for it if it is fully absorbed. Never permanently delete — archive is the retirement path.\n\n" +
     "Use listCanonicalCandidates to see concepts scattered across many notes that would benefit from a single canonical note; " +
-    "for a high-priority candidate, propose creating or updating that canonical note (an 'edit' proposal, or 'merge' when it " +
-    "absorbs a duplicate), citing the covering notes. listRelations shows the typed edges (related_to/duplicates/supersedes) for context.\n\n" +
+    "for a high-priority candidate, proposeChange a 'canonical_note' (canonicalPath + the synthesized content + supersedes = " +
+    "the older notes it replaces) — it writes the canonical note and stamps each superseded note with a superseded_by link. " +
+    "listRelations shows the typed edges (related_to/duplicates/supersedes) for context.\n\n" +
     "The file watcher records changed/created/deleted notes as pending work. listPendingChanges is read-only inspection — " +
     "showing the list must NOT change anything. Only call resolvePendingChanges when the user explicitly asks to clear items, " +
     "or right after you have actually triaged a specific change; state which ids you are resolving and why. Never dismiss " +

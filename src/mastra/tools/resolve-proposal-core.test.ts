@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import matter from "gray-matter";
 import { createProposal, loadProposal } from "../../vault/proposalStore.js";
 import type { ProposalType } from "../../domain/proposal.js";
 
@@ -183,6 +184,42 @@ describe("resolveProposalById", () => {
 
     expect(result.status).toBe("applied");
     expect(await read("notes/ai-eng.md")).toBe("# AI Engineering\n\npromoted");
+  });
+
+  it("approving a canonical_note writes it and stamps superseded_by on the sources", async () => {
+    await mkdir(abs("notes"), { recursive: true });
+    await writeFile(abs("notes/old-a.md"), "# Old A\n\nold a", "utf8");
+    await writeFile(abs("notes/old-b.md"), "---\ntitle: Old B\n---\nold b", "utf8");
+    const p = await propose("canonical_note", {
+      canonicalPath: "notes/redis-canonical.md",
+      content: "# Redis (canonical)\n\nauthoritative",
+      supersedes: ["notes/old-a.md", "notes/old-b.md"],
+    });
+
+    const result = await resolve(p.id, "approve");
+
+    expect(result).toMatchObject({ resolved: true, type: "canonical_note", status: "applied" });
+    expect(await read("notes/redis-canonical.md")).toContain("authoritative");
+    // Directed supersedes stamped into each source's frontmatter, body preserved.
+    expect(matter(await read("notes/old-a.md")).data.superseded_by).toBe("notes/redis-canonical.md");
+    const b = matter(await read("notes/old-b.md"));
+    expect(b.data).toMatchObject({ title: "Old B", superseded_by: "notes/redis-canonical.md" });
+  });
+
+  it("skips a missing supersedes source but still writes the canonical note", async () => {
+    const p = await propose("canonical_note", {
+      canonicalPath: "notes/c.md",
+      content: "# C",
+      supersedes: ["notes/ghost.md"],
+    });
+    const result = await resolve(p.id, "approve");
+    expect(result.status).toBe("applied");
+    expect(await read("notes/c.md")).toBe("# C");
+  });
+
+  it("refuses a canonical_note whose path escapes the vault", async () => {
+    const p = await propose("canonical_note", { canonicalPath: "../evil.md", content: "x", supersedes: [] });
+    expect(await resolve(p.id, "approve")).toMatchObject({ resolved: false, reason: "unsafe_path" });
   });
 
   it("refuses an edit proposal whose path escapes the vault and writes nothing outside", async () => {

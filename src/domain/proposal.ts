@@ -7,9 +7,8 @@ import { z } from "zod";
  * just what was proposed but how it was resolved (approval/rejection + note).
  *
  * Covers every action that has an executor: the maintenance actions
- * (edit / move / archive / merge) plus the knowledge-entry actions
- * (capture / structure / view_promotion). `canonical_note` is the remaining
- * roadmap type still to be added.
+ * (edit / move / archive / merge), the knowledge-entry actions
+ * (capture / structure / view_promotion), and canonicalization (canonical_note).
  */
 export const ProposalTypeSchema = z.enum([
   "edit",
@@ -19,6 +18,7 @@ export const ProposalTypeSchema = z.enum([
   "capture",
   "structure",
   "view_promotion",
+  "canonical_note",
 ]);
 export type ProposalType = z.infer<typeof ProposalTypeSchema>;
 
@@ -59,6 +59,15 @@ export const ViewPromotionPayloadSchema = z.object({
   targetPath: z.string().min(1),
   content: z.string().min(1),
 });
+/**
+ * Create/update the canonical note for a concept and mark the notes it replaces
+ * as superseded (a directed link stamped into their frontmatter).
+ */
+export const CanonicalNotePayloadSchema = z.object({
+  canonicalPath: z.string().min(1),
+  content: z.string().min(1),
+  supersedes: z.array(z.string()).default([]),
+});
 
 /** Per-type payload validators, used when assembling a proposal from raw input. */
 export const PAYLOAD_SCHEMAS = {
@@ -69,6 +78,7 @@ export const PAYLOAD_SCHEMAS = {
   capture: CapturePayloadSchema,
   structure: StructurePayloadSchema,
   view_promotion: ViewPromotionPayloadSchema,
+  canonical_note: CanonicalNotePayloadSchema,
 } as const satisfies Record<ProposalType, z.ZodTypeAny>;
 
 const baseFields = {
@@ -90,6 +100,7 @@ export const ProposalSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("capture"), payload: CapturePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("structure"), payload: StructurePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("view_promotion"), payload: ViewPromotionPayloadSchema, ...baseFields }),
+  z.object({ type: z.literal("canonical_note"), payload: CanonicalNotePayloadSchema, ...baseFields }),
 ]);
 export type Proposal = z.infer<typeof ProposalSchema>;
 
@@ -121,6 +132,8 @@ export function deriveTargetFiles(input: ProposalAction): string[] {
       return [input.payload.directory];
     case "view_promotion":
       return [input.payload.sourceViewPath, input.payload.targetPath];
+    case "canonical_note":
+      return [input.payload.canonicalPath, ...input.payload.supersedes];
   }
 }
 

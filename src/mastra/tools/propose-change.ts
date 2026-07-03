@@ -30,6 +30,12 @@ function buildPayload(type: ProposalType, input: Record<string, unknown>): unkno
         targetPath: input.targetPath,
         content: input.content,
       };
+    case "canonical_note":
+      return {
+        canonicalPath: input.canonicalPath,
+        content: input.content,
+        supersedes: input.supersedes ?? [],
+      };
   }
 }
 
@@ -46,6 +52,8 @@ export const proposeChangeTool = createTool({
     "- capture: content (the synthesized note) + optional topic (directory hint)\n" +
     "- structure: directory + add and/or remove (classification keywords)\n" +
     "- view_promotion: sourceViewPath (.agent/views/...) + targetPath + content (the note to write)\n" +
+    "- canonical_note: canonicalPath + content (the canonical note) + supersedes (older notes it replaces; each is " +
+    "stamped with a superseded_by link)\n" +
     "Always give a clear title and rationale.",
   inputSchema: z.object({
     type: ProposalTypeSchema,
@@ -56,7 +64,7 @@ export const proposeChangeTool = createTool({
     from: z.string().optional().describe("move/archive: current path"),
     to: z.string().optional().describe("move: target path"),
     sourcePath: z.string().optional().describe("merge: duplicate to absorb"),
-    canonicalPath: z.string().optional().describe("merge: note to keep"),
+    canonicalPath: z.string().optional().describe("merge/canonical_note: the note to keep/canonicalize"),
     canonicalContent: z.string().optional().describe("merge: full merged content"),
     content: z.string().optional().describe("capture/view_promotion: the note content to write"),
     topic: z.string().optional().describe("capture: directory hint, e.g. 'reflections/'"),
@@ -65,6 +73,10 @@ export const proposeChangeTool = createTool({
     remove: z.array(z.string()).optional().describe("structure: keywords to remove"),
     sourceViewPath: z.string().optional().describe("view_promotion: source .agent/views path"),
     targetPath: z.string().optional().describe("view_promotion: target vault note path"),
+    supersedes: z
+      .array(z.string())
+      .optional()
+      .describe("canonical_note: older note paths this canonical note replaces"),
   }),
   outputSchema: z.object({
     proposalId: z.string(),

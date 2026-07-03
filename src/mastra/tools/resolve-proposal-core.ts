@@ -8,6 +8,7 @@ import { writeVaultNote } from "./ingest-core.js";
 import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
+import { setFrontmatterKey } from "../../vault/frontmatter.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
@@ -119,6 +120,48 @@ async function executeProposal(
         detail: `promoted ${sourceViewPath} → ${targetPath}`,
       });
       return { ok: true, affected: [targetPath] };
+    }
+    case "canonical_note": {
+      const { canonicalPath, content, supersedes } = proposal.payload;
+      const canonicalAbs = safeVaultPath(VAULT_PATH, canonicalPath);
+      if (!canonicalAbs) return { ok: false, reason: "unsafe_path" };
+      for (const source of supersedes) {
+        if (!safeVaultPath(VAULT_PATH, source)) return { ok: false, reason: "unsafe_path" };
+      }
+
+      // Write/update the canonical note.
+      await fs.mkdir(path.dirname(canonicalAbs), { recursive: true });
+      await fs.writeFile(canonicalAbs, content, "utf8");
+      if (canonicalPath.endsWith(".md")) await reindexFile(canonicalPath);
+
+      // Stamp a directed `superseded_by` link into each source that still exists
+      // (human-visible, and survives semantic refreshes). Missing ones are skipped.
+      const stamped: string[] = [];
+      for (const source of supersedes) {
+        if (source === canonicalPath) continue;
+        const sourceAbs = safeVaultPath(VAULT_PATH, source);
+        if (!sourceAbs) continue;
+        let sourceContent: string;
+        try {
+          sourceContent = await fs.readFile(sourceAbs, "utf8");
+        } catch {
+          continue;
+        }
+        await fs.writeFile(sourceAbs, setFrontmatterKey(sourceContent, "superseded_by", canonicalPath), "utf8");
+        if (source.endsWith(".md")) await reindexFile(source);
+        stamped.push(source);
+      }
+
+      await recordOperation({
+        type: "canonical",
+        targetFiles: [canonicalPath, ...stamped],
+        rationale: proposal.title,
+        source: "resolveProposal",
+        detail: stamped.length
+          ? `canonical ${canonicalPath}; supersedes ${stamped.join(", ")}`
+          : `canonical ${canonicalPath}`,
+      });
+      return { ok: true, affected: [canonicalPath, ...stamped] };
     }
   }
 }

@@ -45,6 +45,12 @@ describe("deriveTargetFiles", () => {
         payload: { sourceViewPath: ".agent/views/x.md", targetPath: "notes/x.md", content: "c" },
       }),
     ).toEqual([".agent/views/x.md", "notes/x.md"]);
+    expect(
+      deriveTargetFiles({
+        type: "canonical_note",
+        payload: { canonicalPath: "notes/c.md", content: "c", supersedes: ["a.md", "b.md"] },
+      }),
+    ).toEqual(["notes/c.md", "a.md", "b.md"]);
   });
 });
 
