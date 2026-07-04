@@ -84,11 +84,30 @@ Configuration is via environment variables (a `.env` is loaded):
 | `APOTHECARY_SEMANTIC_SYNC_DEBOUNCE_MS` | Watcher → semantic-sync debounce | `8000` |
 | `APOTHECARY_DESKTOP_WATCH` | Set to `0` to skip the desktop's vault watcher (use when running `desktop:dev` next to `mastra dev` so a single watcher owns change detection) | on |
 
+The desktop **系统状态** page verifies DeepSeek, the embedding endpoint, and
+local vault permissions. It reports configuration and authentication failures
+without exposing API keys to the renderer.
+
 The vault-local `.agent/config.yaml` controls scan-ignore patterns, hash behaviour, recent-file limits, map size limits, and deterministic review thresholds.
+
+On first desktop launch, Apothecary uses the configured vault, a previously
+selected vault, or asks you to choose a folder. Use **药柜 → 选择其他药柜…**
+to switch later; the app restarts so the entire agent runtime uses the new path.
 
 ## Running
 
-The agent is developed and driven through **Mastra Studio**:
+The Electron desktop app is the v1.1 product entrance. It provides the unified
+agent conversation, changed-file queue, inbox triage, proposal review, and
+knowledge-profile views without requiring Mastra Studio:
+
+```bash
+pnpm run desktop:dev   # Vite HMR + main/preload watch + Electron auto-restart
+pnpm run desktop:dev:once # one build + one Electron launch (smoke/CI)
+pnpm run desktop:pack  # create release/mac-arm64/Apothecary.app
+pnpm run desktop:dist  # create distributable macOS artifacts
+```
+
+Mastra Studio remains available as a development and debugging surface:
 
 ```bash
 pnpm run dev     # Mastra Studio (agents, tools, workflows)
