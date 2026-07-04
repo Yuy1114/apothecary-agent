@@ -1,6 +1,18 @@
 import { z } from "zod";
 
-export const VaultLayerSchema = z.enum(["inbox", "raw", "wiki", "outputs", "archive", "agent", "unknown"]);
+export const VaultLayerSchema = z.enum([
+  "inbox",
+  "journal",
+  "notes",
+  "projects",
+  "areas",
+  "resources",
+  "records",
+  "media",
+  "archive",
+  "agent",
+  "unknown",
+]);
 export type VaultLayer = z.infer<typeof VaultLayerSchema>;
 
 export const VaultFileMediaTypeSchema = z.enum(["markdown", "pdf", "image", "text", "other"]);

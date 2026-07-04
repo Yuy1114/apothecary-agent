@@ -10,6 +10,7 @@ import type { FileSummary } from "../../domain/semantic.js";
 const dirs: string[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -17,6 +18,9 @@ async function freshVault(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "apothecary-semsync-test-"));
   dirs.push(dir);
   await mkdir(path.join(dir, "notes"), { recursive: true });
+  // Vault content lives in `dir`; keep the agent home there too so the semantic
+  // layer written by production lands where the test reads it back.
+  vi.stubEnv("APOTHECARY_HOME", dir);
   return dir;
 }
 

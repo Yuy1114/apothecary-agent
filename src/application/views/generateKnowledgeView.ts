@@ -2,12 +2,13 @@ import { knowledgeViewWriter } from "../../mastra/agents/knowledge-view-writer.j
 import { KnowledgeViewDraftSchema, assembleViewFiles, type KnowledgeView } from "../../domain/knowledgeView.js";
 import { loadGraph, loadSummaries } from "../../vault/semanticStore.js";
 import { queryVault } from "../../mastra/tools/rag.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 const MAX_FILES = 25;
 
 export async function generateKnowledgeView(topic: string): Promise<KnowledgeView> {
-  const [graph, summaries] = await Promise.all([loadGraph(VAULT_PATH), loadSummaries(VAULT_PATH)]);
+  const home = apothecaryHome();
+  const [graph, summaries] = await Promise.all([loadGraph(home), loadSummaries(home)]);
 
   // Graph match, plus a RAG fallback so a fragmented graph doesn't miss files.
   const fromGraph = assembleViewFiles(graph, topic);

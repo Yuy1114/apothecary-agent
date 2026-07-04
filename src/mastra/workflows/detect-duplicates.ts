@@ -14,6 +14,7 @@ import { classifyDuplicate } from "../../application/duplicates/classifyDuplicat
 import { refreshRelations } from "../../application/semantic/refreshRelations.js";
 import { renderDuplicateReportMarkdown } from "../../reports/renderDuplicateReportMarkdown.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 const CONCURRENCY = Number(process.env.APOTHECARY_SEMANTIC_CONCURRENCY ?? 8);
 const PER_ITEM_TIMEOUT_MS = Number(process.env.APOTHECARY_SEMANTIC_TIMEOUT_MS ?? 90_000);
@@ -43,8 +44,10 @@ const detectStep = createStep({
   inputSchema: z.object({ vaultPath: z.string(), minSharedConcepts: z.number().optional() }),
   outputSchema: OutputSchema,
   execute: async ({ inputData }) => {
-    const { vaultPath } = inputData;
-    const [graph, summaries] = await Promise.all([loadGraph(vaultPath), loadSummaries(vaultPath)]);
+    // Duplicate detection reads/writes the semantic layer in the global agent
+    // home; the vault is only validated (resolveVaultStep), not read here.
+    const home = apothecaryHome();
+    const [graph, summaries] = await Promise.all([loadGraph(home), loadSummaries(home)]);
 
     if (graph.concepts.length === 0) {
       throw new Error("Semantic graph is empty. Run the refresh-semantics workflow first.");
@@ -80,7 +83,7 @@ const detectStep = createStep({
     const failed = outcomes.length - clusters.length;
 
     const report: DuplicateReport = { generatedAt: new Date().toISOString(), clusters };
-    const artifacts = await ensureAgentArtifacts(vaultPath);
+    const artifacts = await ensureAgentArtifacts();
     await fs.writeFile(
       path.join(artifacts.semanticDir, "duplicate-clusters.json"),
       JSON.stringify(report, null, 2),
@@ -93,7 +96,7 @@ const detectStep = createStep({
     );
 
     // Fold the fresh classifications into the typed relation layer.
-    await refreshRelations(vaultPath, graph);
+    await refreshRelations(home, graph);
 
     const count = (c: DuplicateCluster["classification"]) =>
       clusters.filter((cluster) => cluster.classification === c).length;

@@ -17,6 +17,7 @@ import { buildSemanticGraph } from "../../domain/semanticGraph.js";
 import { refreshRelations } from "../../application/semantic/refreshRelations.js";
 import { generateFileSummary } from "../../application/semantic/generateFileSummary.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 const OutputSchema = z.object({
   refreshed: z.number(),
@@ -63,9 +64,12 @@ const refreshStep = createStep({
   outputSchema: OutputSchema,
   execute: async ({ inputData }) => {
     const { vaultPath, scan } = inputData;
+    // Vault content is scanned from `vaultPath`; the semantic layer it produces
+    // is persisted to the global agent home, not inside the vault.
+    const home = apothecaryHome();
     const markdown = scan.files.filter((file) => file.mediaType === "markdown");
 
-    let summaries = await loadSummaries(vaultPath);
+    let summaries = await loadSummaries(home);
 
     const toProcess = markdown.filter((file) => needsRefresh(summaries, file.path, file.hash ?? ""));
     const skipped = markdown.length - toProcess.length;
@@ -101,12 +105,12 @@ const refreshStep = createStep({
     }
 
     const pruneResult = pruneMissing(summaries, markdown.map((file) => file.path));
-    await saveSummaries(vaultPath, pruneResult.summaries);
+    await saveSummaries(home, pruneResult.summaries);
 
     // Rebuild the derived semantic graph from the final summaries (deterministic, cheap).
     const graph = buildSemanticGraph(pruneResult.summaries);
-    await saveGraph(vaultPath, graph);
-    await refreshRelations(vaultPath, graph);
+    await saveGraph(home, graph);
+    await refreshRelations(home, graph);
 
     return {
       refreshed,

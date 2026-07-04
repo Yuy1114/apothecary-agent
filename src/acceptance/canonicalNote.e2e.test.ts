@@ -49,6 +49,7 @@ beforeEach(async () => {
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   reindexFile.mockClear();
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
 });
 

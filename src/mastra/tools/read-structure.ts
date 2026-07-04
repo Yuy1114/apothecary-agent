@@ -5,7 +5,7 @@ import { loadStructure } from "./vault-structure.js";
 export const readStructureTool = createTool({
   id: "readStructure",
   description:
-    "Read the vault's directory layout from .agent/structure.yaml. Each directory has a description and optional keywords. " +
+    "Read the vault's directory layout from the agent's structure config. Each directory has a description and optional keywords. " +
     "Use this before classifying or moving files so placement follows the configured structure.",
   inputSchema: z.object({}),
   outputSchema: z.object({

@@ -12,6 +12,7 @@ import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { KnowledgeProfileSchema } from "../../domain/knowledgeProfile.js";
 import { loadProfileRefreshState } from "../../vault/profileState.js";
 import { loadCanonicalCandidates, loadRelations } from "../../vault/semanticStore.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
@@ -118,9 +119,9 @@ export class DesktopService {
   async dashboard() {
     const [changes, proposals, operations, profileState] = await Promise.all([
       listPendingChanges(),
-      listProposals(this.vaultPath),
+      listProposals(apothecaryHome()),
       listOperations({ limit: 8 }),
-      loadProfileRefreshState(this.vaultPath),
+      loadProfileRefreshState(apothecaryHome()),
     ]);
     return {
       vaultPath: this.vaultPath,
@@ -176,7 +177,7 @@ export class DesktopService {
   }
 
   proposals(status?: "proposed" | "applied" | "rejected") {
-    return listProposals(this.vaultPath, status ? { status } : {});
+    return listProposals(apothecaryHome(), status ? { status } : {});
   }
 
   resolveProposal(id: string, decision: "approve" | "reject", note?: string) {
@@ -205,11 +206,11 @@ export class DesktopService {
   }
 
   async knowledge() {
-    const artifacts = getAgentArtifacts(this.vaultPath);
+    const artifacts = getAgentArtifacts();
     const [profileState, relations, candidates, superseded] = await Promise.all([
-      loadProfileRefreshState(this.vaultPath),
-      loadRelations(this.vaultPath),
-      loadCanonicalCandidates(this.vaultPath),
+      loadProfileRefreshState(apothecaryHome()),
+      loadRelations(apothecaryHome()),
+      loadCanonicalCandidates(apothecaryHome()),
       detectSupersededNotes(this.vaultPath),
     ]);
     let profile: unknown = null;

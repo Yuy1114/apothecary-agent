@@ -1,6 +1,7 @@
 import type { ProcessInputArgs, ProcessInputResult, Processor } from "@mastra/core/processors";
 import { queryVault } from "../tools/rag.js";
 import { loadSummaries } from "../../vault/semanticStore.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 import type { FileSummaries } from "../../domain/semantic.js";
 
 type VaultSemanticRecallOptions = {
@@ -8,7 +9,6 @@ type VaultSemanticRecallOptions = {
 };
 
 const DEFAULT_TOP_K = 5;
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
 export class VaultSemanticRecallProcessor implements Processor<"vault-semantic-recall"> {
   readonly id = "vault-semantic-recall" as const;
@@ -30,7 +30,7 @@ export class VaultSemanticRecallProcessor implements Processor<"vault-semantic-r
 
     // Expand each retrieved excerpt with its file's semantic summary so the
     // model sees what the whole source is about, not just the matched chunk.
-    const summaries = await loadSummaries(VAULT_PATH);
+    const summaries = await loadSummaries(apothecaryHome());
 
     messageList.addSystem(formatRecallContext(results, summaries), this.id);
     return messageList;

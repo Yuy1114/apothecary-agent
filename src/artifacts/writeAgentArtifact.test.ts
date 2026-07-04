@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentArtifacts } from "./agentArtifacts.types.js";
+import { getAgentArtifacts } from "./agentArtifacts.js";
 import { appendTextArtifact, writeJsonArtifact, writeMarkdownArtifact, writeTextArtifactIfMissing } from "./writeAgentArtifact.js";
 
 const tempDirs: string[] = [];
@@ -57,20 +58,5 @@ describe("writeAgentArtifact", () => {
 async function createTempArtifacts(): Promise<AgentArtifacts> {
   const root = await mkdtemp(path.join(tmpdir(), "apothecary-agent-test-"));
   tempDirs.push(root);
-  const agentRoot = path.join(root, ".agent");
-
-  return {
-    rootPath: agentRoot,
-    configPath: path.join(agentRoot, "config.yaml"),
-    protocolDir: path.join(agentRoot, "protocol"),
-    protocolPath: path.join(agentRoot, "protocol", "kb_protocol.md"),
-    protocolYamlPath: path.join(agentRoot, "protocol", "kb_protocol.yaml"),
-    mapsDir: path.join(agentRoot, "maps"),
-    reviewsDir: path.join(agentRoot, "reviews"),
-    metadataDir: path.join(agentRoot, "metadata"),
-    logsDir: path.join(agentRoot, "logs"),
-    semanticDir: path.join(agentRoot, "semantic"),
-    viewsDir: path.join(agentRoot, "views"),
-    profileDir: path.join(agentRoot, "profile"),
-  };
+  return getAgentArtifacts(path.join(root, ".agent"));
 }

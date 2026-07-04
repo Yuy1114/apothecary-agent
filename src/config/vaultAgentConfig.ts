@@ -32,8 +32,9 @@ export const defaultVaultAgentConfig: ApothecaryConfig = {
 export const defaultVaultAgentConfigYaml = stringify(defaultVaultAgentConfig);
 
 export async function loadVaultAgentConfig(artifacts: AgentArtifacts): Promise<ApothecaryConfig> {
+  // Technical runtime config lives in engine.yaml; config.yaml is the human charter.
   const raw = await fs
-    .readFile(artifacts.configPath, "utf8")
+    .readFile(artifacts.enginePath, "utf8")
     .catch((error: unknown) => {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
         return undefined;

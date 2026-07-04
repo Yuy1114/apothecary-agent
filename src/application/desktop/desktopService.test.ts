@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ const dirs: string[] = [];
 afterEach(async () => {
   setChangeLogClient(null);
   setOperationLedgerClient(null);
+  vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -19,6 +20,7 @@ async function setup() {
   dirs.push(root);
   const vaultPath = path.join(root, "vault");
   const projectRoot = path.join(root, "project");
+  vi.stubEnv("APOTHECARY_HOME", vaultPath);
   await mkdir(path.join(vaultPath, "inbox"), { recursive: true });
   await writeFile(path.join(vaultPath, "inbox", "idea.txt"), "Redis idea", "utf8");
   const service = new DesktopService({

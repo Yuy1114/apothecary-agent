@@ -20,6 +20,7 @@ beforeEach(async () => {
   await writeFile(abs("notes/redis.md"), "# Redis\n\ncurrent", "utf8");
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
 });
 

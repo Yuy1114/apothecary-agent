@@ -10,6 +10,8 @@ import { recordOperation } from "../../vault/operationLedger.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { setFrontmatterKey } from "../../vault/frontmatter.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
+import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
 import { syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
@@ -108,10 +110,13 @@ async function executeProposal(
       if (targetPath.replaceAll("\\", "/").startsWith(".agent/")) {
         return { ok: false, reason: "invalid_promotion_target" };
       }
-      const sourceAbs = safeVaultPath(VAULT_PATH, sourceViewPath);
+      // Generated views live in the global agent home (~/.apothecary/views), so
+      // the source view is resolved there; the promotion target is a vault note.
+      const artifacts = getAgentArtifacts();
+      const sourceAbs = path.resolve(artifacts.rootPath, sourceViewPath);
       const abs = safeVaultPath(VAULT_PATH, targetPath);
-      if (!sourceAbs || !abs) return { ok: false, reason: "unsafe_path" };
-      const viewsRoot = path.resolve(VAULT_PATH, ".agent", "views");
+      if (!abs) return { ok: false, reason: "unsafe_path" };
+      const viewsRoot = artifacts.viewsDir;
       const sourceWithinViews = path.relative(viewsRoot, sourceAbs);
       if (
         sourceWithinViews === "" ||
@@ -199,7 +204,7 @@ export async function resolveProposalById(
   note?: string,
   deps: { postApplyRefresh: PostApplyRefresh } = { postApplyRefresh: defaultPostApplyRefresh },
 ): Promise<ResolveProposalResult> {
-  const proposal = await loadProposal(VAULT_PATH, id);
+  const proposal = await loadProposal(apothecaryHome(), id);
   if (!proposal) return { resolved: false, proposalId: id, reason: "not_found" };
   if (proposal.status !== "proposed") {
     return { resolved: false, proposalId: id, type: proposal.type, status: proposal.status, reason: "not_pending" };
@@ -207,7 +212,7 @@ export async function resolveProposalById(
 
   if (decision === "reject") {
     const rejected = resolveProposalRecord(proposal, "rejected", note, nowIso());
-    await saveProposal(VAULT_PATH, rejected);
+    await saveProposal(apothecaryHome(), rejected);
     return { resolved: true, proposalId: id, type: proposal.type, status: "rejected" };
   }
 
@@ -240,7 +245,7 @@ export async function resolveProposalById(
   }
 
   const applied = resolveProposalRecord(proposal, "applied", note, nowIso());
-  await saveProposal(VAULT_PATH, applied);
+  await saveProposal(apothecaryHome(), applied);
   return { resolved: true, proposalId: id, type: proposal.type, status: "applied" };
 }
 
@@ -248,5 +253,5 @@ export async function resolveProposalById(
 export function listProposalRecords(
   filter: Parameters<typeof listProposals>[1] = {},
 ): Promise<Proposal[]> {
-  return listProposals(VAULT_PATH, filter);
+  return listProposals(apothecaryHome(), filter);
 }

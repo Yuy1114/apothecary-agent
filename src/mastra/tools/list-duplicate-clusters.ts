@@ -5,8 +5,6 @@ import path from "node:path";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { DuplicateReportSchema, DuplicateClassificationSchema } from "../../domain/duplicateDetection.js";
 
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-
 export const listDuplicateClustersTool = createTool({
   id: "listDuplicateClusters",
   description:
@@ -30,7 +28,7 @@ export const listDuplicateClustersTool = createTool({
     ),
   }),
   execute: async ({ classification }) => {
-    const reportPath = path.join(getAgentArtifacts(VAULT_PATH).semanticDir, "duplicate-clusters.json");
+    const reportPath = path.join(getAgentArtifacts().semanticDir, "duplicate-clusters.json");
     let report;
     try {
       report = DuplicateReportSchema.parse(JSON.parse(await fs.readFile(reportPath, "utf8")));

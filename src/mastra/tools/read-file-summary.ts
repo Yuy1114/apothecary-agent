@@ -1,8 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { loadSummaries } from "../../vault/semanticStore.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export const readFileSummaryTool = createTool({
   id: "readFileSummary",
@@ -23,7 +22,7 @@ export const readFileSummaryTool = createTool({
     generatedAt: z.string().optional(),
   }),
   execute: async ({ filePath }) => {
-    const summaries = await loadSummaries(VAULT_PATH);
+    const summaries = await loadSummaries(apothecaryHome());
     const entry = summaries[filePath];
     if (!entry) return { found: false, filePath };
     return {

@@ -15,6 +15,7 @@ import { generateFileSummary } from "./generateFileSummary.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
 import { planSemanticSync, type ChangedFileState } from "./planSemanticSync.js";
 import type { FileSummary } from "../../domain/semantic.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 const CONCURRENCY = Number(process.env.APOTHECARY_SEMANTIC_CONCURRENCY ?? 8);
 const PER_FILE_TIMEOUT_MS = Number(process.env.APOTHECARY_SEMANTIC_TIMEOUT_MS ?? 90_000);
@@ -121,7 +122,9 @@ export async function syncSemanticsForPaths(
   );
   const byPath = new Map(gathered.map((g) => [g.state.path, g]));
 
-  let summaries = await loadSummaries(input.vaultPath);
+  // Files are read from the vault; the semantic layer lives in the agent home.
+  const home = apothecaryHome();
+  let summaries = await loadSummaries(home);
   const plan = planSemanticSync(
     gathered.map((g) => g.state),
     summaries,
@@ -167,9 +170,9 @@ export async function syncSemanticsForPaths(
 
   // Only persist when the layer actually changed; unchanged passes stay read-only.
   if (refreshed > 0 || plan.toPrune.length > 0) {
-    await saveSummaries(input.vaultPath, summaries);
-    await saveGraph(input.vaultPath, graph);
-    await refreshRelations(input.vaultPath, graph);
+    await saveSummaries(home, summaries);
+    await saveGraph(home, graph);
+    await refreshRelations(home, graph);
   }
 
   return {

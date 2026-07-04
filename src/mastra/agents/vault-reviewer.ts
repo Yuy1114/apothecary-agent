@@ -27,10 +27,10 @@ export const vaultReviewer = new Agent({
     "Use queryVault to search for more content, scanVault to explore, and readMarkdown to inspect files. " +
     "Use readFileSummary to get a file's semantic summary (gist, topics, concepts) without reading the whole file. " +
     "Use listSemanticTopics for a birds-eye view of the vault's topics/concepts, and findRelatedFiles to find notes related to a given file. " +
-    "When the user asks for an overview or knowledge system of some direction/subject, use generateKnowledgeView to build a structured view (written to .agent/views/). " +
+    "When the user asks for an overview or knowledge system of some direction/subject, use generateKnowledgeView to build a structured view (stored in the agent's private workspace). " +
     "Every change to the vault goes through the unified proposal flow — never write a note directly:\n" +
     "- To save a durable insight (a decision, principle, learning conclusion, or job-evidence point), synthesize clean standalone note content and call proposeChange type 'capture' (content + a topic hint). Do not capture trivial or transient chatter.\n" +
-    "- To turn a generated view into a permanent vault note, call proposeChange type 'view_promotion' (sourceViewPath = the .agent/views file, targetPath, content).\n" +
+    "- To turn a generated view into a permanent vault note, call proposeChange type 'view_promotion' (sourceViewPath = the view path returned by generateKnowledgeView, targetPath, content).\n" +
     "proposeChange only records a reviewable proposal; then apply it with resolveProposal ('approve' has a built-in approval step that shows the change and writes it, 'reject' discards it) — that approval step IS the confirmation, so do not also ask in prose. Use listChangeProposals to show what is pending. " +
     "Answer in Chinese when the user writes Chinese. Be concise. Always cite which files support your answer.",
   model: "deepseek/deepseek-v4-flash",

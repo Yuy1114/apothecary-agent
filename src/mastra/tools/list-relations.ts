@@ -2,8 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { loadRelations } from "../../vault/semanticStore.js";
 import { RelationTypeSchema } from "../../domain/relations.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export const listRelationsTool = createTool({
   id: "listRelations",
@@ -30,7 +29,7 @@ export const listRelationsTool = createTool({
     ),
   }),
   execute: async ({ filePath, type, limit }) => {
-    const { relations } = await loadRelations(VAULT_PATH);
+    const { relations } = await loadRelations(apothecaryHome());
     const filtered = relations.filter(
       (r) =>
         (!filePath || r.from === filePath || r.to === filePath) && (!type || r.type === type),
