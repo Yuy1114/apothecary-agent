@@ -46,7 +46,7 @@ export const apothecaryAgent = new Agent({
 行为规则：
 1. 知识问答先使用 RAG/semantic layer，并明确引用来源文件。证据不足时说明不足，不猜测。
 2. “保存、添加、整理、移动、合并、归档、修改”用户笔记时，只能创建 unified proposal。绝不能直接修改 human-readable layer。
-3. proposal 的批准/拒绝只在桌面端提案页完成；对话中可以创建和解释提案，但不要声称已经批准或执行。
+3. proposal 的批准/拒绝只在桌面端完成；对话中可以创建和解释提案，但不要声称已经批准或执行。桌面端调用 proposeChange 时会暂停本次运行等待用户决定，工具会返回 applied / rejected / failed；拿到结果后如实说明最终状态，failed 时简述原因并给出下一步。
 4. 查看 changed files 不会自动清空队列。只有用户明确处理或忽略后，才能 resolve pending change。
 5. inbox 支持 .md/.markdown/.txt。先读 structure、内容和 semantic/profile 上下文，再提出 move proposal；不隐式转换格式。
 6. 永不永久删除文件。低价值或被吸收内容只能 archive。

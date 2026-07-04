@@ -82,15 +82,51 @@ export const proposeChangeTool = createTool({
     proposalId: z.string(),
     type: z.string(),
     status: z.string(),
+    targetFiles: z.array(z.string()).optional(),
+    note: z.string().optional(),
+  }),
+  // When a caller (the desktop app) opts in via requestContext, the tool records
+  // the proposal and then suspends the whole agent run until the human approves,
+  // rejects, or the apply fails. The run resumes in-context with the outcome, so
+  // the agent can summarise coherently without a faked follow-up message. Callers
+  // that do not opt in (e.g. Mastra Studio) get the original fire-and-forget
+  // behaviour: record the proposal and return immediately.
+  suspendSchema: z.object({
+    proposalId: z.string(),
+    title: z.string(),
+    type: z.string(),
     targetFiles: z.array(z.string()),
   }),
-  execute: async ({ type, title, rationale, ...fields }) => {
+  resumeSchema: z.object({
+    proposalId: z.string(),
+    decision: z.enum(["applied", "rejected", "failed"]),
+    note: z.string().optional(),
+  }),
+  execute: async ({ type, title, rationale, ...fields }, context) => {
+    // Resumed run: the proposal already exists and the human decision is in.
+    const resumed = context?.agent?.resumeData;
+    if (resumed) {
+      return { proposalId: resumed.proposalId, type, status: resumed.decision, note: resumed.note };
+    }
+
     const proposal = await createProposal(VAULT_PATH, {
       type,
       title,
       rationale,
       payload: buildPayload(type, fields),
     });
+
+    const awaitDecision = Boolean(context?.requestContext?.get("awaitDesktopDecision"));
+    const suspend = context?.agent?.suspend;
+    if (awaitDecision && suspend) {
+      await suspend({
+        proposalId: proposal.id,
+        title: proposal.title,
+        type: proposal.type,
+        targetFiles: proposal.targetFiles,
+      });
+    }
+
     return {
       proposalId: proposal.id,
       type: proposal.type,
