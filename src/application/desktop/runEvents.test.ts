@@ -17,6 +17,29 @@ describe("desktop Agent Run events", () => {
     })).toEqual({ type: "tool_completed", toolCallId: "call-1", toolName: "scanVault", failed: false });
   });
 
+  it("maps a suspended proposeChange call into an awaiting-decision event", () => {
+    expect(eventFromMastraChunk({
+      type: "tool-call-suspended",
+      payload: {
+        toolCallId: "call-2",
+        toolName: "proposeChange",
+        args: { title: "File Redis idea" },
+        suspendPayload: { proposalId: "p-1", title: "File Redis idea", type: "move", targetFiles: ["references/idea.txt"] },
+      },
+    })).toEqual({
+      type: "awaiting_decision",
+      toolCallId: "call-2",
+      proposal: { proposalId: "p-1", title: "File Redis idea", type: "move", targetFiles: ["references/idea.txt"] },
+    });
+  });
+
+  it("ignores a suspension without a proposal id", () => {
+    expect(eventFromMastraChunk({
+      type: "tool-call-suspended",
+      payload: { toolCallId: "call-3", toolName: "other", suspendPayload: {} },
+    })).toBeNull();
+  });
+
   it("maps stream errors into a renderer-safe failure", () => {
     expect(eventFromMastraChunk({ type: "error", payload: { error: "provider down" } })).toEqual({
       type: "failed",

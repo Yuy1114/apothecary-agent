@@ -62,12 +62,14 @@ describe("DesktopService", () => {
     const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-stream-"));
     dirs.push(root);
     const events: Array<{ type: string }> = [];
+    const seenRunId: string[] = [];
     const service = new DesktopService({
       vaultPath: path.join(root, "vault"),
       projectRoot: path.join(root, "project"),
       deps: {
         chat: async () => "fallback",
-        streamChat: async (_messages, emit) => {
+        streamChat: async (_messages, emit, runId) => {
+          seenRunId.push(runId);
           emit({ type: "tool_started", toolCallId: "one", toolName: "scanVault" });
           emit({ type: "text_delta", text: "完成" });
         },
@@ -75,11 +77,55 @@ describe("DesktopService", () => {
     });
     await service.initialize();
 
-    await service.streamChat([{ role: "user", content: "整理 inbox" }], (event) => events.push(event));
+    await service.streamChat([{ role: "user", content: "整理 inbox" }], (event) => events.push(event), "run-1");
 
+    expect(seenRunId).toEqual(["run-1"]);
     expect(events).toEqual([
       { type: "tool_started", toolCallId: "one", toolName: "scanVault" },
       { type: "text_delta", text: "完成" },
     ]);
+  });
+
+  it("completes the fallback stream when no streamChat dep is provided", async () => {
+    const { service } = await setup();
+    const events: Array<{ type: string }> = [];
+    await service.streamChat([{ role: "user", content: "hi" }], (event) => events.push(event), "run-2");
+    expect(events).toEqual([
+      { type: "text_delta", text: "reply:hi" },
+      { type: "completed" },
+    ]);
+  });
+
+  it("resumes a run with the human decision and injects the outcome", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-resume-"));
+    dirs.push(root);
+    const resumed: Array<{ runId: string; resumeData: unknown }> = [];
+    const service = new DesktopService({
+      vaultPath: path.join(root, "vault"),
+      projectRoot: path.join(root, "project"),
+      deps: {
+        chat: async () => "fallback",
+        resumeRun: async (runId, resumeData, emit) => {
+          resumed.push({ runId, resumeData });
+          emit({ type: "completed" });
+        },
+        cancelRun: (runId) => runId === "run-live",
+      },
+    });
+    await service.initialize();
+
+    // Rejecting an (unknown) proposal still resumes the run so it never stays stuck.
+    const rejectEvents: Array<{ type: string }> = [];
+    await service.resumeRun("run-9", "missing", "reject", (event) => rejectEvents.push(event), "not useful");
+    expect(resumed.at(-1)).toEqual({ runId: "run-9", resumeData: { proposalId: "missing", decision: "rejected", note: "not useful" } });
+    expect(rejectEvents).toEqual([{ type: "completed" }]);
+
+    // Approving a proposal that cannot be applied resumes with a "failed" outcome.
+    const approveResult = await service.resumeRun("run-9", "missing", "approve", () => {});
+    expect(approveResult.resolved).toBe(false);
+    expect(resumed.at(-1)).toMatchObject({ runId: "run-9", resumeData: { proposalId: "missing", decision: "failed" } });
+
+    expect(service.cancelRun("run-live")).toBe(true);
+    expect(service.cancelRun("run-dead")).toBe(false);
   });
 });

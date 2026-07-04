@@ -19,12 +19,26 @@ import type { AgentRunEvent } from "./runEvents.js";
 
 export type DesktopChatMessage = { role: "user" | "assistant"; content: string };
 
+/** Human decision injected back into a suspended `proposeChange` tool call. */
+export type ProposalResumeData = {
+  proposalId: string;
+  decision: "applied" | "rejected" | "failed";
+  note?: string;
+};
+
 export type DesktopServiceDeps = {
   chat: (messages: DesktopChatMessage[]) => Promise<string>;
   streamChat?: (
     messages: DesktopChatMessage[],
     emit: (event: AgentRunEvent) => void,
+    runId: string,
   ) => Promise<void>;
+  resumeRun?: (
+    runId: string,
+    resumeData: ProposalResumeData,
+    emit: (event: AgentRunEvent) => void,
+  ) => Promise<void>;
+  cancelRun?: (runId: string) => boolean;
 };
 
 export class DesktopService {
@@ -54,14 +68,51 @@ export class DesktopService {
     return this.deps.chat(messages.slice(-20));
   }
 
-  streamChat(messages: DesktopChatMessage[], emit: (event: AgentRunEvent) => void): Promise<void> {
+  streamChat(messages: DesktopChatMessage[], emit: (event: AgentRunEvent) => void, runId: string): Promise<void> {
     if (messages.length === 0 || messages.at(-1)?.role !== "user") {
       throw new Error("chat_requires_user_message");
     }
     if (!this.deps.streamChat) {
-      return this.deps.chat(messages.slice(-20)).then((text) => emit({ type: "text_delta", text }));
+      return this.deps
+        .chat(messages.slice(-20))
+        .then((text) => {
+          emit({ type: "text_delta", text });
+          emit({ type: "completed" });
+        });
     }
-    return this.deps.streamChat(messages.slice(-20), emit);
+    return this.deps.streamChat(messages.slice(-20), emit, runId);
+  }
+
+  /**
+   * Apply the human decision to a proposal created during a suspended run, then
+   * resume that run in-context so the agent can continue. Approvals go through the
+   * durable resolveProposal path (path safety, ledger, recovery) before the run
+   * learns the outcome; rejections and apply failures resume too, so the run never
+   * stays stuck. Resuming re-emits the continued agent events onto the same runId.
+   */
+  async resumeRun(
+    runId: string,
+    proposalId: string,
+    decision: "approve" | "reject",
+    emit: (event: AgentRunEvent) => void,
+    note?: string,
+  ): Promise<{ resolved: boolean; reason?: string }> {
+    if (decision === "reject") {
+      const result = await resolveProposalById(proposalId, "reject", note);
+      await this.deps.resumeRun?.(runId, { proposalId, decision: "rejected", note }, emit);
+      return result;
+    }
+
+    const result = await resolveProposalById(proposalId, "approve", note);
+    const resumeData: ProposalResumeData = result.resolved
+      ? { proposalId, decision: "applied", note }
+      : { proposalId, decision: "failed", note: result.reason };
+    await this.deps.resumeRun?.(runId, resumeData, emit);
+    return result;
+  }
+
+  cancelRun(runId: string): boolean {
+    return this.deps.cancelRun?.(runId) ?? false;
   }
 
   async dashboard() {

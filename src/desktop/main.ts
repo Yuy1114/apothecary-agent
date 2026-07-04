@@ -8,7 +8,8 @@ import type {
   DesktopChatMessage,
   DesktopService,
 } from "../application/desktop/desktopService.js";
-import { eventFromMastraChunk } from "../application/desktop/runEvents.js";
+import { RequestContext } from "@mastra/core/request-context";
+import { eventFromMastraChunk, type AgentRunEvent } from "../application/desktop/runEvents.js";
 import { registerDesktopIpc } from "./ipc.js";
 import {
   firstAvailableVaultPath,
@@ -94,6 +95,24 @@ function formatConversation(messages: DesktopChatMessage[]): string {
     .join("\n\n");
 }
 
+/**
+ * Drain an agent stream (first run or a resumed run), mapping Mastra chunks to
+ * desktop run events, then translate the terminal run status into a timeline
+ * signal. A `suspended` run is waiting on a human proposal decision, so it emits
+ * no terminal event — the timeline stays paused until resume.
+ */
+async function pumpAgentStream(
+  output: { fullStream: AsyncIterable<unknown>; status: string },
+  emit: (event: AgentRunEvent) => void,
+): Promise<void> {
+  for await (const chunk of output.fullStream) {
+    const event = eventFromMastraChunk(chunk);
+    if (event) emit(event);
+  }
+  if (output.status === "success") emit({ type: "completed" });
+  else if (output.status === "canceled") emit({ type: "failed", message: "Agent Run 已取消" });
+}
+
 async function createService(): Promise<DesktopService> {
   // Keep the Electron bootstrap light. Loading Mastra and its native storage
   // graph before app.whenReady() can stall packaged applications while Electron
@@ -123,16 +142,22 @@ async function createService(): Promise<DesktopService> {
         });
         return result.text;
       },
-      streamChat: async (messages, emit) => {
+      streamChat: async (messages, emit, runId) => {
         const output = await apothecaryAgent.stream(formatConversation(messages), {
           memory,
           maxSteps: 20,
+          runId,
+          // Opt this run into the proposeChange suspend/resume gate so a proposal
+          // pauses the run for the desktop's approve/reject decision.
+          requestContext: new RequestContext([["awaitDesktopDecision", true]]),
         });
-        for await (const chunk of output.fullStream) {
-          const event = eventFromMastraChunk(chunk);
-          if (event) emit(event);
-        }
+        await pumpAgentStream(output, emit);
       },
+      resumeRun: async (runId, resumeData, emit) => {
+        const output = await apothecaryAgent.resumeStream(resumeData, { runId });
+        await pumpAgentStream(output, emit);
+      },
+      cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),
     },
   });
   await service.initialize();

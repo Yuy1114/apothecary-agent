@@ -1,12 +1,15 @@
 import type { IpcMain } from "electron";
 import type { DesktopService } from "../application/desktop/desktopService.js";
+import type { AgentRunEvent } from "../application/desktop/runEvents.js";
 import {
+  CancelRunInputSchema,
   ChatInputSchema,
   DesktopChannel,
   ListProposalsInputSchema,
   ReadInboxInputSchema,
   ResolveChangesInputSchema,
   ResolveProposalInputSchema,
+  ResumeRunInputSchema,
   StartRunInputSchema,
 } from "./contracts.js";
 
@@ -18,23 +21,34 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   });
   ipcMain.handle(DesktopChannel.startRun, (ipcEvent, input) => {
     const { runId, messages } = StartRunInputSchema.parse(input);
-    const send = (event: unknown) => {
+    const send = (event: AgentRunEvent) => {
       if (!ipcEvent.sender.isDestroyed()) ipcEvent.sender.send(DesktopChannel.runEvent, { runId, event });
     };
-    const before = service.proposals("proposed");
-    void before.then(async (existing) => {
-      const existingIds = new Set(existing.map((proposal) => proposal.id));
+    // Fire-and-forget: terminal state (completed / awaiting_decision / failed) is
+    // emitted from within the stream, so the timeline pauses on suspension rather
+    // than being force-completed by the handler.
+    void (async () => {
       send({ type: "status", phase: "started", label: "Agent Run 已开始" });
       try {
-        await service.streamChat(messages, send);
-        const created = (await service.proposals("proposed")).filter((proposal) => !existingIds.has(proposal.id));
-        for (const proposal of created) send({ type: "proposal", proposal });
-        send({ type: "completed" });
+        await service.streamChat(messages, send, runId);
       } catch (error) {
         send({ type: "failed", message: error instanceof Error ? error.message : "Agent 执行失败" });
       }
-    });
+    })();
     return { runId };
+  });
+  ipcMain.handle(DesktopChannel.resumeRun, (ipcEvent, input) => {
+    const { runId, proposalId, decision, note } = ResumeRunInputSchema.parse(input);
+    const send = (event: AgentRunEvent) => {
+      if (!ipcEvent.sender.isDestroyed()) ipcEvent.sender.send(DesktopChannel.runEvent, { runId, event });
+    };
+    // Applies the decision (approve => resolveProposal) and resumes the run; the
+    // continued agent output streams back over runEvent on the same runId.
+    return service.resumeRun(runId, proposalId, decision, send, note);
+  });
+  ipcMain.handle(DesktopChannel.cancelRun, (_event, input) => {
+    const { runId } = CancelRunInputSchema.parse(input);
+    return { canceled: service.cancelRun(runId) };
   });
   ipcMain.handle(DesktopChannel.changes, () => service.changes());
   ipcMain.handle(DesktopChannel.resolveChanges, (_event, input) => {

@@ -1,9 +1,11 @@
+export type ProposalDecisionState = { proposalId: string; title: string; type: string; targetFiles: string[] };
+
 export type AgentRunEvent =
   | { type: "status"; phase: "started" | "thinking"; label: string }
   | { type: "text_delta"; text: string }
   | { type: "tool_started"; toolCallId: string; toolName: string }
   | { type: "tool_completed"; toolCallId: string; toolName: string; failed: boolean }
-  | { type: "proposal"; proposal: Record<string, unknown> }
+  | { type: "awaiting_decision"; toolCallId: string; proposal: ProposalDecisionState }
   | { type: "completed" }
   | { type: "failed"; message: string };
 
@@ -26,6 +28,21 @@ export function eventFromMastraChunk(chunk: unknown): AgentRunEvent | null {
       toolName: payload.toolName,
       failed: payload.isError === true,
     };
+  }
+  if (type === "tool-call-suspended" && typeof payload.toolCallId === "string") {
+    const suspend = (payload.suspendPayload ?? {}) as Record<string, unknown>;
+    if (typeof suspend.proposalId === "string") {
+      return {
+        type: "awaiting_decision",
+        toolCallId: payload.toolCallId,
+        proposal: {
+          proposalId: suspend.proposalId,
+          title: typeof suspend.title === "string" ? suspend.title : "待确认提案",
+          type: typeof suspend.type === "string" ? suspend.type : "unknown",
+          targetFiles: Array.isArray(suspend.targetFiles) ? (suspend.targetFiles as string[]) : [],
+        },
+      };
+    }
   }
   if (type === "tool-error" && typeof payload.toolCallId === "string") {
     return {

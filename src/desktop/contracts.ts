@@ -13,6 +13,15 @@ export const StartRunInputSchema = ChatInputSchema.extend({
   runId: z.string().uuid(),
 });
 
+export const ResumeRunInputSchema = z.object({
+  runId: z.string().uuid(),
+  proposalId: z.string().min(1),
+  decision: z.enum(["approve", "reject"]),
+  note: z.string().max(2_000).optional(),
+});
+
+export const CancelRunInputSchema = z.object({ runId: z.string().uuid() });
+
 export const ResolveChangesInputSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
   outcome: z.enum(["processed", "dismissed"]),
@@ -34,6 +43,8 @@ export const DesktopChannel = {
   dashboard: "apothecary:dashboard",
   chat: "apothecary:chat",
   startRun: "apothecary:start-run",
+  resumeRun: "apothecary:resume-run",
+  cancelRun: "apothecary:cancel-run",
   runEvent: "apothecary:run-event",
   changes: "apothecary:changes",
   resolveChanges: "apothecary:resolve-changes",
