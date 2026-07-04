@@ -33,6 +33,7 @@ import { detectDuplicatesWorkflow } from "./workflows/detect-duplicates.js";
 import { refreshProfileWorkflow } from "./workflows/refresh-profile.js";
 import { workspace } from "./workspaces.js";
 import { apothecaryMemory } from "./memory.js";
+import { apothecaryDb } from "../config/apothecaryDb.js";
 import path from "path";
 
 function getProjectRoot() {
@@ -51,10 +52,12 @@ function getProjectRoot() {
 
 const projectRoot = getProjectRoot();
 
-const DB_PATH = `file:${path.resolve(projectRoot, "sql/local.db")}`;
-const VECTOR_DB_PATH = `file:${path.resolve(projectRoot, "sql/vectors.db")}`;
-const CHANGE_LOG_DB_PATH = `file:${path.resolve(projectRoot, "sql/change-log.db")}`;
-const OPERATIONS_DB_PATH = `file:${path.resolve(projectRoot, "sql/operations.db")}`;
+// Agent-state DBs live in the global agent home; only dev telemetry
+// (observability.duckdb) stays in the project's sql/.
+const DB_PATH = apothecaryDb.studioStore();
+const VECTOR_DB_PATH = apothecaryDb.vectors();
+const CHANGE_LOG_DB_PATH = apothecaryDb.changeLog();
+const OPERATIONS_DB_PATH = apothecaryDb.operations();
 const OBSERVABILITY_DB_PATH = path.resolve(
   projectRoot,
   "sql/observability.duckdb"

@@ -13,6 +13,7 @@ import { KnowledgeProfileSchema } from "../../domain/knowledgeProfile.js";
 import { loadProfileRefreshState } from "../../vault/profileState.js";
 import { loadCanonicalCandidates, loadRelations } from "../../vault/semanticStore.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
+import { apothecaryDb } from "../../config/apothecaryDb.js";
 import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
@@ -54,11 +55,10 @@ export class DesktopService {
   }
 
   async initialize(): Promise<void> {
-    const sqlDir = path.join(this.projectRoot, "sql");
-    await fs.mkdir(sqlDir, { recursive: true });
+    // Ledgers live in the global agent home (apothecaryDb ensures their dirs).
     await Promise.all([
-      initChangeLog(`file:${path.join(sqlDir, "change-log.db")}`),
-      initOperationLedger(`file:${path.join(sqlDir, "operations.db")}`),
+      initChangeLog(apothecaryDb.changeLog()),
+      initOperationLedger(apothecaryDb.operations()),
     ]);
   }
 

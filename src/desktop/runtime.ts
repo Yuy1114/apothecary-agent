@@ -7,6 +7,7 @@ import { fileChangedWorkflow, fileDeletedWorkflow } from "../mastra/workflows/sy
 import { startVaultWatcher } from "../mastra/workflows/sync-watcher.js";
 import { workspace } from "../mastra/workspaces.js";
 import { apothecaryMemory } from "../mastra/memory.js";
+import { apothecaryDb } from "../config/apothecaryDb.js";
 
 /**
  * Electron gets a small Mastra host rather than importing Studio's full runtime.
@@ -16,7 +17,7 @@ import { apothecaryMemory } from "../mastra/memory.js";
 export function createDesktopRuntime(projectRoot: string) {
   const vectorStore = new LibSQLVector({
     id: "vault-chunks",
-    url: `file:${path.join(projectRoot, "sql", "vectors.db")}`,
+    url: apothecaryDb.vectors(),
   });
   setVectorStore(vectorStore);
 
@@ -25,7 +26,7 @@ export function createDesktopRuntime(projectRoot: string) {
     workflows: { fileChangedWorkflow, fileDeletedWorkflow },
     storage: new LibSQLStore({
       id: "apothecary-desktop-storage",
-      url: `file:${path.join(projectRoot, "sql", "desktop-local.db")}`,
+      url: apothecaryDb.desktopStore(),
     }),
     vectors: { vaultChunks: vectorStore },
     workspace,
