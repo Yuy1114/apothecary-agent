@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
 import { initChangeLog, listPendingChanges, resolveChanges } from "../../vault/changeLog.js";
 import { initOperationLedger, listOperations } from "../../vault/operationLedger.js";
@@ -14,11 +14,17 @@ import { loadProfileRefreshState } from "../../vault/profileState.js";
 import { loadCanonicalCandidates, loadRelations } from "../../vault/semanticStore.js";
 import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
+import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
+import type { AgentRunEvent } from "./runEvents.js";
 
 export type DesktopChatMessage = { role: "user" | "assistant"; content: string };
 
 export type DesktopServiceDeps = {
   chat: (messages: DesktopChatMessage[]) => Promise<string>;
+  streamChat?: (
+    messages: DesktopChatMessage[],
+    emit: (event: AgentRunEvent) => void,
+  ) => Promise<void>;
 };
 
 export class DesktopService {
@@ -46,6 +52,16 @@ export class DesktopService {
       throw new Error("chat_requires_user_message");
     }
     return this.deps.chat(messages.slice(-20));
+  }
+
+  streamChat(messages: DesktopChatMessage[], emit: (event: AgentRunEvent) => void): Promise<void> {
+    if (messages.length === 0 || messages.at(-1)?.role !== "user") {
+      throw new Error("chat_requires_user_message");
+    }
+    if (!this.deps.streamChat) {
+      return this.deps.chat(messages.slice(-20)).then((text) => emit({ type: "text_delta", text }));
+    }
+    return this.deps.streamChat(messages.slice(-20), emit);
   }
 
   async dashboard() {
@@ -118,6 +134,23 @@ export class DesktopService {
 
   operations(limit = 50) {
     return listOperations({ limit });
+  }
+
+  async diagnostics() {
+    const services = await runConnectionDiagnostics();
+    let vaultStatus: "read_write" | "read_only" | "unavailable" = "unavailable";
+    try {
+      await fs.access(this.vaultPath, fsConstants.R_OK | fsConstants.W_OK);
+      vaultStatus = "read_write";
+    } catch {
+      try {
+        await fs.access(this.vaultPath, fsConstants.R_OK);
+        vaultStatus = "read_only";
+      } catch {
+        vaultStatus = "unavailable";
+      }
+    }
+    return { ...services, vault: { path: this.vaultPath, status: vaultStatus } };
   }
 
   async knowledge() {

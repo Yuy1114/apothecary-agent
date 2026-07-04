@@ -57,4 +57,29 @@ describe("DesktopService", () => {
     await expect(service.readInboxFile("inbox/idea.txt")).resolves.toMatchObject({ content: "Redis idea" });
     await expect(service.readInboxFile("../secret.txt")).rejects.toThrow("not_an_inbox_file");
   });
+
+  it("streams Agent Run events through the desktop boundary", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-stream-"));
+    dirs.push(root);
+    const events: Array<{ type: string }> = [];
+    const service = new DesktopService({
+      vaultPath: path.join(root, "vault"),
+      projectRoot: path.join(root, "project"),
+      deps: {
+        chat: async () => "fallback",
+        streamChat: async (_messages, emit) => {
+          emit({ type: "tool_started", toolCallId: "one", toolName: "scanVault" });
+          emit({ type: "text_delta", text: "完成" });
+        },
+      },
+    });
+    await service.initialize();
+
+    await service.streamChat([{ role: "user", content: "整理 inbox" }], (event) => events.push(event));
+
+    expect(events).toEqual([
+      { type: "tool_started", toolCallId: "one", toolName: "scanVault" },
+      { type: "text_delta", text: "完成" },
+    ]);
+  });
 });
