@@ -4,11 +4,11 @@ type View = "chat" | "changes" | "inbox" | "proposals" | "knowledge" | "diagnost
 type Message = { role: "user" | "assistant"; content: string };
 type ProposalStatus = "proposed" | "applied" | "rejected";
 type RunTool = { toolCallId: string; toolName: string; status: "running" | "completed" | "failed" };
-type RunProposal = any & { decision?: "approving" | "applied" | "rejected" | "failed"; decisionDetail?: string };
+type RunProposal = ProposalDecisionState & { decision?: "approving" | "applied" | "rejected" | "failed"; decisionDetail?: string };
 type AgentRun = {
   id: string;
   text: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "awaiting" | "completed" | "failed";
   label: string;
   tools: RunTool[];
   proposals: RunProposal[];
@@ -98,7 +98,7 @@ export function App() {
 function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt }: { dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [input, setInput] = useState("");
-  const busy = timeline.some((item) => item.kind === "run" && item.run.status === "running");
+  const busy = timeline.some((item) => item.kind === "run" && (item.run.status === "running" || item.run.status === "awaiting"));
 
   useEffect(() => api.onRunEvent(({ runId, event }) => {
     setTimeline((items) => items.map((item) => {
@@ -108,8 +108,8 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
       if (event.type === "status") return { ...item, run: { ...run, label: event.label } };
       if (event.type === "tool_started") return { ...item, run: { ...run, label: `正在使用 ${event.toolName}`, tools: [...run.tools, { toolCallId: event.toolCallId, toolName: event.toolName, status: "running" }] } };
       if (event.type === "tool_completed") return { ...item, run: { ...run, tools: run.tools.map((tool) => tool.toolCallId === event.toolCallId ? { ...tool, status: event.failed ? "failed" : "completed" } : tool) } };
-      if (event.type === "proposal") return { ...item, run: { ...run, label: "等待你确认提案", proposals: [...run.proposals, event.proposal] } };
-      if (event.type === "completed") return { ...item, run: { ...run, status: "completed", label: run.proposals.length ? "等待你的决定" : "Agent Run 已完成" } };
+      if (event.type === "awaiting_decision") return { ...item, run: { ...run, status: "awaiting", label: "等待你确认提案", proposals: [...run.proposals, event.proposal] } };
+      if (event.type === "completed") return { ...item, run: { ...run, status: "completed", label: run.proposals.some((proposal) => !proposal.decision) ? "等待你的决定" : "Agent Run 已完成" } };
       if (event.type === "failed") return { ...item, run: { ...run, status: "failed", label: event.message } };
       return item;
     }));
@@ -137,19 +137,22 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
   };
 
   const resolveInlineProposal = async (runId: string, proposal: RunProposal, decision: "approve" | "reject") => {
-    if (decision === "approve" && !window.confirm(`批准提案「${proposal.title}」？`)) return;
+    if (decision === "approve" && !window.confirm(`批准提案「${proposal.title}」并应用？`)) return;
     const note = decision === "reject" ? window.prompt("拒绝原因（可选）") || undefined : undefined;
-    setTimeline((items) => updateRunProposal(items, runId, proposal.id, { decision: "approving" }));
-    const result = await api.resolveProposal(proposal.id, decision, note);
-    if (!result.resolved) {
-      setTimeline((items) => updateRunProposal(items, runId, proposal.id, { decision: "failed", decisionDetail: result.reason }));
-      return;
-    }
-    const finalDecision = decision === "approve" ? "applied" : "rejected";
-    setTimeline((items) => updateRunProposal(items, runId, proposal.id, { decision: finalDecision }));
+    // Mark the proposal in-flight and hand the run back to the agent. resumeRun
+    // applies the decision (approve => file change) and resumes the suspended run;
+    // its continuation streams onto this same timeline bubble via onRunEvent.
+    setTimeline((items) => items.map((item) =>
+      item.kind === "run" && item.run.id === runId
+        ? { ...item, run: { ...item.run, status: "running", label: decision === "approve" ? "正在应用并继续…" : "正在继续…", proposals: item.run.proposals.map((existing) => existing.proposalId === proposal.proposalId ? { ...existing, decision: "approving" } : existing) } }
+        : item));
+    const result = await api.resumeRun(runId, proposal.proposalId, decision, note);
+    const finalDecision = !result.resolved ? "failed" : decision === "approve" ? "applied" : "rejected";
+    setTimeline((items) => updateRunProposal(items, runId, proposal.proposalId, { decision: finalDecision, decisionDetail: result.reason }));
     await refreshDashboard();
-    await send(`系统通知：提案「${proposal.title}」已${decision === "approve" ? "批准并执行" : "拒绝"}。请继续当前任务并简要说明最终状态。`, false);
   };
+
+  const cancelRun = async (runId: string) => { await api.cancelRun(runId); };
 
   const submit = (event: FormEvent) => { event.preventDefault(); void send(input); };
   useEffect(() => {
@@ -161,7 +164,7 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
     <div className="chat-messages"><MessageBubble role="assistant" content="你好。我可以帮你检索知识、处理变更、归位 inbox，或把对话沉淀成可审阅的提案。"/>
       {timeline.map((item) => item.kind === "user"
         ? <MessageBubble key={item.id} role="user" content={item.content}/>
-        : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)}/>)}
+        : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onCancel={() => void cancelRun(item.run.id)}/>)}
     </div>
     <form className="composer" onSubmit={submit}><textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder="问一个问题，或告诉我想添加、整理什么内容…"/>
       <div className="composer-footer"><span>所有真实文件修改都需要提案确认</span><button type="submit" className="primary" disabled={busy}>发送 <span>⌘↵</span></button></div></form>
@@ -173,16 +176,17 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
 
 function updateRunProposal(items: TimelineItem[], runId: string, proposalId: string, patch: Partial<RunProposal>): TimelineItem[] {
   return items.map((item) => item.kind === "run" && item.run.id === runId
-    ? { ...item, run: { ...item.run, proposals: item.run.proposals.map((proposal) => proposal.id === proposalId ? { ...proposal, ...patch } : proposal) } }
+    ? { ...item, run: { ...item.run, proposals: item.run.proposals.map((proposal) => proposal.proposalId === proposalId ? { ...proposal, ...patch } : proposal) } }
     : item);
 }
 
-function AgentRunBubble({ run, onResolve }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void }) {
-  return <div className={`message assistant run-message ${run.status === "running" ? "pending" : ""}`}><div className="avatar">A</div><div className="bubble run-bubble"><strong>APOTHECARY · {run.label}</strong>
+function AgentRunBubble({ run, onResolve, onCancel }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onCancel: () => void }) {
+  return <div className={`message assistant run-message ${run.status === "running" ? "pending" : ""}`}><div className="avatar">A</div><div className="bubble run-bubble"><strong>APOTHECARY · {run.label}
+    {run.status === "running" && <button className="run-cancel" onClick={onCancel} title="取消本次 Agent Run">取消</button>}</strong>
     {run.tools.length > 0 && <div className="run-tools">{run.tools.map((tool) => <div key={tool.toolCallId} className={`run-tool ${tool.status}`}><span>{tool.status === "running" ? "◌" : tool.status === "completed" ? "✓" : "!"}</span><span>{tool.toolName}</span></div>)}</div>}
     {run.text && <p>{run.text}</p>}
-    {run.proposals.map((proposal) => <div className="run-proposal" key={proposal.id}><div><b>{proposal.title}</b><span>{proposal.type} · {proposal.targetFiles?.join(", ") || "待执行时确定"}</span></div><p>{proposal.rationale}</p>
-      {!proposal.decision && <div className="card-actions"><button className="primary" onClick={() => onResolve(proposal, "approve")}>批准并继续</button><button className="danger" onClick={() => onResolve(proposal, "reject")}>拒绝</button></div>}
+    {run.proposals.map((proposal) => <div className="run-proposal" key={proposal.proposalId}><div><b>{proposal.title}</b><span>{proposal.type} · {proposal.targetFiles?.join(", ") || "待执行时确定"}</span></div>
+      {!proposal.decision && <div className="card-actions"><button className="primary" onClick={() => onResolve(proposal, "approve")}>批准并应用</button><button className="danger" onClick={() => onResolve(proposal, "reject")}>拒绝</button></div>}
       {proposal.decision && <span className={`run-decision ${proposal.decision}`}>{proposal.decision === "approving" ? "正在执行…" : proposal.decision === "applied" ? "已批准并应用" : proposal.decision === "rejected" ? "已拒绝" : `执行失败：${proposal.decisionDetail}`}</span>}
     </div>)}
     {!run.text && run.tools.length === 0 && <p>{run.status === "failed" ? run.label : "正在连接 Agent…"}</p>}
