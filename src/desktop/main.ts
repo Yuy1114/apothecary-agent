@@ -1,21 +1,91 @@
 import "dotenv/config";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { DesktopService, type DesktopChatMessage } from "../application/desktop/desktopService.js";
-import { createDesktopRuntime } from "./runtime.js";
+import type {
+  DesktopChatMessage,
+  DesktopService,
+} from "../application/desktop/desktopService.js";
+import { eventFromMastraChunk } from "../application/desktop/runEvents.js";
 import { registerDesktopIpc } from "./ipc.js";
+import {
+  firstAvailableVaultPath,
+  loadDesktopSettings,
+  saveDesktopSettings,
+} from "./settings.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..", "..");
-const vaultPath = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+const legacyDefaultVaultPath = "/Users/yuy/apothecary-vault";
+let vaultPath = legacyDefaultVaultPath;
+
+function settingsPath(): string {
+  return path.join(app.getPath("userData"), "desktop-settings.json");
+}
+
+async function chooseVaultPath(): Promise<string | null> {
+  const result = await dialog.showOpenDialog({
+    title: "选择 Apothecary 知识药柜",
+    message: "选择包含 Markdown 文档的文件夹",
+    buttonLabel: "使用这个文件夹",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  return result.canceled ? null : (result.filePaths[0] ?? null);
+}
+
+async function resolveVaultPath(): Promise<string> {
+  const explicitPath = process.env.APOTHECARY_VAULT_PATH;
+  if (explicitPath) {
+    const validExplicitPath = await firstAvailableVaultPath([explicitPath]);
+    if (!validExplicitPath) throw new Error(`configured_vault_not_found: ${explicitPath}`);
+    return validExplicitPath;
+  }
+
+  const settings = await loadDesktopSettings(settingsPath());
+  const existingPath = await firstAvailableVaultPath([
+    settings?.vaultPath,
+    legacyDefaultVaultPath,
+  ]);
+  if (existingPath) return existingPath;
+
+  const selectedPath = await chooseVaultPath();
+  if (!selectedPath) throw new Error("vault_selection_cancelled");
+  await saveDesktopSettings(settingsPath(), { vaultPath: selectedPath });
+  return path.resolve(selectedPath);
+}
+
+function installApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin"
+      ? [{ role: "appMenu" as const }]
+      : []),
+    {
+      label: "药柜",
+      submenu: [
+        {
+          label: "选择其他药柜…",
+          click: async () => {
+            const selectedPath = await chooseVaultPath();
+            if (!selectedPath || path.resolve(selectedPath) === vaultPath) return;
+            await saveDesktopSettings(settingsPath(), { vaultPath: path.resolve(selectedPath) });
+            app.relaunch();
+            app.exit(0);
+          },
+        },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "editMenu" },
+    { role: "windowMenu" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function rendererPath(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "renderer", "index.html")
-    : path.join(projectRoot, "src", "desktop", "renderer", "index.html");
+  return path.join(app.getAppPath(), "dist", "desktop", "ui", "index.html");
 }
 
 function formatConversation(messages: DesktopChatMessage[]): string {
@@ -25,7 +95,15 @@ function formatConversation(messages: DesktopChatMessage[]): string {
 }
 
 async function createService(): Promise<DesktopService> {
+  // Keep the Electron bootstrap light. Loading Mastra and its native storage
+  // graph before app.whenReady() can stall packaged applications while Electron
+  // is still resolving modules from the asar archive.
+  const [{ DesktopService }, { createDesktopRuntime }] = await Promise.all([
+    import("../application/desktop/desktopService.js"),
+    import("./runtime.js"),
+  ]);
   const runtimeRoot = app.isPackaged ? app.getPath("userData") : projectRoot;
+  await fs.mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
   const desktopRuntime = createDesktopRuntime(runtimeRoot);
   const apothecaryAgent = desktopRuntime.getAgent("apothecaryAgent");
   // The agent's memory (observational + working) is thread-scoped, so generate()
@@ -44,6 +122,16 @@ async function createService(): Promise<DesktopService> {
           maxSteps: 20,
         });
         return result.text;
+      },
+      streamChat: async (messages, emit) => {
+        const output = await apothecaryAgent.stream(formatConversation(messages), {
+          memory,
+          maxSteps: 20,
+        });
+        for await (const chunk of output.fullStream) {
+          const event = eventFromMastraChunk(chunk);
+          if (event) emit(event);
+        }
       },
     },
   });
@@ -70,7 +158,9 @@ async function createWindow(): Promise<void> {
     if (url.startsWith("https://")) void shell.openExternal(url);
     return { action: "deny" };
   });
-  await window.loadFile(rendererPath());
+  const rendererDevUrl = process.env.APOTHECARY_RENDERER_URL;
+  if (rendererDevUrl) await window.loadURL(rendererDevUrl);
+  else await window.loadFile(rendererPath());
   const smokePath = process.env.APOTHECARY_DESKTOP_SMOKE_PATH;
   if (smokePath) {
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -84,6 +174,10 @@ async function createWindow(): Promise<void> {
 app
   .whenReady()
   .then(async () => {
+    vaultPath = await resolveVaultPath();
+    process.env.APOTHECARY_VAULT_PATH = vaultPath;
+    await saveDesktopSettings(settingsPath(), { vaultPath });
+    installApplicationMenu();
     const service = await createService();
     registerDesktopIpc(ipcMain, service);
     await createWindow();

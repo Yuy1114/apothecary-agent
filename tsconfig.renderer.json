@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "rootDir": "src/desktop/ui",
+    "noEmit": true,
+    "types": ["vite/client"]
+  },
+  "include": ["src/desktop/ui/**/*.ts", "src/desktop/ui/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}
