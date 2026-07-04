@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+    <!-- CSP is injected per-mode by vite.desktop.config.ts: strict for the
+         packaged build, relaxed for dev where Vite/HMR inject inline styles. -->
     <title>Apothecary</title>
   </head>
   <body>
