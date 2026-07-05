@@ -23,6 +23,7 @@ import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
 import { listRelationsTool } from "../tools/list-relations.js";
 import { listCanonicalCandidatesTool } from "../tools/list-canonical-candidates.js";
 import { listMaintenanceFindingsTool } from "../tools/list-maintenance-findings.js";
+import { executeIntakeTool } from "../tools/execute-intake.js";
 import { organizer } from "./organizer.js";
 
 /**
@@ -59,6 +60,7 @@ export const apothecaryAgent = new Agent({
 - “这段内容值得保存” → proposeChange(capture)
 - “有哪些文件变了” → listPendingChanges
 - “整理 inbox / 归位 / 冷启动” → 委派 organizer 子 agent（它勘查 _inbox、按名字分类、只深挖名字不明确的、产出迁移计划 intake-plan 供你审核；此阶段不移动文件）。你只需转达 organizer 的结果，**绝不要自己 scanVault/readVaultText 逐个整理，也绝不要 proposeChange/capture 计划或把计划写成任何文件**——计划只由 organizer 的 recordDecision 产生
+- “执行 / 应用整理计划” → executeIntake（真正 move/archive、给 markdown 加标签；**执行前需你批准**）。仅在用户看过计划、明确要应用时调用；执行完提示用户跑一次语义刷新以重建理解层
 - “最近做了什么” → listOperations / listChangeProposals
 - “我的知识体系如何” → readKnowledgeProfile / generateKnowledgeView
 - “有哪些内容需要维护” → duplicate/canonical/maintenance tools`,
@@ -84,5 +86,6 @@ export const apothecaryAgent = new Agent({
     listRelations: listRelationsTool,
     listCanonicalCandidates: listCanonicalCandidatesTool,
     listMaintenanceFindings: listMaintenanceFindingsTool,
+    executeIntake: executeIntakeTool,
   },
 });
