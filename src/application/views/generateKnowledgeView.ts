@@ -1,4 +1,4 @@
-import { knowledgeViewWriter } from "../../mastra/agents/knowledge-view-writer.js";
+import { knowledgeViewWriter } from "../../mastra/agents/transformers/knowledge-view-writer.js";
 import { KnowledgeViewDraftSchema, assembleViewFiles, type KnowledgeView } from "../../domain/knowledgeView.js";
 import { loadGraph, loadSummaries } from "../../vault/semanticStore.js";
 import { queryVault } from "../../mastra/tools/rag.js";

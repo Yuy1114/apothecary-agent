@@ -11,8 +11,6 @@ import {
 } from "@mastra/observability";
 
 import { vaultReviewer } from "./agents/vault-reviewer.js";
-import { vaultCurator } from "./agents/vault-curator.js";
-import { vaultIngestor } from "./agents/vault-ingestor.js";
 import { apothecaryAgent } from "./agents/apothecary-agent.js";
 import { setVectorStore } from "./tools/rag.js";
 import {
@@ -82,7 +80,7 @@ const observabilityStorage = new DuckDBStore({
 // ── Mastra instance ──
 
 export const mastra = new Mastra({
-  agents: { apothecaryAgent, vaultReviewer, vaultCurator, vaultIngestor },
+  agents: { apothecaryAgent, vaultReviewer },
   workflows: {
     fullReindexWorkflow,
     fileChangedWorkflow,

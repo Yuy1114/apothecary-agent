@@ -1,4 +1,4 @@
-import { semanticSummarizer } from "../../mastra/agents/semantic-summarizer.js";
+import { semanticSummarizer } from "../../mastra/agents/transformers/semantic-summarizer.js";
 import { FileSummaryDraftSchema, type FileSummary } from "../../domain/semantic.js";
 
 const MAX_CONTENT_CHARS = 6000;
