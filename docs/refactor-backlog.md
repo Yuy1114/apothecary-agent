@@ -41,6 +41,15 @@ intakeWorkflow:
 
 ---
 
+## 4. intake 执行的两个边界情况（首次真实运行暴露）
+
+**记录于 2026-07-05｜状态：延后**
+
+- **LLM 复述路径会走样特殊字符**：一张文件名含弯引号 `“…”` 的图片执行时 `missing_source`——organizer 把路径重打给 recordDecision 时引号变了字节。文件安全（没动）。根治方向：organizer 用 surveyInbox 给出的**索引/ID 引用文件**，而不是重打完整路径；或 executeIntake 做一次规范化/模糊匹配兜底。与 #1 的 structuredOutput 重构一起做最自然（decision 里带 survey 的稳定 id）。
+- **junk 聚合决策无法执行**：organizer 对 `.DS_Store` 用「整体 archive」的聚合决策（source 不是真实路径），executeIntake 落不了地，垃圾留在 _inbox。方向：executeIntake 增加「按规则清理 junk」（或 surveyInbox 把 junk 路径逐个给出、executeIntake 支持 glob/批量 archive）。
+
+---
+
 ## 2. structure.yaml 老机制清理（legacy）
 
 **记录于 2026-07-05｜状态：延后**
