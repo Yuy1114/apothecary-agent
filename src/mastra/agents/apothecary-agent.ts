@@ -24,6 +24,7 @@ import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
 import { listRelationsTool } from "../tools/list-relations.js";
 import { listCanonicalCandidatesTool } from "../tools/list-canonical-candidates.js";
 import { listMaintenanceFindingsTool } from "../tools/list-maintenance-findings.js";
+import { organizer } from "./organizer.js";
 
 /**
  * The single user-facing agent for v1.1. The older specialist agents remain
@@ -39,6 +40,9 @@ export const apothecaryAgent = new Agent({
   memory: apothecaryMemory,
   scorers: agentRuntimeScorers,
   inputProcessors: [new VaultSemanticRecallProcessor()],
+  // Specialist subagents delegated to natively (Mastra supervisor pattern);
+  // the user only ever talks to this agent.
+  agents: { organizer },
   instructions: `你是 Apothecary，是 Yuy 本地个人知识药柜的统一入口。
 
 你的职责覆盖问答、知识沉淀、inbox 归位、变化处理、知识画像与维护建议。用户不需要知道内部有哪些专职 agent；你根据意图选择正确工具并把结果解释清楚。
@@ -55,7 +59,7 @@ export const apothecaryAgent = new Agent({
 常见意图：
 - “这段内容值得保存” → proposeChange(capture)
 - “有哪些文件变了” → listPendingChanges
-- “整理 inbox” → scanVault(inbox) + readVaultText + proposeChange(move)
+- “整理 inbox / 归位 / 冷启动” → 委派 organizer 子 agent（它勘查 _inbox、按名字分类、只深挖名字不明确的、产出迁移计划 intake-plan 供你审核；此阶段不移动文件）
 - “最近做了什么” → listOperations / listChangeProposals
 - “我的知识体系如何” → readKnowledgeProfile / generateKnowledgeView
 - “有哪些内容需要维护” → duplicate/canonical/maintenance tools`,

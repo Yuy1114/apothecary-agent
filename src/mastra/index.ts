@@ -10,7 +10,6 @@ import {
   SensitiveDataFilter,
 } from "@mastra/observability";
 
-import { vaultReviewer } from "./agents/vault-reviewer.js";
 import { apothecaryAgent } from "./agents/apothecary-agent.js";
 import { setVectorStore } from "./tools/rag.js";
 import {
@@ -80,7 +79,7 @@ const observabilityStorage = new DuckDBStore({
 // ── Mastra instance ──
 
 export const mastra = new Mastra({
-  agents: { apothecaryAgent, vaultReviewer },
+  agents: { apothecaryAgent },
   workflows: {
     fullReindexWorkflow,
     fileChangedWorkflow,
