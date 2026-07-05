@@ -50,6 +50,20 @@ intakeWorkflow:
 
 ---
 
+## 5. Cap5（画像/视图）首次真机验证暴露的改进点
+
+**记录于 2026-07-05｜状态：延后。测试结论：画像优秀、视图核心好但来源偏松**
+
+在新骨架下跑 refresh-profile + generateKnowledgeView(Redis) 的观察：
+
+- **主题标签未归一**（语义层/Cap4）：同一主题被 summarizer 产出多个变体当成不同主题——`DSA` / `Data Structures and Algorithms` / `Data Structures & Algorithms`（11/9/5）。方向：summarize 时约束标签词表，或在建 graph/profile 时做一次标签归一化/别名合并。
+- **generateKnowledgeView 来源精度低**：主题视图的「来源文件/推荐阅读顺序」把只**顺带提及**该主题的文件也纳入了（如 Redis 视图里混进简历、面试 feedback、Daily Log）。根因是「图匹配 + RAG 兜底」对沾边内容不加区分。方向：按「主题是否出现在标题/heading、概念密度」加权，或让主题视图默认排除 journal/career 等非知识层；核心的主题/概念/缺口生成质量本身很好，只需收紧 sourceFiles 选取。
+- **（小）非 notes/journal 层的扁平名未清理**：intake 只对 notes/journal 强制了干净 rename，`areas/` 里仍有 `interviews__*`/`career__*` 前缀名。可扩展 rename 要求到 areas/projects，或在 intake 后做一次批量重命名。
+
+结论：Cap5 可用——画像可直接信；视图当「起草」用、来源人工筛一下。以上都不是 blocker。
+
+---
+
 ## 2. structure.yaml 老机制清理（legacy）
 
 **记录于 2026-07-05｜状态：延后**
