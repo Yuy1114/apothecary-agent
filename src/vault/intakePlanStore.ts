@@ -32,20 +32,33 @@ export async function loadIntakePlan(home: string = apothecaryHome()): Promise<I
 async function saveIntakePlan(home: string, plan: IntakePlan): Promise<void> {
   const filePath = planPath(home);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(plan, null, 2), "utf8");
+  // Atomic write: full file to a temp path, then rename over the target, so a
+  // crash or overlapping write can never leave a half-written/corrupt JSON.
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(plan, null, 2), "utf8");
+  await fs.rename(tmp, filePath);
 }
+
+// The model may emit parallel recordDecision tool calls in one turn; serialize
+// the read-modify-write here (in-process) so concurrent upserts don't race.
+let writeChain: Promise<unknown> = Promise.resolve();
 
 /** Record (upsert by source) one decision and return the updated plan + count. */
 export async function recordIntakeDecision(
   decision: IntakeDecision,
   home: string = apothecaryHome(),
 ): Promise<{ plan: IntakePlan; total: number }> {
-  const existing = await loadIntakePlan(home);
-  const now = nowIso();
-  const base: IntakePlan =
-    existing.generatedAt === "" ? { generatedAt: now, updatedAt: now, decisions: [] } : existing;
-  const plan = { ...upsertDecision(base, decision), updatedAt: now };
-  await saveIntakePlan(home, plan);
+  const run = writeChain.then(async () => {
+    const existing = await loadIntakePlan(home);
+    const now = nowIso();
+    const base: IntakePlan =
+      existing.generatedAt === "" ? { generatedAt: now, updatedAt: now, decisions: [] } : existing;
+    const plan = { ...upsertDecision(base, decision), updatedAt: now };
+    await saveIntakePlan(home, plan);
+    return plan;
+  });
+  writeChain = run.catch(() => undefined);
+  const plan = await run;
   return { plan, total: plan.decisions.length };
 }
 

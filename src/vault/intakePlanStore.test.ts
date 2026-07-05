@@ -51,6 +51,18 @@ describe("intakePlanStore", () => {
     expect(plan.generatedAt).not.toBe("");
   });
 
+  it("serializes concurrent records without corruption or lost writes", async () => {
+    const home = await freshHome();
+    // The model can emit parallel recordDecision calls; all must survive and the
+    // file must stay valid JSON (regression for the racing read-modify-write bug).
+    await Promise.all(
+      Array.from({ length: 25 }, (_, i) => recordIntakeDecision(decision(`_inbox/f${i}.md`), home)),
+    );
+    const plan = await loadIntakePlan(home);
+    expect(plan.decisions).toHaveLength(25);
+    expect(new Set(plan.decisions.map((d) => d.source)).size).toBe(25);
+  });
+
   it("clears the plan", async () => {
     const home = await freshHome();
     await recordIntakeDecision(decision("_inbox/a.md"), home);
