@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { enqueueChange } from "./../../vault/changeLog.js";
+import { isSelfWrite } from "../../vault/selfWriteGuard.js";
 import { isArchivedPath } from "../../vault/archive.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
 
@@ -59,15 +60,19 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
     console.warn(`Vault watcher: failed to sync ${relativePath}:`, error);
   }
 
-  // Record the change as pending agent-work in the durable ledger.
-  try {
-    await enqueueChange({
-      path: relativePath,
-      changeType: exists ? "modified" : "deleted",
-      source: "watcher",
-    });
-  } catch (error) {
-    console.warn(`Vault watcher: failed to log change for ${relativePath}:`, error);
+  // Record the change as pending agent-work in the durable ledger — unless this
+  // write is the agent's own applied operation. Those already went through
+  // proposal → approval → operation ledger, so re-queuing them would be noise.
+  if (!isSelfWrite(relativePath)) {
+    try {
+      await enqueueChange({
+        path: relativePath,
+        changeType: exists ? "modified" : "deleted",
+        source: "watcher",
+      });
+    } catch (error) {
+      console.warn(`Vault watcher: failed to log change for ${relativePath}:`, error);
+    }
   }
 
   // Keep the semantic layer live: refresh summaries/graph for the changed files

@@ -7,6 +7,7 @@ import { mergeNotesCore } from "./merge-notes-core.js";
 import { writeVaultNote } from "./ingest-core.js";
 import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { setFrontmatterKey } from "../../vault/frontmatter.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
@@ -216,6 +217,12 @@ export async function resolveProposalById(
     return { resolved: true, proposalId: id, type: proposal.type, status: "rejected" };
   }
 
+  // Mark the paths this apply will touch before writing, so the vault watcher
+  // treats the resulting fs events as the agent's own work and does not re-queue
+  // them as external changes. Marked again below with the exact affected set once
+  // known (README side-effects mark themselves inside the readme-index core).
+  markSelfWrite(proposal.targetFiles);
+
   // Executors report expected failures via {ok:false}; some (e.g. structure)
   // throw on invalid input. Either way, leave the proposal open to fix and retry.
   let outcome: { ok: boolean; reason?: string; affected?: string[] };
@@ -232,6 +239,10 @@ export async function resolveProposalById(
   if (!outcome.ok) {
     return { resolved: false, proposalId: id, type: proposal.type, reason: outcome.reason ?? "apply_failed" };
   }
+
+  // Re-mark with the exact affected paths (covers move's destination, etc.) now
+  // that the write has landed, refreshing the window for late fs.watch events.
+  markSelfWrite(outcome.affected ?? []);
 
   // Bring the semantic layer in step with the change before the proposal counts
   // as applied. Best-effort: the file change already succeeded, so a refresh

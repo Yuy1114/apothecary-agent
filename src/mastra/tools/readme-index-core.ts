@@ -3,6 +3,7 @@ import path from "node:path";
 import { addReadmeEntry, removeReadmeEntry } from "../../vault/readmeIndex.js";
 import { parseMarkdownSnapshot } from "../../vault/markdown.js";
 import { loadStructure } from "./vault-structure.js";
+import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 
 /** Directory of a vault-relative path in POSIX form; "" for the vault root. */
 function dirOf(relPath: string): string {
@@ -40,8 +41,12 @@ export async function updateReadmeForCreatedNote(vaultPath: string, notePath: st
   });
   if (next === existing) return null;
   await fs.mkdir(path.dirname(readmePath), { recursive: true });
+  const relativeReadme = path.posix.join(dir, "README.md");
+  // This README write is an agent side-effect of applying a proposal — mark it so
+  // the watcher does not surface it as an external change.
+  markSelfWrite([relativeReadme]);
   await fs.writeFile(readmePath, next, "utf8");
-  return path.posix.join(dir, "README.md");
+  return relativeReadme;
 }
 
 /**
@@ -58,7 +63,10 @@ export async function updateReadmesForMove(vaultPath: string, from: string, to: 
   const srcContent = await readOrNull(srcReadme);
   if (srcContent != null) {
     const next = removeReadmeEntry(srcContent, fromBase);
-    if (next !== srcContent) await fs.writeFile(srcReadme, next, "utf8");
+    if (next !== srcContent) {
+      markSelfWrite([path.posix.join(fromDir, "README.md")]);
+      await fs.writeFile(srcReadme, next, "utf8");
+    }
   }
 
   // Add the note to the destination directory's index.

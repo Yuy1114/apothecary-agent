@@ -47,6 +47,32 @@ function DataCard({ title, description, pills = [], children }: {
   </div></article>;
 }
 
+// Electron disables window.prompt(), so the reject-reason input is an in-app
+// dialog. Returns null when cancelled, the (possibly empty) reason when confirmed.
+function useReasonPrompt() {
+  const [pending, setPending] = useState<{ message: string; resolve: (value: string | null) => void } | null>(null);
+  const [value, setValue] = useState("");
+  const prompt = useCallback(
+    (message: string) => new Promise<string | null>((resolve) => { setValue(""); setPending({ message, resolve }); }),
+    [],
+  );
+  const close = (result: string | null) => { pending?.resolve(result); setPending(null); };
+  const dialog = pending ? (
+    <div className="modal-overlay" onMouseDown={() => close(null)}>
+      <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
+        <p>{pending.message}</p>
+        <textarea rows={3} autoFocus value={value} onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Escape") close(null); if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) close(value.trim()); }} />
+        <div className="card-actions">
+          <button className="ghost" onClick={() => close(null)}>取消</button>
+          <button className="danger" onClick={() => close(value.trim())}>确认拒绝</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+  return { prompt, dialog };
+}
+
 export function App() {
   const [view, setView] = useState<View>("chat");
   const [dashboard, setDashboard] = useState<any>(null);
@@ -98,6 +124,7 @@ export function App() {
 function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt }: { dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [input, setInput] = useState("");
+  const { prompt: reasonPrompt, dialog: reasonDialog } = useReasonPrompt();
   const busy = timeline.some((item) => item.kind === "run" && (item.run.status === "running" || item.run.status === "awaiting"));
 
   useEffect(() => api.onRunEvent(({ runId, event }) => {
@@ -138,7 +165,12 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
 
   const resolveInlineProposal = async (runId: string, proposal: RunProposal, decision: "approve" | "reject") => {
     if (decision === "approve" && !window.confirm(`批准提案「${proposal.title}」并应用？`)) return;
-    const note = decision === "reject" ? window.prompt("拒绝原因（可选）") || undefined : undefined;
+    let note: string | undefined;
+    if (decision === "reject") {
+      const reason = await reasonPrompt(`拒绝提案「${proposal.title}」的原因（可选）`);
+      if (reason === null) return; // cancelled the reject
+      note = reason || undefined;
+    }
     // Mark the proposal in-flight and hand the run back to the agent. resumeRun
     // applies the decision (approve => file change) and resumes the suspended run;
     // its continuation streams onto this same timeline bubble via onRunEvent.
@@ -171,7 +203,7 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
   </div><aside className="context-panel"><h3>现在可以做什么</h3>
     {["有哪些文件发生了变更？请帮我判断应该如何处理。", "请扫描 inbox，并建议这些文件应该归位到哪里。", "根据当前药柜，总结我的核心知识主题和薄弱区域。"].map((prompt, index) => <button className="prompt-chip" key={prompt} onClick={() => void send(prompt)}>{["检查最近变更", "整理 Inbox", "查看知识画像"][index]}</button>)}
     <div className="divider"/><h3>最近活动</h3><div className="mini-list">{dashboard?.recentOperations?.length ? dashboard.recentOperations.slice(0, 5).map((op: any) => <div className="mini-item" key={op.id}>{op.type} · {op.targetFiles.join(", ")}</div>) : <p className="muted">暂无活动</p>}</div>
-  </aside></section>;
+  </aside>{reasonDialog}</section>;
 }
 
 function updateRunProposal(items: TimelineItem[], runId: string, proposalId: string, patch: Partial<RunProposal>): TimelineItem[] {
@@ -219,9 +251,21 @@ function InboxView({ refreshKey, onChat, notify }: { refreshKey: number; onChat:
 
 function ProposalsView({ refreshKey, notify }: { refreshKey: number; notify: (text: string) => void }) {
   const [status, setStatus] = useState<ProposalStatus>("proposed"); const [items, setItems] = useState<any[]>([]);
+  const { prompt: reasonPrompt, dialog: reasonDialog } = useReasonPrompt();
   const load = useCallback(() => api.proposals(status).then(setItems), [status]); useEffect(() => { void load(); }, [load, refreshKey]);
-  const resolve = async (proposal: any, decision: "approve" | "reject") => { if (decision === "approve" && !window.confirm(`批准提案「${proposal.title}」？`)) return; const note = decision === "reject" ? window.prompt("拒绝原因（可选）") || undefined : undefined; const result = await api.resolveProposal(proposal.id, decision, note); notify(result.resolved === false ? `应用失败：${result.reason}` : decision === "approve" ? "提案已应用" : "提案已拒绝"); await load(); };
-  return <section className="view active"><div className="section-toolbar"><div><h2>变更提案</h2><p>所有 human-readable layer 修改的统一确认入口</p></div><div className="segmented">{(["proposed", "applied", "rejected"] as ProposalStatus[]).map((value) => <button key={value} className={status === value ? "active" : ""} onClick={() => setStatus(value)}>{({ proposed: "待确认", applied: "已应用", rejected: "已拒绝" })[value]}</button>)}</div></div><div className="card-list">{items.length === 0 ? <Empty>这个列表是空的。</Empty> : items.map((proposal) => <DataCard key={proposal.id} title={proposal.title} description={proposal.rationale} pills={[{ text: proposal.type }, { text: proposal.status }, { text: formatDate(proposal.createdAt) }, ...proposal.targetFiles.map((file: string) => ({ text: file }))]}>{proposal.status === "proposed" && <div className="card-actions"><button className="primary" onClick={() => void resolve(proposal, "approve")}>批准</button><button className="danger" onClick={() => void resolve(proposal, "reject")}>拒绝</button></div>}<details className="inline-detail"><summary>查看 proposal payload</summary><pre>{JSON.stringify(proposal.payload, null, 2)}</pre></details></DataCard>)}</div></section>;
+  const resolve = async (proposal: any, decision: "approve" | "reject") => {
+    if (decision === "approve" && !window.confirm(`批准提案「${proposal.title}」？`)) return;
+    let note: string | undefined;
+    if (decision === "reject") {
+      const reason = await reasonPrompt(`拒绝提案「${proposal.title}」的原因（可选）`);
+      if (reason === null) return; // cancelled the reject
+      note = reason || undefined;
+    }
+    const result = await api.resolveProposal(proposal.id, decision, note);
+    notify(result.resolved === false ? `应用失败：${result.reason}` : decision === "approve" ? "提案已应用" : "提案已拒绝");
+    await load();
+  };
+  return <section className="view active"><div className="section-toolbar"><div><h2>变更提案</h2><p>所有 human-readable layer 修改的统一确认入口</p></div><div className="segmented">{(["proposed", "applied", "rejected"] as ProposalStatus[]).map((value) => <button key={value} className={status === value ? "active" : ""} onClick={() => setStatus(value)}>{({ proposed: "待确认", applied: "已应用", rejected: "已拒绝" })[value]}</button>)}</div></div><div className="card-list">{items.length === 0 ? <Empty>这个列表是空的。</Empty> : items.map((proposal) => <DataCard key={proposal.id} title={proposal.title} description={proposal.rationale} pills={[{ text: proposal.type }, { text: proposal.status }, { text: formatDate(proposal.createdAt) }, ...proposal.targetFiles.map((file: string) => ({ text: file }))]}>{proposal.status === "proposed" && <div className="card-actions"><button className="primary" onClick={() => void resolve(proposal, "approve")}>批准</button><button className="danger" onClick={() => void resolve(proposal, "reject")}>拒绝</button></div>}<details className="inline-detail"><summary>查看 proposal payload</summary><pre>{JSON.stringify(proposal.payload, null, 2)}</pre></details></DataCard>)}</div>{reasonDialog}</section>;
 }
 
 function KnowledgeView({ refreshKey, onChat }: { refreshKey: number; onChat: (prompt: string) => void }) {
