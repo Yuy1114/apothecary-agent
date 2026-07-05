@@ -4,6 +4,7 @@ import { moveVaultFileCore } from "./move-vault-file-core.js";
 import { archiveVaultFileCore } from "./archive-vault-file-core.js";
 import { reindexFile } from "./rag.js";
 import { addFrontmatterTags } from "../../vault/frontmatter.js";
+import { recordOperation } from "../../vault/operationLedger.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { loadIntakePlan, clearIntakePlan } from "../../vault/intakePlanStore.js";
 import type { IntakeDecision } from "../../domain/intakePlan.js";
@@ -19,11 +20,15 @@ export type ExecuteIntakeReport = {
   failures: { source: string; reason: string }[];
 };
 
-/** dest (a directory) + rename|basename → the vault-relative target path. */
-function targetPath(decision: IntakeDecision): string {
+/** dest (a directory) + rename|basename → the vault-relative target path (files only). */
+function fileTargetPath(decision: IntakeDecision): string {
   const base = decision.rename?.trim() || path.posix.basename(decision.source);
   const dir = (decision.dest ?? "").replace(/\/+$/, "");
   return dir ? path.posix.join(dir, base) : base;
+}
+
+async function pathExists(abs: string): Promise<boolean> {
+  return fs.access(abs).then(() => true, () => false);
 }
 
 /** Best-effort: stamp the decision's tags onto a moved markdown note's frontmatter. */
@@ -43,15 +48,70 @@ async function applyTags(target: string, tags: string[]): Promise<void> {
   }
 }
 
+/** Remove directories that are empty after a merge (bottom-up); never touches files. */
+async function removeEmptyDirs(abs: string): Promise<void> {
+  const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (entry.isDirectory()) await removeEmptyDirs(path.join(abs, entry.name));
+  }
+  await fs.rmdir(abs).catch(() => undefined); // succeeds only when empty
+}
+
+/**
+ * Merge a directory's contents INTO `destDir` (not nested under it): each file
+ * moves to `destDir/<path-relative-to-source>`. Existing targets are skipped
+ * (never overwritten); emptied source dirs are pruned. `dest` for a directory
+ * decision is the target directory itself (e.g. `resources/books/`), so we must
+ * not append the source's basename or it would double-nest.
+ */
+async function moveDirectoryInto(
+  sourceRel: string,
+  destDirRel: string,
+): Promise<{ ok: boolean; reason?: string; skipped: number }> {
+  const srcAbs = safeVaultPath(VAULT_PATH, sourceRel);
+  const destAbs = safeVaultPath(VAULT_PATH, destDirRel || sourceRel);
+  if (!srcAbs || !destAbs) return { ok: false, reason: "unsafe_path", skipped: 0 };
+
+  let skipped = 0;
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      const target = path.join(destAbs, path.relative(srcAbs, abs));
+      if (entry.isDirectory()) {
+        await fs.mkdir(target, { recursive: true });
+        await walk(abs);
+      } else if (await pathExists(target)) {
+        skipped += 1; // never overwrite
+      } else {
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.rename(abs, target);
+        const relTarget = path.relative(VAULT_PATH, target).split(path.sep).join("/");
+        if (relTarget.endsWith(".md")) await reindexFile(relTarget);
+      }
+    }
+  };
+
+  await walk(srcAbs);
+  await removeEmptyDirs(srcAbs);
+  await recordOperation({
+    type: "move",
+    targetFiles: [sourceRel, destDirRel],
+    source: "executeIntake",
+    detail: `${sourceRel}/* → ${destDirRel}/${skipped ? ` (${skipped} skipped)` : ""}`,
+  });
+  return { ok: true, skipped };
+}
+
 /**
  * Apply the reviewed intake plan: for each decision, move / archive / leave the
- * _inbox file, tagging moved markdown. Reuses the audited move & archive cores
- * (RAG index + operation ledger stay in sync; nothing is ever overwritten or
- * deleted). The plan is consumed on completion — the _inbox filesystem is the
- * source of truth, so re-running the organizer re-plans whatever remains.
+ * _inbox entry, tagging moved markdown. Directory entries merge their contents
+ * into the target dir. Reuses the audited move & archive cores (RAG index +
+ * operation ledger stay in sync; nothing is overwritten or deleted). The plan is
+ * consumed on completion — the _inbox filesystem is the source of truth, so
+ * re-running the organizer re-plans whatever remains.
  *
- * Does NOT rebuild the semantic layer (that is a separate, cost-bearing pass);
- * run a semantic refresh afterward to bring understanding up to date.
+ * Does NOT rebuild the semantic layer (a separate, cost-bearing pass); run a
+ * semantic refresh afterward to bring understanding up to date.
  */
 export async function executeIntake(): Promise<ExecuteIntakeReport> {
   const plan = await loadIntakePlan();
@@ -76,14 +136,27 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
         else report.failures.push({ source: decision.source, reason: result.reason ?? "archive_failed" });
         continue;
       }
-      // move
-      const to = targetPath(decision);
-      const result = await moveVaultFileCore(decision.source, to);
-      if (result.moved) {
-        report.moved += 1;
-        await applyTags(to, decision.tags);
+
+      // move — directory sources merge their contents; files rename+move.
+      const srcAbs = safeVaultPath(VAULT_PATH, decision.source);
+      const stat = srcAbs ? await fs.stat(srcAbs).catch(() => null) : null;
+      if (!stat) {
+        report.failures.push({ source: decision.source, reason: "missing_source" });
+        continue;
+      }
+      if (stat.isDirectory()) {
+        const result = await moveDirectoryInto(decision.source, (decision.dest ?? "").replace(/\/+$/, ""));
+        if (result.ok) report.moved += 1;
+        else report.failures.push({ source: decision.source, reason: result.reason ?? "move_failed" });
       } else {
-        report.failures.push({ source: decision.source, reason: result.reason ?? "move_failed" });
+        const to = fileTargetPath(decision);
+        const result = await moveVaultFileCore(decision.source, to);
+        if (result.moved) {
+          report.moved += 1;
+          await applyTags(to, decision.tags);
+        } else {
+          report.failures.push({ source: decision.source, reason: result.reason ?? "move_failed" });
+        }
       }
     } catch (error) {
       report.failures.push({ source: decision.source, reason: error instanceof Error ? error.message : "error" });

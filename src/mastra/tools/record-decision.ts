@@ -46,6 +46,19 @@ export const recordDecisionTool = createTool({
             `For the agent's own stale artifacts use action="archive".`,
         };
       }
+      // notes/ is strictly flat and journal/ is date-organized: both need a clean,
+      // human-readable filename, never the flattened source name (e.g. a__b__c.md).
+      if ((layer === "notes" || layer === "journal") && !input.rename?.trim()) {
+        const total = (await loadIntakePlan(apothecaryHome())).decisions.length;
+        return {
+          recorded: false,
+          source: input.source,
+          total,
+          error:
+            `A move into ${layer}/ must set a clean, human-readable "rename" derived from the file's ` +
+            `title/meaning (e.g. "Kubernetes 笔记.md"), not keep the raw source name. Put the topic in tags, not the filename.`,
+        };
+      }
     }
     const { total } = await recordIntakeDecision({ ...input, decidedAt: nowIso() }, apothecaryHome());
     return { recorded: true, source: input.source, total };

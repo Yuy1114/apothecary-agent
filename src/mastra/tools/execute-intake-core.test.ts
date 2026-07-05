@@ -23,6 +23,9 @@ beforeEach(async () => {
   removeFromIndex.mockClear();
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
+  // The core (and the move/archive cores it uses) read VAULT_PATH at module load,
+  // so re-evaluate the graph per test to pick up this test's fresh vault.
+  vi.resetModules();
   ({ executeIntake } = await import("./execute-intake-core.js"));
 });
 
@@ -65,6 +68,25 @@ describe("executeIntake", () => {
 
     // Plan consumed.
     expect((await loadIntakePlan(vault)).decisions).toHaveLength(0);
+  });
+
+  it("merges a directory's contents INTO dest instead of nesting it", async () => {
+    await mkdir(abs("_inbox/books/sub"), { recursive: true });
+    await writeFile(abs("_inbox/books/a.epub"), "e", "utf8");
+    await writeFile(abs("_inbox/books/sub/b.pdf"), "p", "utf8");
+    await mkdir(abs("resources/books"), { recursive: true });
+    await writeFile(abs("resources/books/.gitkeep"), "", "utf8"); // dest pre-exists (non-empty)
+    await recordIntakeDecision(decision({ source: "_inbox/books", kind: "directory", action: "move", dest: "resources/books/" }), vault);
+
+    const report = await executeIntake();
+    expect(report).toMatchObject({ moved: 1, failed: 0 });
+
+    // Contents merged directly under resources/books (NOT resources/books/books).
+    expect(await exists("resources/books/a.epub")).toBe(true);
+    expect(await exists("resources/books/sub/b.pdf")).toBe(true);
+    expect(await exists("resources/books/books")).toBe(false);
+    // Source dir emptied and pruned.
+    expect(await exists("_inbox/books")).toBe(false);
   });
 
   it("reports a missing source as a failure without throwing", async () => {
