@@ -6,6 +6,8 @@ import { reindexFile } from "./rag.js";
 import { addFrontmatterTags } from "../../vault/frontmatter.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
+import { markSelfWrite } from "../../vault/selfWriteGuard.js";
+import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { loadIntakePlan, clearIntakePlan } from "../../vault/intakePlanStore.js";
 import type { IntakeDecision } from "../../domain/intakePlan.js";
 
@@ -67,11 +69,13 @@ async function removeEmptyDirs(abs: string): Promise<void> {
 async function moveDirectoryInto(
   sourceRel: string,
   destDirRel: string,
+  affected: Set<string>,
 ): Promise<{ ok: boolean; reason?: string; skipped: number }> {
   const srcAbs = safeVaultPath(VAULT_PATH, sourceRel);
   const destAbs = safeVaultPath(VAULT_PATH, destDirRel || sourceRel);
   if (!srcAbs || !destAbs) return { ok: false, reason: "unsafe_path", skipped: 0 };
 
+  const toRel = (abs: string) => path.relative(VAULT_PATH, abs).split(path.sep).join("/");
   let skipped = 0;
   const walk = async (dir: string): Promise<void> => {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
@@ -83,9 +87,15 @@ async function moveDirectoryInto(
       } else if (await pathExists(target)) {
         skipped += 1; // never overwrite
       } else {
+        const relSource = toRel(abs);
+        const relTarget = toRel(target);
+        // Mark both endpoints self-writes before the rename so the watcher's
+        // event for either lands on a registered path and is skipped.
+        markSelfWrite([relSource, relTarget]);
+        affected.add(relSource);
+        affected.add(relTarget);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.rename(abs, target);
-        const relTarget = path.relative(VAULT_PATH, target).split(path.sep).join("/");
         if (relTarget.endsWith(".md")) await reindexFile(relTarget);
       }
     }
@@ -124,6 +134,11 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
     failures: [],
   };
 
+  // Every path this batch touches, so the change baseline can be updated once at
+  // the end — keeping the watcher and manual sync from re-flagging these system
+  // moves as external edits.
+  const affected = new Set<string>();
+
   for (const decision of plan.decisions) {
     try {
       if (decision.action === "leave") {
@@ -131,6 +146,8 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
         continue;
       }
       if (decision.action === "archive") {
+        markSelfWrite([decision.source]);
+        affected.add(decision.source);
         const result = await archiveVaultFileCore(decision.source, { reason: decision.rationale });
         if (result.archived) report.archived += 1;
         else report.failures.push({ source: decision.source, reason: result.reason ?? "archive_failed" });
@@ -145,11 +162,14 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
         continue;
       }
       if (stat.isDirectory()) {
-        const result = await moveDirectoryInto(decision.source, (decision.dest ?? "").replace(/\/+$/, ""));
+        const result = await moveDirectoryInto(decision.source, (decision.dest ?? "").replace(/\/+$/, ""), affected);
         if (result.ok) report.moved += 1;
         else report.failures.push({ source: decision.source, reason: result.reason ?? "move_failed" });
       } else {
         const to = fileTargetPath(decision);
+        markSelfWrite([decision.source, to]);
+        affected.add(decision.source);
+        affected.add(to);
         const result = await moveVaultFileCore(decision.source, to);
         if (result.moved) {
           report.moved += 1;
@@ -164,6 +184,9 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
   }
 
   report.failed = report.failures.length;
+  // Record the batch's final on-disk state in the baseline (sources dropped,
+  // targets hashed) and release the pending self-write marks.
+  await commitSelfWrite(VAULT_PATH, affected);
   await clearIntakePlan();
   return report;
 }

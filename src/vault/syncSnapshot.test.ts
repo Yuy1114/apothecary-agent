@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { diffSnapshot, loadSnapshot, saveSnapshot, type SnapshotFiles } from "./syncSnapshot.js";
+import {
+  commitSelfWrite,
+  diffSnapshot,
+  loadSnapshot,
+  saveSnapshot,
+  type SnapshotFiles,
+} from "./syncSnapshot.js";
 
 const h = (files: Record<string, string>): SnapshotFiles =>
   Object.fromEntries(Object.entries(files).map(([p, hash]) => [p, { hash }]));
@@ -58,5 +64,72 @@ describe("snapshot store", () => {
     await saveSnapshot(vault, { generatedAt: "2026-07-03T00:00:00.000Z", files: h({ "a.md": "1" }) });
     const loaded = await loadSnapshot(vault);
     expect(loaded.files["a.md"]).toEqual({ hash: "1" });
+  });
+});
+
+describe("commitSelfWrite", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  });
+  // vault == home for the test: snapshot lands at <vault>/sync/snapshot.json.
+  const freshVault = async () => {
+    const vault = await mkdtemp(path.join(tmpdir(), "apothecary-commit-test-"));
+    dirs.push(vault);
+    await mkdir(path.join(vault, "notes"), { recursive: true });
+    return vault;
+  };
+
+  it("upserts hashes for existing files and drops missing ones", async () => {
+    const vault = await freshVault();
+    await writeFile(path.join(vault, "notes/a.md"), "content A", "utf8");
+    await saveSnapshot(vault, { generatedAt: "", files: h({ "notes/gone.md": "old" }) });
+
+    await commitSelfWrite(vault, ["notes/a.md", "notes/gone.md"], vault);
+
+    const snap = await loadSnapshot(vault);
+    expect(snap.files["notes/a.md"].hash).toMatch(/^[a-f0-9]{64}$/); // real sha256
+    expect(snap.files["notes/gone.md"]).toBeUndefined(); // committed while absent → dropped
+  });
+
+  it("updates the hash when a file's content changed", async () => {
+    const vault = await freshVault();
+    const file = path.join(vault, "notes/a.md");
+    await writeFile(file, "v1", "utf8");
+    await commitSelfWrite(vault, ["notes/a.md"], vault);
+    const first = (await loadSnapshot(vault)).files["notes/a.md"].hash;
+
+    await writeFile(file, "v2 different", "utf8");
+    await commitSelfWrite(vault, ["notes/a.md"], vault);
+    const second = (await loadSnapshot(vault)).files["notes/a.md"].hash;
+
+    expect(second).not.toEqual(first);
+  });
+
+  it("ignores non-baseline paths (non-md and archived) to stay in step with the scan", async () => {
+    const vault = await freshVault();
+    await writeFile(path.join(vault, "notes/a.md"), "keep", "utf8");
+    await mkdir(path.join(vault, "archive"), { recursive: true });
+    await writeFile(path.join(vault, "archive/old.md"), "archived", "utf8");
+    await writeFile(path.join(vault, "notes/pic.png"), "binary", "utf8");
+
+    await commitSelfWrite(vault, ["notes/a.md", "archive/old.md", "notes/pic.png"], vault);
+
+    const files = (await loadSnapshot(vault)).files;
+    expect(Object.keys(files)).toEqual(["notes/a.md"]);
+  });
+
+  it("does not lose updates when commits run concurrently (serialized)", async () => {
+    const vault = await freshVault();
+    await writeFile(path.join(vault, "notes/a.md"), "A", "utf8");
+    await writeFile(path.join(vault, "notes/b.md"), "B", "utf8");
+
+    await Promise.all([
+      commitSelfWrite(vault, ["notes/a.md"], vault),
+      commitSelfWrite(vault, ["notes/b.md"], vault),
+    ]);
+
+    const files = (await loadSnapshot(vault)).files;
+    expect(Object.keys(files).sort()).toEqual(["notes/a.md", "notes/b.md"]);
   });
 });
