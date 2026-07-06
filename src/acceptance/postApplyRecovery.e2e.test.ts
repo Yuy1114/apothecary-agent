@@ -27,6 +27,7 @@ beforeEach(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-recovery-e2e-"));
   await initChangeLog(`file:${path.join(vault, "change-log.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   reindexFile.mockClear();
   ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
 });

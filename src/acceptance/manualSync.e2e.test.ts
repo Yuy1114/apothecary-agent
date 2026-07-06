@@ -32,11 +32,13 @@ beforeEach(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-manual-sync-e2e-"));
   await mkdir(abs("notes"), { recursive: true });
   await initChangeLog(`file:${path.join(vault, "changes.db")}`);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ manualSync } = await import("../mastra/tools/manual-sync-core.js"));
 });
 
 afterEach(async () => {
   setChangeLogClient(null);
+  vi.unstubAllEnvs();
   await rm(vault, { recursive: true, force: true });
 });
 

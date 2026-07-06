@@ -1,8 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { loadCanonicalCandidates } from "../../vault/semanticStore.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export const listCanonicalCandidatesTool = createTool({
   id: "listCanonicalCandidates",
@@ -27,7 +26,7 @@ export const listCanonicalCandidatesTool = createTool({
     ),
   }),
   execute: async ({ limit }) => {
-    const { candidates } = await loadCanonicalCandidates(VAULT_PATH);
+    const { candidates } = await loadCanonicalCandidates(apothecaryHome());
     return { candidates: candidates.slice(0, limit ?? 15) };
   },
 });

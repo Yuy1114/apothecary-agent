@@ -34,13 +34,15 @@ async function propose(type: ProposalType, payload: unknown, title = "t", ration
 
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-proposal-test-"));
-  await mkdir(path.join(vault, ".agent"), { recursive: true });
+  // Point the agent home at the temp vault so the test's createProposal(vault)
+  // and production's apothecaryHome() resolve the same artifact dir.
+  vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   await writeFile(
-    path.join(vault, ".agent", "structure.yaml"),
+    path.join(vault, "structure.yaml"),
     "directories:\n  reflections/:\n    description: 反思\n    keywords:\n      - 反思\n  notes/:\n    description: 笔记\naliases: {}\n",
     "utf8",
   );
-  vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   ({ resolveProposalById } = await import("./resolve-proposal-core.js"));
 });
 
@@ -158,7 +160,7 @@ describe("resolveProposalById", () => {
     const result = await resolve(p.id, "approve");
 
     expect(result.status).toBe("applied");
-    expect(await read(".agent/structure.yaml")).toContain("复盘");
+    expect(await read("structure.yaml")).toContain("复盘");
   });
 
   it("leaves a structure proposal pending when the directory is unknown", async () => {
@@ -172,10 +174,10 @@ describe("resolveProposalById", () => {
   });
 
   it("approving a view_promotion writes the target note", async () => {
-    await mkdir(abs(".agent/views"), { recursive: true });
-    await writeFile(abs(".agent/views/ai-eng.md"), "# view", "utf8");
+    await mkdir(abs("views"), { recursive: true });
+    await writeFile(abs("views/ai-eng.md"), "# view", "utf8");
     const p = await propose("view_promotion", {
-      sourceViewPath: ".agent/views/ai-eng.md",
+      sourceViewPath: "views/ai-eng.md",
       targetPath: "notes/ai-eng.md",
       content: "# AI Engineering\n\npromoted",
     });
@@ -202,7 +204,7 @@ describe("resolveProposalById", () => {
 
   it("refuses a view path that enters .agent/views then traverses back out", async () => {
     const p = await propose("view_promotion", {
-      sourceViewPath: ".agent/views/../../notes/not-a-view.md",
+      sourceViewPath: "views/../../notes/not-a-view.md",
       targetPath: "notes/copied.md",
       content: "# copied",
     });
@@ -268,10 +270,10 @@ describe("resolveProposalById", () => {
   });
 
   it("refuses a view_promotion whose target escapes the vault", async () => {
-    await mkdir(abs(".agent/views"), { recursive: true });
-    await writeFile(abs(".agent/views/v.md"), "# v", "utf8");
+    await mkdir(abs("views"), { recursive: true });
+    await writeFile(abs("views/v.md"), "# v", "utf8");
     const p = await propose("view_promotion", {
-      sourceViewPath: ".agent/views/v.md",
+      sourceViewPath: "views/v.md",
       targetPath: "../../evil.md",
       content: "x",
     });
@@ -283,7 +285,7 @@ describe("resolveProposalById", () => {
 
   it("refuses a view_promotion whose source view is missing", async () => {
     const p = await propose("view_promotion", {
-      sourceViewPath: ".agent/views/ghost.md",
+      sourceViewPath: "views/ghost.md",
       targetPath: "notes/ghost.md",
       content: "x",
     });

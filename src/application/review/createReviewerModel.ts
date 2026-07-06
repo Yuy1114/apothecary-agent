@@ -10,7 +10,7 @@ import {
   TopicFileSchema,
 } from "../../domain/knowledgeMap.js";
 import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from "./reviewerModel.js";
-import { vaultReviewer } from "../../mastra/agents/vault-reviewer.js";
+import { reviewModel } from "../../mastra/agents/transformers/review-model.js";
 import { createId } from "../../utils/ids.js";
 
 const MAP_SYSTEM = [
@@ -69,7 +69,7 @@ export function createReviewerModel(_config?: unknown): ReviewerModel {
         `Constraints: maxTopics=${input.options.maxTopics}, maxFilesPerTopic=${input.options.maxFilesPerTopic}`,
       ].join("\n");
 
-      const result = await vaultReviewer.generate(prompt, {
+      const result = await reviewModel.generate(prompt, {
         maxSteps: 1,
         system: MAP_SYSTEM,
         // The full scan context is already in the prompt; this is a pure
@@ -106,7 +106,7 @@ export function createReviewerModel(_config?: unknown): ReviewerModel {
         `Thresholds: longContextWord=${input.options.longContextWordThreshold}, longContextLine=${input.options.longContextLineThreshold}`,
       ].join("\n");
 
-      const result = await vaultReviewer.generate(prompt, {
+      const result = await reviewModel.generate(prompt, {
         maxSteps: 1,
         system: REVIEW_SYSTEM,
         // The full scan context is already in the prompt; this is a pure

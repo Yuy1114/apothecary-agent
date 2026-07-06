@@ -5,8 +5,7 @@ import path from "node:path";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { KnowledgeProfileSchema } from "../../domain/knowledgeProfile.js";
 import { loadProfileRefreshState } from "../../vault/profileState.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export const readKnowledgeProfileTool = createTool({
   id: "readKnowledgeProfile",
@@ -29,8 +28,8 @@ export const readKnowledgeProfileTool = createTool({
     recommendations: z.array(z.string()).optional(),
   }),
   execute: async () => {
-    const profilePath = path.join(getAgentArtifacts(VAULT_PATH).profileDir, "knowledge-profile.json");
-    const { dirty } = await loadProfileRefreshState(VAULT_PATH);
+    const profilePath = path.join(getAgentArtifacts().profileDir, "knowledge-profile.json");
+    const { dirty } = await loadProfileRefreshState(apothecaryHome());
     try {
       const profile = KnowledgeProfileSchema.parse(JSON.parse(await fs.readFile(profilePath, "utf8")));
       return {

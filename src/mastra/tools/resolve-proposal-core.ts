@@ -7,9 +7,12 @@ import { mergeNotesCore } from "./merge-notes-core.js";
 import { writeVaultNote } from "./ingest-core.js";
 import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { setFrontmatterKey } from "../../vault/frontmatter.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
+import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
 import { syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
@@ -108,10 +111,13 @@ async function executeProposal(
       if (targetPath.replaceAll("\\", "/").startsWith(".agent/")) {
         return { ok: false, reason: "invalid_promotion_target" };
       }
-      const sourceAbs = safeVaultPath(VAULT_PATH, sourceViewPath);
+      // Generated views live in the global agent home (~/.apothecary/views), so
+      // the source view is resolved there; the promotion target is a vault note.
+      const artifacts = getAgentArtifacts();
+      const sourceAbs = path.resolve(artifacts.rootPath, sourceViewPath);
       const abs = safeVaultPath(VAULT_PATH, targetPath);
-      if (!sourceAbs || !abs) return { ok: false, reason: "unsafe_path" };
-      const viewsRoot = path.resolve(VAULT_PATH, ".agent", "views");
+      if (!abs) return { ok: false, reason: "unsafe_path" };
+      const viewsRoot = artifacts.viewsDir;
       const sourceWithinViews = path.relative(viewsRoot, sourceAbs);
       if (
         sourceWithinViews === "" ||
@@ -199,7 +205,7 @@ export async function resolveProposalById(
   note?: string,
   deps: { postApplyRefresh: PostApplyRefresh } = { postApplyRefresh: defaultPostApplyRefresh },
 ): Promise<ResolveProposalResult> {
-  const proposal = await loadProposal(VAULT_PATH, id);
+  const proposal = await loadProposal(apothecaryHome(), id);
   if (!proposal) return { resolved: false, proposalId: id, reason: "not_found" };
   if (proposal.status !== "proposed") {
     return { resolved: false, proposalId: id, type: proposal.type, status: proposal.status, reason: "not_pending" };
@@ -207,9 +213,15 @@ export async function resolveProposalById(
 
   if (decision === "reject") {
     const rejected = resolveProposalRecord(proposal, "rejected", note, nowIso());
-    await saveProposal(VAULT_PATH, rejected);
+    await saveProposal(apothecaryHome(), rejected);
     return { resolved: true, proposalId: id, type: proposal.type, status: "rejected" };
   }
+
+  // Mark the paths this apply will touch before writing, so the vault watcher
+  // treats the resulting fs events as the agent's own work and does not re-queue
+  // them as external changes. Marked again below with the exact affected set once
+  // known (README side-effects mark themselves inside the readme-index core).
+  markSelfWrite(proposal.targetFiles);
 
   // Executors report expected failures via {ok:false}; some (e.g. structure)
   // throw on invalid input. Either way, leave the proposal open to fix and retry.
@@ -228,6 +240,10 @@ export async function resolveProposalById(
     return { resolved: false, proposalId: id, type: proposal.type, reason: outcome.reason ?? "apply_failed" };
   }
 
+  // Re-mark with the exact affected paths (covers move's destination, etc.) now
+  // that the write has landed, refreshing the window for late fs.watch events.
+  markSelfWrite(outcome.affected ?? []);
+
   // Bring the semantic layer in step with the change before the proposal counts
   // as applied. Best-effort: the file change already succeeded, so a refresh
   // failure must not block `applied`. Instead of losing it in a warning, record
@@ -240,7 +256,7 @@ export async function resolveProposalById(
   }
 
   const applied = resolveProposalRecord(proposal, "applied", note, nowIso());
-  await saveProposal(VAULT_PATH, applied);
+  await saveProposal(apothecaryHome(), applied);
   return { resolved: true, proposalId: id, type: proposal.type, status: "applied" };
 }
 
@@ -248,5 +264,5 @@ export async function resolveProposalById(
 export function listProposalRecords(
   filter: Parameters<typeof listProposals>[1] = {},
 ): Promise<Proposal[]> {
-  return listProposals(VAULT_PATH, filter);
+  return listProposals(apothecaryHome(), filter);
 }

@@ -28,6 +28,7 @@ beforeEach(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-manualsync-test-"));
   await mkdir(abs("notes"), { recursive: true });
   await initChangeLog(`file:${path.join(vault, "change-log.db")}`);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   reindexFile.mockClear();
   removeFromIndex.mockClear();
   refreshSemantics.mockClear();
@@ -35,6 +36,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   setChangeLogClient(null);
+  vi.unstubAllEnvs();
   await rm(vault, { recursive: true, force: true });
 });
 

@@ -8,8 +8,6 @@ import {
   MaintenanceFindingSchema,
 } from "../../domain/maintenanceReview.js";
 
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-
 export const readReviewTool = createTool({
   id: "readReview",
   description:
@@ -30,7 +28,7 @@ export const readReviewTool = createTool({
     findings: z.array(MaintenanceFindingSchema),
   }),
   execute: async ({ reviewId }) => {
-    const reviewsDir = getAgentArtifacts(VAULT_PATH).reviewsDir;
+    const reviewsDir = getAgentArtifacts().reviewsDir;
 
     let stem = reviewId;
     if (!stem) {

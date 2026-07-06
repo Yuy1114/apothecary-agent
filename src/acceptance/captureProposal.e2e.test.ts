@@ -46,14 +46,14 @@ const postApplyRefresh = (vaultPath: string, paths: string[]) =>
 
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-e2e-test-"));
-  await mkdir(path.join(vault, ".agent"), { recursive: true });
   await writeFile(
-    path.join(vault, ".agent", "structure.yaml"),
+    path.join(vault, "structure.yaml"),
     "directories:\n  reflections/:\n    description: 反思\n    keywords:\n      - 反思\n      - 复盘\naliases: {}\n",
     "utf8",
   );
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
 });
 
@@ -104,6 +104,6 @@ describe("capture proposal end-to-end", () => {
     expect(summaries[notePath].topics).toContain("Redis");
 
     // ...and the derived artifacts were rebuilt (graph → relations exist on disk).
-    await expect(access(path.join(vault, ".agent", "semantic", "semantic-graph.json"))).resolves.toBeUndefined();
+    await expect(access(path.join(vault, "semantic", "semantic-graph.json"))).resolves.toBeUndefined();
   });
 });

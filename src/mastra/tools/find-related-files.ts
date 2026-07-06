@@ -2,8 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { loadGraph } from "../../vault/semanticStore.js";
 import { semanticNeighbors } from "../../domain/semanticGraph.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export const findRelatedFilesTool = createTool({
   id: "findRelatedFiles",
@@ -27,7 +26,7 @@ export const findRelatedFilesTool = createTool({
     ),
   }),
   execute: async ({ filePath, limit }) => {
-    const graph = await loadGraph(VAULT_PATH);
+    const graph = await loadGraph(apothecaryHome());
     return { filePath, related: semanticNeighbors(graph, filePath, limit ?? 10) };
   },
 });

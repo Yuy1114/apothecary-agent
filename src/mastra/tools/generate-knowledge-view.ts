@@ -6,8 +6,6 @@ import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { generateKnowledgeView } from "../../application/views/generateKnowledgeView.js";
 import { renderKnowledgeViewMarkdown } from "../../reports/renderKnowledgeViewMarkdown.js";
 
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
-
 function slugify(text: string): string {
   return (
     text
@@ -36,12 +34,12 @@ export const generateKnowledgeViewTool = createTool({
   }),
   execute: async ({ topic }) => {
     const view = await generateKnowledgeView(topic);
-    const artifacts = await ensureAgentArtifacts(VAULT_PATH);
+    const artifacts = await ensureAgentArtifacts();
     const viewPath = path.join(artifacts.viewsDir, `${slugify(topic)}.md`);
     await fs.writeFile(viewPath, renderKnowledgeViewMarkdown(view), "utf8");
     return {
       topic: view.topic,
-      viewPath: path.relative(VAULT_PATH, viewPath),
+      viewPath: path.relative(artifacts.rootPath, viewPath),
       overview: view.overview,
       sourceFiles: view.sourceFiles,
     };

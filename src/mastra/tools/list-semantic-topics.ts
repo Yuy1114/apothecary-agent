@@ -1,8 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { loadGraph } from "../../vault/semanticStore.js";
-
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export const listSemanticTopicsTool = createTool({
   id: "listSemanticTopics",
@@ -22,7 +21,7 @@ export const listSemanticTopicsTool = createTool({
     concepts: z.array(z.object({ label: z.string(), fileCount: z.number() })),
   }),
   execute: async ({ limit, minFiles }) => {
-    const graph = await loadGraph(VAULT_PATH);
+    const graph = await loadGraph(apothecaryHome());
     const take = limit ?? 20;
     const floor = minFiles ?? 2;
     const shape = (entries: typeof graph.topics) =>

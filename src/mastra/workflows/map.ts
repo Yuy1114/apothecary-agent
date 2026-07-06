@@ -33,7 +33,7 @@ const scanStep = createStep({
     scan: VaultScanSchema,
   }),
   execute: async ({ inputData }) => {
-    await ensureAgentArtifacts(inputData.vaultPath);
+    await ensureAgentArtifacts();
     const scan = VaultScanSchema.parse(await scanVault({
       vaultPath: inputData.vaultPath,
       scopePath: inputData.scopePath,
@@ -60,7 +60,7 @@ const mapStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const scan = inputData.scan;
-    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts();
     const context = buildKnowledgeMapContext(scan, {
       maxFiles: 20,
       minSizeBytes: 100,

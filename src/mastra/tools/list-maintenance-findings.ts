@@ -3,6 +3,7 @@ import { z } from "zod";
 import { detectSupersededNotes } from "../../application/maintenance/detectSupersededNotes.js";
 import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { loadCanonicalCandidates } from "../../vault/semanticStore.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -28,7 +29,7 @@ export const listMaintenanceFindingsTool = createTool({
   execute: async ({ limit }) => {
     const [superseded, { candidates }] = await Promise.all([
       detectSupersededNotes(VAULT_PATH),
-      loadCanonicalCandidates(VAULT_PATH),
+      loadCanonicalCandidates(apothecaryHome()),
     ]);
     const findings = buildMaintenanceFindings({ superseded, candidates });
     return { findings: findings.slice(0, limit ?? 20) };

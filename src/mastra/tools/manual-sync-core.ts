@@ -10,6 +10,7 @@ import {
 } from "../../vault/syncSnapshot.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
 import { nowIso } from "../../utils/time.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 export type ManualSyncReport = {
   created: number;
@@ -47,7 +48,7 @@ export async function manualSync(
     if (file.mediaType === "markdown") current[file.path] = { hash: file.hash ?? "" };
   }
 
-  const previous = await loadSnapshot(input.vaultPath);
+  const previous = await loadSnapshot(apothecaryHome());
   const diff = diffSnapshot(previous.files, current);
 
   // Keep the vector index fresh (the watcher normally does this eagerly).
@@ -59,7 +60,7 @@ export async function manualSync(
   for (const p of diff.modified) await enqueueChange({ path: p, changeType: "modified", source: "manual" });
   for (const p of diff.deleted) await enqueueChange({ path: p, changeType: "deleted", source: "manual" });
 
-  await saveSnapshot(input.vaultPath, { generatedAt: nowIso(), files: current });
+  await saveSnapshot(apothecaryHome(), { generatedAt: nowIso(), files: current });
 
   // Chain the incremental semantic refresh so the understanding layer catches up
   // too — only when something actually changed, to avoid needless LLM work.

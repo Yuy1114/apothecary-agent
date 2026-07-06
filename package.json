@@ -1,14 +1,19 @@
 {
   "name": "apothecary-agent",
-  "version": "0.1.0",
+  "version": "1.1.0",
+  "main": "dist/desktop/main.js",
   "description": "Mastra-native agent for local Markdown knowledge bases.",
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "build": "tsc",
-    "check": "tsc --noEmit",
+    "build": "tsc && vite build --config vite.desktop.config.ts",
+    "check": "tsc --noEmit && tsc --project tsconfig.renderer.json",
     "test": "vitest",
-    "ci": "pnpm run check && pnpm run build && pnpm vitest run"
+    "ci": "pnpm run check && pnpm run build && pnpm vitest run",
+    "desktop:dev": "node scripts/desktop-dev.mjs",
+    "desktop:dev:once": "pnpm run build && electron .",
+    "desktop:pack": "pnpm run build && electron-builder --dir",
+    "desktop:dist": "pnpm run build && electron-builder"
   },
   "keywords": [
     "agent",
@@ -21,6 +26,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.4",
     "@ai-sdk/openai-compatible": "^3.0.2",
+    "@assistant-ui/react": "^0.14.24",
+    "@assistant-ui/react-markdown": "^0.14.5",
     "@libsql/client": "^0.17.4",
     "@mastra/core": "^1.47.0",
     "@mastra/duckdb": "^1.5.0",
@@ -31,16 +38,73 @@
     "@mastra/observability": "^1.15.2",
     "@mastra/rag": "^2.3.0",
     "ai": "^7.0.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
+    "lucide-react": "^1.23.0",
     "mastra": "^1.16.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "^3.6.0",
     "yaml": "^2.8.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-from-json-schema": "0.5.3",
+    "zod-from-json-schema-v3": "npm:zod-from-json-schema@0.0.5"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^24.10.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "tailwindcss": "^4.3.2",
     "typescript": "^5.9.3",
+    "vite": "^8.1.3",
     "vitest": "^4.0.15"
+  },
+  "build": {
+    "appId": "com.yuy.apothecary-agent",
+    "productName": "Apothecary",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/.pnpm/zod-from-json-schema@0.5.3/node_modules/zod-from-json-schema",
+        "to": "app/node_modules/zod-from-json-schema"
+      },
+      {
+        "from": "node_modules/.pnpm/zod-from-json-schema@0.0.5/node_modules/zod-from-json-schema",
+        "to": "app/node_modules/zod-from-json-schema-v3"
+      },
+      {
+        "from": "node_modules/.pnpm/@ai-sdk+provider@2.0.3/node_modules/@ai-sdk/provider",
+        "to": "app/node_modules/@ai-sdk/provider-v5"
+      },
+      {
+        "from": "node_modules/.pnpm/@ai-sdk+provider@3.0.10/node_modules/@ai-sdk/provider",
+        "to": "app/node_modules/@ai-sdk/provider-v6"
+      },
+      {
+        "from": "node_modules/.pnpm/@ai-sdk+provider@4.0.0/node_modules/@ai-sdk/provider",
+        "to": "app/node_modules/@ai-sdk/provider-v7"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   }
 }

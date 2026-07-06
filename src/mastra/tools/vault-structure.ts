@@ -2,8 +2,14 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parse, parseDocument } from "yaml";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 
-const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+// Legacy directory-classification config. The skeleton redesign supersedes this
+// with charter-config routing; kept resilient (returns empty when absent) and
+// homed under the global agent dir rather than inside the vault.
+function structureYamlPath(): string {
+  return path.join(getAgentArtifacts().rootPath, "structure.yaml");
+}
 
 export type DirectoryDef = {
   description: string;
@@ -22,7 +28,7 @@ let cache: VaultStructure | null = null;
 export async function loadStructure(): Promise<VaultStructure> {
   if (cache) return cache;
   try {
-    const raw = await fs.readFile(path.join(VAULT_PATH, ".agent", "structure.yaml"), "utf8");
+    const raw = await fs.readFile(structureYamlPath(), "utf8");
     const parsed = (parse(raw) ?? {}) as Partial<VaultStructure>;
     cache = {
       directories: parsed.directories ?? {},
@@ -97,7 +103,7 @@ export function applyKeywordEdit(rawYaml: string, edit: KeywordEdit): { yaml: st
  * next classification uses the updated rules.
  */
 export async function updateDirectoryKeywords(edit: KeywordEdit): Promise<KeywordEditResult> {
-  const structurePath = path.join(VAULT_PATH, ".agent", "structure.yaml");
+  const structurePath = structureYamlPath();
   const raw = await fs.readFile(structurePath, "utf8");
   const { yaml, directory, keywords, conflicts } = applyKeywordEdit(raw, edit);
   await fs.writeFile(structurePath, yaml, "utf8");
@@ -105,7 +111,7 @@ export async function updateDirectoryKeywords(edit: KeywordEdit): Promise<Keywor
 
   await recordOperation({
     type: "structure",
-    targetFiles: [".agent/structure.yaml"],
+    targetFiles: ["structure.yaml"],
     source: "updateStructureKeywords",
     detail: `${directory}: +[${(edit.add ?? []).join(", ")}] -[${(edit.remove ?? []).join(", ")}]`,
   });

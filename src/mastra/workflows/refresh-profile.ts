@@ -8,6 +8,7 @@ import { loadSummaries, loadGraph, loadDuplicateReport } from "../../vault/seman
 import { generateKnowledgeProfile } from "../../application/profile/generateKnowledgeProfile.js";
 import { renderKnowledgeProfileMarkdown } from "../../reports/renderKnowledgeProfileMarkdown.js";
 import { clearProfileDirty } from "../../vault/profileState.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 
 const OutputSchema = z.object({
   fileCount: z.number(),
@@ -28,11 +29,13 @@ const buildStep = createStep({
   inputSchema: z.object({ vaultPath: z.string() }),
   outputSchema: OutputSchema,
   execute: async ({ inputData }) => {
-    const { vaultPath } = inputData;
+    // Reads and writes the semantic layer / profile in the global agent home;
+    // the vault itself is only validated (resolveVaultStep), not read here.
+    const home = apothecaryHome();
     const [summaries, graph, dupReport] = await Promise.all([
-      loadSummaries(vaultPath),
-      loadGraph(vaultPath),
-      loadDuplicateReport(vaultPath),
+      loadSummaries(home),
+      loadGraph(home),
+      loadDuplicateReport(home),
     ]);
 
     if (Object.keys(summaries).length === 0) {
@@ -41,7 +44,7 @@ const buildStep = createStep({
 
     const profile = await generateKnowledgeProfile({ summaries, graph, dupReport });
 
-    const artifacts = await ensureAgentArtifacts(vaultPath);
+    const artifacts = await ensureAgentArtifacts();
     await fs.writeFile(
       path.join(artifacts.profileDir, "knowledge-profile.json"),
       JSON.stringify(profile, null, 2),
@@ -54,7 +57,7 @@ const buildStep = createStep({
     );
 
     // The profile now reflects the current semantic layer.
-    await clearProfileDirty(vaultPath);
+    await clearProfileDirty(home);
 
     return {
       fileCount: profile.stats.fileCount,

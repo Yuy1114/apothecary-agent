@@ -145,7 +145,7 @@ const persistReviewStep = createStep({
       };
     }
 
-    const artifacts = await ensureAgentArtifacts(inputData.vaultPath);
+    const artifacts = await ensureAgentArtifacts();
     const stamp = timestampForFile();
     const jsonPath = path.join(artifacts.reviewsDir, `review-${stamp}.json`);
     const markdownPath = path.join(artifacts.reviewsDir, `review-${stamp}.md`);
