@@ -5,7 +5,28 @@ import path from "node:path";
 import { enqueueChange } from "./../../vault/changeLog.js";
 import { isSelfWrite } from "../../vault/selfWriteGuard.js";
 import { isArchivedPath } from "../../vault/archive.js";
+import { hashFile } from "../../vault/hash.js";
+import { loadSnapshot, commitSelfWrite } from "../../vault/syncSnapshot.js";
+import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
+
+export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
+
+/**
+ * Classify a watcher event by comparing the file's current content hash against
+ * the sync baseline. Pure and deterministic (mirrors `diffSnapshot`): a null
+ * current hash means the file is gone; a null baseline hash means it was not
+ * previously accounted for. An unregistered path is external work iff its
+ * content no longer matches the baseline.
+ */
+export function classifyWatchEvent(
+  currentHash: string | null,
+  baselineHash: string | null,
+): WatchClassification {
+  if (currentHash === null) return baselineHash === null ? "unchanged" : "deleted";
+  if (baselineHash === null) return "created";
+  return currentHash === baselineHash ? "unchanged" : "modified";
+}
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -40,39 +61,52 @@ const FILE_CHANGED_WORKFLOW = "fileChangedWorkflow";
 const FILE_DELETED_WORKFLOW = "fileDeletedWorkflow";
 
 async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
+  // A system operation is mid-write on this path: it owns the index, ledger and
+  // baseline for it, so the watcher must stay out entirely.
+  if (isSelfWrite(relativePath)) return;
+
   const absolutePath = path.join(VAULT_PATH, relativePath);
 
-  let exists = false;
+  // Hash the current content (null = gone) and compare against the baseline.
+  // Only a genuine mismatch — new file, changed content, or a deletion — counts
+  // as external work; a self-write echo already matches the baseline.
+  let currentHash: string | null = null;
   try {
-    exists = (await fs.stat(absolutePath)).isFile();
+    if ((await fs.stat(absolutePath)).isFile()) currentHash = await hashFile(absolutePath);
   } catch {
-    exists = false;
+    currentHash = null;
   }
+
+  const baseline = await loadSnapshot(apothecaryHome());
+  const classification = classifyWatchEvent(currentHash, baseline.files[relativePath]?.hash ?? null);
+  if (classification === "unchanged") return;
 
   // Isolated from the stat above so a workflow failure is never mistaken for a
   // deletion, and never escapes as an unhandled rejection that crashes the host.
   try {
     // Index stays eager so search is always fresh.
-    const workflowKey = exists ? FILE_CHANGED_WORKFLOW : FILE_DELETED_WORKFLOW;
+    const workflowKey = currentHash !== null ? FILE_CHANGED_WORKFLOW : FILE_DELETED_WORKFLOW;
     const run = await mastra.getWorkflow(workflowKey).createRun();
     await run.start({ inputData: { filePath: relativePath } });
   } catch (error) {
     console.warn(`Vault watcher: failed to sync ${relativePath}:`, error);
   }
 
-  // Record the change as pending agent-work in the durable ledger — unless this
-  // write is the agent's own applied operation. Those already went through
-  // proposal → approval → operation ledger, so re-queuing them would be noise.
-  if (!isSelfWrite(relativePath)) {
-    try {
-      await enqueueChange({
-        path: relativePath,
-        changeType: exists ? "modified" : "deleted",
-        source: "watcher",
-      });
-    } catch (error) {
-      console.warn(`Vault watcher: failed to log change for ${relativePath}:`, error);
-    }
+  // Record the external change as pending agent-work, accurately typed — the
+  // hash diff lets the watcher tell created from modified, unlike the old
+  // exists-only check.
+  try {
+    await enqueueChange({ path: relativePath, changeType: classification, source: "watcher" });
+  } catch (error) {
+    console.warn(`Vault watcher: failed to log change for ${relativePath}:`, error);
+  }
+
+  // Fold the change into the baseline so the duplicate events a single write
+  // emits, and the next manual sync, agree it is now accounted for.
+  try {
+    await commitSelfWrite(VAULT_PATH, [relativePath]);
+  } catch (error) {
+    console.warn(`Vault watcher: failed to update baseline for ${relativePath}:`, error);
   }
 
   // Keep the semantic layer live: refresh summaries/graph for the changed files

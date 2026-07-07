@@ -4,6 +4,7 @@ import { addReadmeEntry, removeReadmeEntry } from "../../vault/readmeIndex.js";
 import { parseMarkdownSnapshot } from "../../vault/markdown.js";
 import { loadStructure } from "./vault-structure.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
+import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 
 /** Directory of a vault-relative path in POSIX form; "" for the vault root. */
 function dirOf(relPath: string): string {
@@ -46,6 +47,7 @@ export async function updateReadmeForCreatedNote(vaultPath: string, notePath: st
   // the watcher does not surface it as an external change.
   markSelfWrite([relativeReadme]);
   await fs.writeFile(readmePath, next, "utf8");
+  await commitSelfWrite(vaultPath, [relativeReadme]);
   return relativeReadme;
 }
 
@@ -64,8 +66,10 @@ export async function updateReadmesForMove(vaultPath: string, from: string, to: 
   if (srcContent != null) {
     const next = removeReadmeEntry(srcContent, fromBase);
     if (next !== srcContent) {
-      markSelfWrite([path.posix.join(fromDir, "README.md")]);
+      const srcReadmeRel = path.posix.join(fromDir, "README.md");
+      markSelfWrite([srcReadmeRel]);
       await fs.writeFile(srcReadme, next, "utf8");
+      await commitSelfWrite(vaultPath, [srcReadmeRel]);
     }
   }
 

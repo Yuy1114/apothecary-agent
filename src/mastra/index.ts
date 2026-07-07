@@ -18,6 +18,7 @@ import {
   fileDeletedWorkflow,
 } from "./workflows/sync-workflow.js";
 import { startVaultWatcher } from "./workflows/sync-watcher.js";
+import { manualSync } from "./tools/manual-sync-core.js";
 import { initChangeLog } from "../vault/changeLog.js";
 import { initOperationLedger } from "../vault/operationLedger.js";
 import { initWorkflow } from "./workflows/init.js";
@@ -121,8 +122,30 @@ export const mastra = new Mastra({
   },
 });
 
-initChangeLog(CHANGE_LOG_DB_PATH)
-  .catch((error) => console.warn("Change ledger failed to initialize:", error));
-initOperationLedger(OPERATIONS_DB_PATH)
-  .catch((error) => console.warn("Operation ledger failed to initialize:", error));
-startVaultWatcher(mastra);
+const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
+
+// Boot the change-awareness subsystem in order: ledgers first, then a manual
+// sync to (a) recover edits made while the process was down and (b) seed the
+// hash baseline the watcher diffs against, then start the real-time watcher.
+// Runs off the module load so it never blocks the Mastra/Studio server; only
+// the watcher's start is gated on the seeding sync completing.
+async function bootstrapChangeAwareness(): Promise<void> {
+  try {
+    await initChangeLog(CHANGE_LOG_DB_PATH);
+  } catch (error) {
+    console.warn("Change ledger failed to initialize:", error);
+  }
+  try {
+    await initOperationLedger(OPERATIONS_DB_PATH);
+  } catch (error) {
+    console.warn("Operation ledger failed to initialize:", error);
+  }
+  try {
+    await manualSync({ vaultPath: VAULT_PATH });
+  } catch (error) {
+    console.warn("Startup sync failed to seed the change baseline:", error);
+  }
+  startVaultWatcher(mastra);
+}
+
+void bootstrapChangeAwareness();

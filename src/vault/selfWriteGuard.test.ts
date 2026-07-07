@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { clearSelfWriteMarks, isSelfWrite, markSelfWrite } from "./selfWriteGuard.js";
+import { clearSelfWrite, clearSelfWriteMarks, isSelfWrite, markSelfWrite } from "./selfWriteGuard.js";
 
 afterEach(() => clearSelfWriteMarks());
 
@@ -22,8 +22,22 @@ describe("selfWriteGuard", () => {
     expect(isSelfWrite("notes/b.md")).toBe(true);
   });
 
-  it("expires marks so a later external edit is caught", () => {
+  it("expires marks via the backstop TTL so a later external edit is caught", () => {
     markSelfWrite(["notes/c.md"], -1);
     expect(isSelfWrite("notes/c.md")).toBe(false);
+  });
+
+  it("clearSelfWrite releases a mark immediately (no TTL wait)", () => {
+    markSelfWrite(["notes/d.md", "notes/e.md"]);
+    clearSelfWrite(["notes/d.md"]);
+    // Cleared path is now open to external-edit detection; the other stays marked.
+    expect(isSelfWrite("notes/d.md")).toBe(false);
+    expect(isSelfWrite("notes/e.md")).toBe(true);
+  });
+
+  it("clearSelfWrite normalises paths the same way as marking", () => {
+    markSelfWrite(["notes/f.md"]);
+    clearSelfWrite(["./notes\\f.md"]);
+    expect(isSelfWrite("notes/f.md")).toBe(false);
   });
 });

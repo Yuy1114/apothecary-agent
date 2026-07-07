@@ -8,6 +8,7 @@ import { writeVaultNote } from "./ingest-core.js";
 import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
+import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { setFrontmatterKey } from "../../vault/frontmatter.js";
 import { loadProposal, saveProposal, listProposals } from "../../vault/proposalStore.js";
@@ -243,6 +244,15 @@ export async function resolveProposalById(
   // Re-mark with the exact affected paths (covers move's destination, etc.) now
   // that the write has landed, refreshing the window for late fs.watch events.
   markSelfWrite(outcome.affected ?? []);
+
+  // Fold the applied write into the change baseline (sources dropped, targets
+  // hashed) and release the marks, so neither the watcher nor a later manual
+  // sync re-flags this agent-applied change as an external edit.
+  try {
+    await commitSelfWrite(VAULT_PATH, outcome.affected ?? []);
+  } catch (error) {
+    console.warn(`resolveProposal: failed to update change baseline for ${id}:`, error);
+  }
 
   // Bring the semantic layer in step with the change before the proposal counts
   // as applied. Best-effort: the file change already succeeded, so a refresh
