@@ -11,6 +11,8 @@ const channel = {
   resolveChanges: "apothecary:resolve-changes",
   sync: "apothecary:sync",
   inbox: "apothecary:inbox",
+  vaultTree: "apothecary:vault-tree",
+  vaultFolder: "apothecary:vault-folder",
   readInbox: "apothecary:read-inbox",
   readFile: "apothecary:read-file",
   proposals: "apothecary:proposals",
@@ -39,6 +41,8 @@ contextBridge.exposeInMainWorld("apothecary", {
     ipcRenderer.invoke(channel.resolveChanges, { ids, outcome }),
   sync: () => ipcRenderer.invoke(channel.sync),
   inbox: () => ipcRenderer.invoke(channel.inbox),
+  vaultTree: () => ipcRenderer.invoke(channel.vaultTree),
+  vaultFolder: (scopePath: string) => ipcRenderer.invoke(channel.vaultFolder, { scopePath }),
   readInbox: (filePath: string) => ipcRenderer.invoke(channel.readInbox, { filePath }),
   readFile: (filePath: string) => ipcRenderer.invoke(channel.readFile, { filePath }),
   proposals: (status?: "proposed" | "applied" | "rejected") =>

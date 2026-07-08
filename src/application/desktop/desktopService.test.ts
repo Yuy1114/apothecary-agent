@@ -21,8 +21,11 @@ async function setup() {
   const vaultPath = path.join(root, "vault");
   const projectRoot = path.join(root, "project");
   vi.stubEnv("APOTHECARY_HOME", vaultPath);
-  await mkdir(path.join(vaultPath, "inbox"), { recursive: true });
-  await writeFile(path.join(vaultPath, "inbox", "idea.txt"), "Redis idea", "utf8");
+  await mkdir(path.join(vaultPath, "_inbox"), { recursive: true });
+  await writeFile(path.join(vaultPath, "_inbox", "idea.txt"), "Redis idea", "utf8");
+  // Meta files describing the folder itself must be filtered out of the inbox list.
+  await writeFile(path.join(vaultPath, "_inbox", "ABOUT.md"), "# 关于 _inbox", "utf8");
+  await writeFile(path.join(vaultPath, "_inbox", "README.md"), "# _inbox 总览", "utf8");
   const service = new DesktopService({
     vaultPath,
     projectRoot,
@@ -45,7 +48,7 @@ describe("DesktopService", () => {
 
     await expect(service.chat([{ role: "user", content: "hello" }])).resolves.toBe("reply:hello");
     expect(await service.inbox()).toHaveLength(1);
-    await expect(service.readTextFile("inbox/idea.txt")).resolves.toMatchObject({ content: "Redis idea" });
+    await expect(service.readTextFile("_inbox/idea.txt")).resolves.toMatchObject({ content: "Redis idea" });
     expect(await service.changes()).toHaveLength(1);
     expect(await service.proposals("proposed")).toHaveLength(1);
     await expect(service.dashboard()).resolves.toMatchObject({
@@ -56,7 +59,7 @@ describe("DesktopService", () => {
 
   it("only reads inbox files through the inbox detail endpoint", async () => {
     const { service } = await setup();
-    await expect(service.readInboxFile("inbox/idea.txt")).resolves.toMatchObject({ content: "Redis idea" });
+    await expect(service.readInboxFile("_inbox/idea.txt")).resolves.toMatchObject({ content: "Redis idea" });
     await expect(service.readInboxFile("../secret.txt")).rejects.toThrow("not_an_inbox_file");
   });
 

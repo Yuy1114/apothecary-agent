@@ -171,7 +171,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1080,
     minHeight: 720,
     titleBarStyle: "hiddenInset",
-    backgroundColor: "#f4f0e8",
+    backgroundColor: "#ffffff",
     webPreferences: {
       preload: path.join(currentDir, "preload.cjs"),
       contextIsolation: true,

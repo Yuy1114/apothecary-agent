@@ -8,6 +8,7 @@ import {
   ListProposalsInputSchema,
   ReadInboxInputSchema,
   ResolveChangesInputSchema,
+  VaultFolderInputSchema,
   ResolveProposalInputSchema,
   ResumeRunInputSchema,
   StartRunInputSchema,
@@ -57,6 +58,11 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   });
   ipcMain.handle(DesktopChannel.sync, () => service.sync());
   ipcMain.handle(DesktopChannel.inbox, () => service.inbox());
+  ipcMain.handle(DesktopChannel.vaultTree, () => service.vaultTree());
+  ipcMain.handle(DesktopChannel.vaultFolder, (_event, input) => {
+    const { scopePath } = VaultFolderInputSchema.parse(input);
+    return service.vaultFolder(scopePath);
+  });
   ipcMain.handle(DesktopChannel.readInbox, (_event, input) => {
     const { filePath } = ReadInboxInputSchema.parse(input);
     return service.readInboxFile(filePath);

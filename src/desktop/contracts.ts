@@ -29,6 +29,8 @@ export const ResolveChangesInputSchema = z.object({
 
 export const ReadInboxInputSchema = z.object({ filePath: z.string().min(1) });
 
+export const VaultFolderInputSchema = z.object({ scopePath: z.string().min(1) });
+
 export const ListProposalsInputSchema = z.object({
   status: z.enum(["proposed", "applied", "rejected"]).optional(),
 });
@@ -50,6 +52,8 @@ export const DesktopChannel = {
   resolveChanges: "apothecary:resolve-changes",
   sync: "apothecary:sync",
   inbox: "apothecary:inbox",
+  vaultTree: "apothecary:vault-tree",
+  vaultFolder: "apothecary:vault-folder",
   readInbox: "apothecary:read-inbox",
   readFile: "apothecary:read-file",
   proposals: "apothecary:proposals",

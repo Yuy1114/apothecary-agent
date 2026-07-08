@@ -1,6 +1,6 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type View = "chat" | "changes" | "inbox" | "proposals" | "knowledge" | "diagnostics";
+type View = "workspace" | "vault" | "runs" | "knowledge" | "settings";
 type Message = { role: "user" | "assistant"; content: string };
 type ProposalStatus = "proposed" | "applied" | "rejected";
 type RunTool = { toolCallId: string; toolName: string; status: "running" | "completed" | "failed" };
@@ -16,35 +16,55 @@ type AgentRun = {
 type TimelineItem = { kind: "user"; id: string; content: string } | { kind: "run"; run: AgentRun };
 
 const api = window.apothecary;
+
 const titles: Record<View, [string, string]> = {
-  chat: ["UNIFIED AGENT", "和你的知识药柜对话"],
-  changes: ["CHANGE AWARENESS", "处理药柜变更"],
-  inbox: ["INBOX TRIAGE", "让新知识找到归属"],
-  proposals: ["GOVERNANCE", "审阅 Agent 的修改提案"],
-  knowledge: ["KNOWLEDGE PROFILE", "看见你的知识体系"],
-  diagnostics: ["SYSTEM STATUS", "检查 Apothecary 的连接状态"],
+  workspace: ["工作区 Workspace", "对话 · 提案 · 运行动态"],
+  vault: ["Vault 文件库", "Inbox 与变更 · 监听中"],
+  runs: ["运行历史 Runs", "Agent 的操作记录"],
+  knowledge: ["知识体系 Knowledge", "主题域 · 关系 · 维护机会"],
+  settings: ["设置 Settings", "本地配置 · 不会上传"],
 };
 
-const nav: Array<[View, string, string]> = [
-  ["chat", "✦", "对话"], ["changes", "↻", "变更"], ["inbox", "⌁", "Inbox"],
-  ["proposals", "◇", "提案"], ["knowledge", "⌘", "知识画像"], ["diagnostics", "◎", "系统状态"],
-];
+const formatDate = (value?: string) =>
+  value ? new Date(value).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+const lastSegment = (p?: string) => (p ? p.split(/[\\/]/).filter(Boolean).at(-1) ?? p : "");
 
-const formatDate = (value?: string) => value
-  ? new Date(value).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-  : "";
+/* ── Icons (16-viewBox strokes, matching the imported design) ────────── */
+const S = (d: string, size = 15) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+);
+const Icon = {
+  workspace: () => S("M14 10.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 2.5V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7z"),
+  vault: () => S("M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 2h4.5A1.5 1.5 0 0 1 14 6.5v5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7z"),
+  runs: () => (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6.2" /><path d="M8 4.8V8l2.2 1.4" />
+    </svg>
+  ),
+  knowledge: () => (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="3.2" r="1.7" /><circle cx="3.2" cy="11.8" r="1.7" /><circle cx="12.8" cy="11.8" r="1.7" /><path d="M7.1 4.7 4 10.3M8.9 4.7l3.1 5.6M4.9 11.8h6.2" />
+    </svg>
+  ),
+  settings: () => (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="2.2" /><path d="M13.2 9.9a1.2 1.2 0 0 0 .24 1.32l.04.05a1.45 1.45 0 1 1-2.05 2.05l-.05-.04a1.2 1.2 0 0 0-1.32-.24 1.2 1.2 0 0 0-.73 1.1v.13a1.45 1.45 0 0 1-2.9 0v-.07a1.2 1.2 0 0 0-.79-1.1 1.2 1.2 0 0 0-1.32.24l-.05.04a1.45 1.45 0 1 1-2.05-2.05l.04-.05a1.2 1.2 0 0 0 .24-1.32 1.2 1.2 0 0 0-1.1-.73h-.13a1.45 1.45 0 0 1 0-2.9h.07a1.2 1.2 0 0 0 1.1-.79 1.2 1.2 0 0 0-.24-1.32l-.04-.05A1.45 1.45 0 1 1 4.27 2.1l.05.04a1.2 1.2 0 0 0 1.32.24h.06a1.2 1.2 0 0 0 .73-1.1v-.13a1.45 1.45 0 0 1 2.9 0v.07a1.2 1.2 0 0 0 .73 1.1 1.2 1.2 0 0 0 1.32-.24l.05-.04a1.45 1.45 0 1 1 2.05 2.05l-.04.05a1.2 1.2 0 0 0-.24 1.32v.06a1.2 1.2 0 0 0 1.1.73h.13a1.45 1.45 0 0 1 0 2.9h-.07a1.2 1.2 0 0 0-1.1.73z" />
+    </svg>
+  ),
+  file: () => (
+    <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.5 1.5h-5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5l-3.5-3.5z" /><path d="M9.5 1.5V5H13" />
+    </svg>
+  ),
+  refresh: () => S("M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v2.6h-2.6", 14),
+  close: () => S("m4 4 8 8M12 4l-8 8", 14),
+  chevron: () => S("m4 6 4 4 4-4", 14),
+};
 
 function Empty({ children }: { children: ReactNode }) {
-  return <div className="empty-state">{children}</div>;
-}
-
-function DataCard({ title, description, pills = [], children }: {
-  title: string; description?: string; pills?: Array<{ text: string; className?: string }>; children?: ReactNode;
-}) {
-  return <article className="data-card"><div className="card-main"><h3>{title}</h3><p>{description}</p>
-    {pills.length > 0 && <div className="card-meta">{pills.map((pill, index) => <span key={`${pill.text}-${index}`} className={`pill ${pill.className ?? ""}`}>{pill.text}</span>)}</div>}
-    {children}
-  </div></article>;
+  return <div className="empty">{children}</div>;
 }
 
 // Electron disables window.prompt(), so the reject-reason input is an in-app
@@ -58,14 +78,16 @@ function useReasonPrompt() {
   );
   const close = (result: string | null) => { pending?.resolve(result); setPending(null); };
   const dialog = pending ? (
-    <div className="modal-overlay" onMouseDown={() => close(null)}>
-      <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
-        <p>{pending.message}</p>
-        <textarea rows={3} autoFocus value={value} onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Escape") close(null); if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) close(value.trim()); }} />
-        <div className="card-actions">
-          <button className="ghost" onClick={() => close(null)}>取消</button>
-          <button className="danger" onClick={() => close(value.trim())}>确认拒绝</button>
+    <div className="overlay" onMouseDown={() => close(null)}>
+      <div className="modal" style={{ width: "min(440px, 100%)" }} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-body">
+          <p style={{ margin: 0, fontSize: 13.5 }}>{pending.message}</p>
+          <textarea className="textarea" rows={3} autoFocus value={value} onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Escape") close(null); if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) close(value.trim()); }} />
+        </div>
+        <div className="modal-foot" style={{ justifyContent: "flex-end" }}>
+          <button className="btn btn-ghost sm" onClick={() => close(null)}>取消</button>
+          <button className="btn btn-danger sm" onClick={() => close(value.trim())}>确认拒绝</button>
         </div>
       </div>
     </div>
@@ -74,11 +96,13 @@ function useReasonPrompt() {
 }
 
 export function App() {
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>("workspace");
   const [dashboard, setDashboard] = useState<any>(null);
   const [toast, setToast] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [queuedPrompt, setQueuedPrompt] = useState("");
+  const [diffProposal, setDiffProposal] = useState<any>(null);
+  const [vaultScope, setVaultScope] = useState<string>("inbox");
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -96,36 +120,166 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [refreshDashboard]);
 
-  const [eyebrow, title] = titles[view];
-  const openChat = (prompt: string) => { setQueuedPrompt(prompt); setView("chat"); };
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">A</div><div><strong>Apothecary</strong><span>Knowledge workspace</span></div></div>
-      <nav aria-label="主要导航">{nav.map(([id, icon, label]) => <button key={id} className={`nav-item ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
-        <span>{icon}</span>{label}
-        {id === "changes" && dashboard?.pendingChanges > 0 && <b className="badge">{dashboard.pendingChanges}</b>}
-        {id === "proposals" && dashboard?.pendingProposals > 0 && <b className="badge">{dashboard.pendingProposals}</b>}
-      </button>)}</nav>
-      <div className="vault-card"><span className="status-dot"/><div><small>当前药柜</small><strong>{dashboard?.vaultPath?.split(/[\\/]/).filter(Boolean).at(-1) ?? "加载中…"}</strong></div></div>
-    </aside>
-    <main className="main-area">
-      <header className="topbar"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div><button className="icon-button" title="刷新当前页面" onClick={refresh}>↻</button></header>
-      {view === "chat" && <ChatView dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")}/>} 
-      {view === "changes" && <ChangesView refreshKey={refreshKey} onChat={openChat} notify={notify}/>} 
-      {view === "inbox" && <InboxView refreshKey={refreshKey} onChat={openChat} notify={notify}/>} 
-      {view === "proposals" && <ProposalsView refreshKey={refreshKey} notify={notify}/>} 
-      {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat}/>} 
-      {view === "diagnostics" && <DiagnosticsView refreshKey={refreshKey}/>} 
-    </main>
-    <div className={`toast ${toast ? "show" : ""}`} role="status">{toast}</div>
-  </div>;
+  const openChat = useCallback((prompt: string) => { setQueuedPrompt(prompt); setView("workspace"); }, []);
+  const [eyebrowTitle, eyebrowDesc] = titles[view];
+
+  return (
+    <div className="win">
+      <aside className="sidebar">
+        <div className="sidebar-top" />
+        <div className="brand">
+          <div className="brand-mark">A</div>
+          <div className="brand-text"><strong>Apothecary</strong><span>Knowledge workspace</span></div>
+        </div>
+        <nav className="nav" aria-label="主要导航">
+          <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
+          <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
+          <NavItem id="runs" icon={<Icon.runs />} label="运行历史 Runs" active={view} onClick={setView} />
+          <NavItem id="knowledge" icon={<Icon.knowledge />} label="知识体系 Knowledge" active={view} onClick={setView} />
+        </nav>
+
+        <SidePanel view={view} dashboard={dashboard} onPrompt={openChat} refreshKey={refreshKey} vaultScope={vaultScope} setVaultScope={setVaultScope} />
+
+        <div className="side-foot">
+          <nav className="nav">
+            <NavItem id="settings" icon={<Icon.settings />} label="设置 Settings" active={view} onClick={setView} />
+          </nav>
+          <div className="sync-status">
+            <span className={`dot ${dashboard ? "" : "off"}`} />
+            <span className="t">{dashboard ? "监听中 · 已连接" : "连接中…"}</span>
+            <button className="btn btn-ghost sm icon" title="手动同步 / 刷新" onClick={refresh}><Icon.refresh /></button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <span className="title">{eyebrowTitle}</span>
+          <span className="desc">{eyebrowDesc}</span>
+          <span className="spacer" />
+          <button className="btn btn-ghost sm icon" title="刷新当前页面" onClick={refresh}><Icon.refresh /></button>
+        </header>
+
+        {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal} />}
+        {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} />}
+        {view === "runs" && <RunsView refreshKey={refreshKey} />}
+        {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
+        {view === "settings" && <SettingsView refreshKey={refreshKey} notify={notify} />}
+      </main>
+
+      {diffProposal && <DiffModal proposal={diffProposal} onClose={() => setDiffProposal(null)} />}
+      <div className={`toast ${toast ? "show" : ""}`} role="status">{toast}</div>
+    </div>
+  );
 }
 
-function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt }: { dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void }) {
+function NavItem({ id, icon, label, active, onClick, badge, count }: {
+  id: View; icon: ReactNode; label: string; active: View; onClick: (v: View) => void; badge?: number; count?: number;
+}) {
+  return (
+    <button className={`nav-item ${active === id ? "active" : ""}`} onClick={() => onClick(id)}>
+      {icon}
+      <span className="label">{label}</span>
+      {count != null && <span className="count">{count}</span>}
+      {badge != null && badge > 0 && <span className="badge accent">{badge}</span>}
+    </button>
+  );
+}
+
+const QUICK_PROMPTS: Array<[string, string]> = [
+  ["检查最近变更", "有哪些文件发生了变更？请帮我判断应该如何处理。"],
+  ["整理 Inbox", "请扫描 inbox，并建议这些文件应该归位到哪里。"],
+  ["查看知识画像", "根据当前药柜，总结我的核心知识主题和薄弱区域。"],
+];
+
+function SidePanel({ view, dashboard, onPrompt, refreshKey, vaultScope, setVaultScope }: {
+  view: View; dashboard: any; onPrompt: (p: string) => void; refreshKey: number; vaultScope: string; setVaultScope: (s: string) => void;
+}) {
+  if (view === "workspace") {
+    return (
+      <div className="side-panel">
+        <div className="side-head"><span>快捷提问</span></div>
+        {QUICK_PROMPTS.map(([label, prompt]) => (
+          <button className="prompt-chip" key={label} onClick={() => onPrompt(prompt)}>{label}</button>
+        ))}
+      </div>
+    );
+  }
+  if (view === "vault") {
+    return <VaultTreePanel scope={vaultScope} setScope={setVaultScope} dashboard={dashboard} refreshKey={refreshKey} />;
+  }
+  const ops: any[] = dashboard?.recentOperations ?? [];
+  return (
+    <div className="side-panel">
+      <div className="side-head"><span>最近活动</span></div>
+      <div className="side-list">
+        {ops.length === 0 ? <div className="side-empty">暂无活动</div> : ops.slice(0, 8).map((op) => (
+          <div className="side-row" key={op.id}>
+            <div className="side-row-top"><span className="t">{op.type}</span><span className="time">{formatDate(op.appliedAt)}</span></div>
+            <span className="sub">{op.targetFiles?.map(lastSegment).join(", ") || op.detail || op.source}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const INBOX_DIR_NAMES = ["inbox", "_inbox"];
+
+function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: string; setScope: (s: string) => void; dashboard: any; refreshKey: number }) {
+  const [tree, setTree] = useState<{ directories: any[]; totalFiles: number } | null>(null);
+  const [inboxCount, setInboxCount] = useState<number | null>(null);
+  useEffect(() => {
+    void api.vaultTree().then(setTree).catch(() => setTree({ directories: [], totalFiles: 0 }));
+    void api.inbox().then((f) => setInboxCount(f.length)).catch(() => setInboxCount(null));
+  }, [refreshKey]);
+  const dirs = (tree?.directories ?? []).filter((d) => !INBOX_DIR_NAMES.includes(d.path.toLowerCase()));
+  return (
+    <div className="side-panel">
+      <div className="side-head"><span>Vault</span><span className="count mono">{tree ? `${tree.totalFiles} 篇` : "…"}</span></div>
+      <div className="side-list">
+        <div className={`tree-row ${scope === "inbox" ? "active" : ""}`} onClick={() => setScope("inbox")}>
+          <Icon.file /><span className="label">_inbox</span>
+          {inboxCount != null && inboxCount > 0 && <span className="badge accent">{inboxCount} 待处理</span>}
+        </div>
+        <div className={`tree-row ${scope === "changes" ? "active" : ""}`} onClick={() => setScope("changes")}>
+          <Icon.refresh /><span className="label">变更</span>
+          {dashboard?.pendingChanges > 0 && <span className="badge warning">{dashboard.pendingChanges}</span>}
+        </div>
+        {dirs.map((d) => (
+          <div key={d.path} className={`tree-row ${scope === d.path ? "active" : ""}`} onClick={() => setScope(d.path)}>
+            <Icon.vault /><span className="label">{d.path}</span><span className="count">{d.fileCount}</span>
+          </div>
+        ))}
+        {dirs.length === 0 && tree && <div className="side-empty">Vault 里还没有其它文件夹。</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ Workspace ═══════════════════════════════════════════════════════ */
+function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff }: {
+  refreshKey: number; dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void; notify: (t: string) => void; openDiff: (p: any) => void;
+}) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [pending, setPending] = useState<any[]>([]);
   const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { prompt: reasonPrompt, dialog: reasonDialog } = useReasonPrompt();
   const busy = timeline.some((item) => item.kind === "run" && (item.run.status === "running" || item.run.status === "awaiting"));
+
+  const loadPending = useCallback(() => api.proposals("proposed").then(setPending).catch(() => undefined), []);
+  useEffect(() => { void loadPending(); }, [loadPending, refreshKey, dashboard?.pendingProposals]);
+
+  // Proposals awaited inside a live run must be resolved via resumeRun (to unblock
+  // the suspended run), so exclude them from the standalone "agent event" list to
+  // avoid double display and stuck runs.
+  const liveProposalIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of timeline) if (item.kind === "run") for (const p of item.run.proposals) ids.add(p.proposalId);
+    return ids;
+  }, [timeline]);
+  const standalone = pending.filter((p) => !liveProposalIds.has(p.id));
 
   useEffect(() => api.onRunEvent(({ runId, event }) => {
     setTimeline((items) => items.map((item) => {
@@ -143,19 +297,20 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
     if (event.type === "completed" || event.type === "failed") void refreshDashboard();
   }), [refreshDashboard]);
 
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [timeline]);
+
   const conversationFrom = (items: TimelineItem[]): Message[] => items.reduce<Message[]>((messages, item) => {
     if (item.kind === "user") messages.push({ role: "user", content: item.content });
     else if (item.run.text) messages.push({ role: "assistant", content: item.run.text });
     return messages;
   }, []).slice(-19);
 
-  const send = async (text: string, visible = true) => {
+  const send = async (text: string) => {
     const content = text.trim(); if (!content || busy) return;
     const runId = crypto.randomUUID();
     const userItem: TimelineItem = { kind: "user", id: crypto.randomUUID(), content };
     const runItem: TimelineItem = { kind: "run", run: { id: runId, text: "", status: "running", label: "正在启动 Agent Run", tools: [], proposals: [] } };
-    const next = visible ? [...timeline, userItem, runItem] : [...timeline, runItem];
-    setTimeline(next); setInput("");
+    setTimeline((items) => [...items, userItem, runItem]); setInput("");
     try {
       await api.startRun(runId, [...conversationFrom(timeline), { role: "user", content }]);
     } catch (error) {
@@ -168,12 +323,9 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
     let note: string | undefined;
     if (decision === "reject") {
       const reason = await reasonPrompt(`拒绝提案「${proposal.title}」的原因（可选）`);
-      if (reason === null) return; // cancelled the reject
+      if (reason === null) return;
       note = reason || undefined;
     }
-    // Mark the proposal in-flight and hand the run back to the agent. resumeRun
-    // applies the decision (approve => file change) and resumes the suspended run;
-    // its continuation streams onto this same timeline bubble via onRunEvent.
     setTimeline((items) => items.map((item) =>
       item.kind === "run" && item.run.id === runId
         ? { ...item, run: { ...item.run, status: "running", label: decision === "approve" ? "正在应用并继续…" : "正在继续…", proposals: item.run.proposals.map((existing) => existing.proposalId === proposal.proposalId ? { ...existing, decision: "approving" } : existing) } }
@@ -184,7 +336,18 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
     await refreshDashboard();
   };
 
-  const cancelRun = async (runId: string) => { await api.cancelRun(runId); };
+  const resolveStandalone = async (proposal: any, decision: "approve" | "reject") => {
+    if (decision === "approve" && !window.confirm(`采纳提案「${proposal.title}」？`)) return;
+    let note: string | undefined;
+    if (decision === "reject") {
+      const reason = await reasonPrompt(`忽略提案「${proposal.title}」的原因（可选）`);
+      if (reason === null) return;
+      note = reason || undefined;
+    }
+    const result = await api.resolveProposal(proposal.id, decision, note);
+    notify(result.resolved === false ? `应用失败：${result.reason}` : decision === "approve" ? "提案已采纳" : "提案已忽略");
+    await loadPending(); await refreshDashboard();
+  };
 
   const submit = (event: FormEvent) => { event.preventDefault(); void send(input); };
   useEffect(() => {
@@ -192,18 +355,50 @@ function ChatView({ dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt
     clearQueuedPrompt();
     void send(queuedPrompt);
   }, [queuedPrompt]);
-  return <section className="view active" id="view-chat"><div className="chat-layout">
-    <div className="chat-messages"><MessageBubble role="assistant" content="你好。我可以帮你检索知识、处理变更、归位 inbox，或把对话沉淀成可审阅的提案。"/>
-      {timeline.map((item) => item.kind === "user"
-        ? <MessageBubble key={item.id} role="user" content={item.content}/>
-        : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onCancel={() => void cancelRun(item.run.id)}/>)}
-    </div>
-    <form className="composer" onSubmit={submit}><textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder="问一个问题，或告诉我想添加、整理什么内容…"/>
-      <div className="composer-footer"><span>所有真实文件修改都需要提案确认</span><button type="submit" className="primary" disabled={busy}>发送 <span>⌘↵</span></button></div></form>
-  </div><aside className="context-panel"><h3>现在可以做什么</h3>
-    {["有哪些文件发生了变更？请帮我判断应该如何处理。", "请扫描 inbox，并建议这些文件应该归位到哪里。", "根据当前药柜，总结我的核心知识主题和薄弱区域。"].map((prompt, index) => <button className="prompt-chip" key={prompt} onClick={() => void send(prompt)}>{["检查最近变更", "整理 Inbox", "查看知识画像"][index]}</button>)}
-    <div className="divider"/><h3>最近活动</h3><div className="mini-list">{dashboard?.recentOperations?.length ? dashboard.recentOperations.slice(0, 5).map((op: any) => <div className="mini-item" key={op.id}>{op.type} · {op.targetFiles.join(", ")}</div>) : <p className="muted">暂无活动</p>}</div>
-  </aside>{reasonDialog}</section>;
+
+  return (
+    <section className="view">
+      <div className="scroll feed" ref={scrollRef}>
+        <div className="feed-inner">
+          <div className="date-divider">今天</div>
+
+          {standalone.map((proposal) => (
+            <div className="msg-agent" key={proposal.id}>
+              <div className="agent-col">
+                <div className="agent-meta">{formatDate(proposal.createdAt)} · 文件监听 / 维护触发</div>
+                <ProposalCard proposal={proposal} onApprove={() => void resolveStandalone(proposal, "approve")} onReject={() => void resolveStandalone(proposal, "reject")} onDiff={() => openDiff(proposal)} />
+              </div>
+            </div>
+          ))}
+
+          <div className="msg-agent">
+            <div className="agent-col">
+              <div className="agent-text">你好。我可以帮你检索知识、处理变更、归位 inbox，或把对话沉淀成可审阅的提案。</div>
+            </div>
+          </div>
+
+          {timeline.map((item) => item.kind === "user"
+            ? <div className="msg-user" key={item.id}><div className="bubble">{item.content}</div></div>
+            : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onCancel={() => void api.cancelRun(item.run.id)} />)}
+        </div>
+      </div>
+
+      <form className="composer" onSubmit={submit}>
+        <div className="composer-inner">
+          <textarea rows={2} value={input} onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
+            placeholder="向知识库提问，或让 Apothecary 整理文件…" />
+          <div className="composer-bar">
+            <span className="hint">所有真实文件修改都需要提案确认</span>
+            <span className="spacer" />
+            <span className="hint">检索范围：整个 vault</span>
+            <button type="submit" className="btn btn-primary sm" disabled={busy}>发送</button>
+          </div>
+        </div>
+      </form>
+      {reasonDialog}
+    </section>
+  );
 }
 
 function updateRunProposal(items: TimelineItem[], runId: string, proposalId: string, patch: Partial<RunProposal>): TimelineItem[] {
@@ -212,69 +407,438 @@ function updateRunProposal(items: TimelineItem[], runId: string, proposalId: str
     : item);
 }
 
+const runBadge = (status: AgentRun["status"]): [string, string] =>
+  status === "running" ? ["warning", "运行中"] : status === "awaiting" ? ["accent", "待确认"] : status === "failed" ? ["danger", "失败"] : ["success", "已完成"];
+
 function AgentRunBubble({ run, onResolve, onCancel }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onCancel: () => void }) {
-  return <div className={`message assistant run-message ${run.status === "running" ? "pending" : ""}`}><div className="avatar">A</div><div className="bubble run-bubble"><strong>APOTHECARY · {run.label}
-    {run.status === "running" && <button className="run-cancel" onClick={onCancel} title="取消本次 Agent Run">取消</button>}</strong>
-    {run.tools.length > 0 && <div className="run-tools">{run.tools.map((tool) => <div key={tool.toolCallId} className={`run-tool ${tool.status}`}><span>{tool.status === "running" ? "◌" : tool.status === "completed" ? "✓" : "!"}</span><span>{tool.toolName}</span></div>)}</div>}
-    {run.text && <p>{run.text}</p>}
-    {run.proposals.map((proposal) => <div className="run-proposal" key={proposal.proposalId}><div><b>{proposal.title}</b><span>{proposal.type} · {proposal.targetFiles?.join(", ") || "待执行时确定"}</span></div>
-      {!proposal.decision && <div className="card-actions"><button className="primary" onClick={() => onResolve(proposal, "approve")}>批准并应用</button><button className="danger" onClick={() => onResolve(proposal, "reject")}>拒绝</button></div>}
-      {proposal.decision && <span className={`run-decision ${proposal.decision}`}>{proposal.decision === "approving" ? "正在执行…" : proposal.decision === "applied" ? "已批准并应用" : proposal.decision === "rejected" ? "已拒绝" : `执行失败：${proposal.decisionDetail}`}</span>}
-    </div>)}
-    {!run.text && run.tools.length === 0 && <p>{run.status === "failed" ? run.label : "正在连接 Agent…"}</p>}
-  </div></div>;
+  const [badgeCls, badgeText] = runBadge(run.status);
+  return (
+    <div className="msg-agent">
+      <div className="agent-col">
+        {(run.tools.length > 0 || run.status !== "completed") && (
+          <div className="card run-card">
+            <div className="run-head">
+              <span className={`badge ${badgeCls}`}>{badgeText}</span>
+              <span className="t">{run.label}</span>
+              <span className="spacer" />
+              {run.status === "running" && <button className="btn btn-ghost sm run-cancel-btn" onClick={onCancel} title="取消本次 Agent Run">取消</button>}
+            </div>
+            {run.tools.length > 0 && (
+              <div className="run-steps">
+                {run.tools.map((tool) => (
+                  <div key={tool.toolCallId} className={`run-step ${tool.status === "completed" ? "done" : tool.status === "failed" ? "failed" : "active"}`}>
+                    {tool.status === "running" ? <span className="mini-spin" /> : <span className="ic">{tool.status === "completed" ? "✓" : "!"}</span>}
+                    <span className="grow">{tool.toolName}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {run.text && <div className="agent-text">{run.text}</div>}
+        {run.proposals.map((proposal) => (
+          <div className="card prop-card" key={proposal.proposalId}>
+            <div className="prop-head">
+              <span className="badge accent">提案 Proposal</span>
+              <span className="t">{proposal.title}</span>
+              <span className="spacer" />
+              <span className="meta">{proposal.type}</span>
+            </div>
+            <div className="prop-body">
+              <div className="hint mono">{proposal.targetFiles?.join(", ") || "待执行时确定"}</div>
+              {!proposal.decision && (
+                <div className="actions">
+                  <button className="btn btn-primary sm" onClick={() => onResolve(proposal, "approve")}>采纳提案</button>
+                  <button className="btn btn-ghost sm" onClick={() => onResolve(proposal, "reject")}>忽略</button>
+                </div>
+              )}
+              {proposal.decision && (
+                <span className={`decision ${proposal.decision === "approving" ? "" : proposal.decision}`}>
+                  {proposal.decision === "approving" ? "正在执行…" : proposal.decision === "applied" ? "已采纳并应用" : proposal.decision === "rejected" ? "已忽略" : `执行失败：${proposal.decisionDetail}`}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+        {!run.text && run.tools.length === 0 && run.status !== "failed" && <div className="agent-text muted">正在连接 Agent…</div>}
+      </div>
+    </div>
+  );
 }
 
-function MessageBubble({ role, content, pending = false }: Message & { pending?: boolean }) {
-  return <div className={`message ${role} ${pending ? "pending" : ""}`}><div className="avatar">{role === "user" ? "Y" : "A"}</div><div className="bubble"><strong>{role === "user" ? "YOU" : "APOTHECARY"}</strong><p>{content}</p></div></div>;
+function ProposalCard({ proposal, onApprove, onReject, onDiff }: { proposal: any; onApprove: () => void; onReject: () => void; onDiff: () => void }) {
+  return (
+    <div className="card prop-card">
+      <div className="prop-head">
+        <span className="badge accent">提案 Proposal</span>
+        <span className="t">{proposal.title}</span>
+        <span className="spacer" />
+        <span className="meta">{proposal.targetFiles?.length ?? 0} 处变更</span>
+      </div>
+      <div className="prop-body">
+        {proposal.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{proposal.rationale}</div>}
+        {proposal.targetFiles?.length > 0 && <div className="hint mono">{proposal.targetFiles.join(", ")}</div>}
+        <div className="actions">
+          <button className="btn btn-primary sm" onClick={onApprove}>采纳提案</button>
+          <button className="btn btn-secondary sm" onClick={onDiff}>查看完整 diff</button>
+          <button className="btn btn-ghost sm" onClick={onReject}>忽略</button>
+          <span className="spacer" />
+          <span className="hint">采纳后自动应用并更新索引</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function ChangesView({ refreshKey, onChat, notify }: { refreshKey: number; onChat: (prompt: string) => void; notify: (text: string) => void }) {
-  const [changes, setChanges] = useState<any[]>([]); const [open, setOpen] = useState<Record<string, string>>({});
-  const load = useCallback(() => api.changes().then(setChanges), []);
-  useEffect(() => { void load(); }, [load, refreshKey]);
-  const resolve = async (id: string, outcome: "processed" | "dismissed") => { await api.resolveChanges([id], outcome); notify(outcome === "processed" ? "已标记处理" : "已忽略"); await load(); };
-  return <section className="view active"><div className="section-toolbar"><div><h2>待处理变更</h2><p>由 watcher、manual sync 或恢复队列记录</p></div><button className="secondary" onClick={async () => { const result = await api.sync(); notify(`同步完成：+${result.created} ~${result.modified} -${result.deleted}`); await load(); }}>运行 Manual Sync</button></div>
-    <div className="card-list">{changes.length === 0 ? <Empty>没有待处理变更，药柜很安静。</Empty> : changes.map((change) => <DataCard key={change.id} title={change.path} description={`${change.source} · ${formatDate(change.detectedAt)}`} pills={[{ text: change.changeType, className: change.changeType }]}><div className="card-actions">
-      {change.changeType !== "deleted" && <button className="ghost" onClick={async () => setOpen({ ...open, [change.id]: (await api.readFile(change.path)).content })}>查看</button>}
-      <button className="secondary" onClick={() => onChat(`请分析这个变更并建议如何处理：${change.path}（${change.changeType}）`)}>交给 Agent</button><button className="ghost" onClick={() => void resolve(change.id, "processed")}>已处理</button><button className="ghost" onClick={() => void resolve(change.id, "dismissed")}>忽略</button>
-    </div>{open[change.id] && <details className="inline-detail" open><summary>当前文件内容</summary><pre>{open[change.id]}</pre></details>}</DataCard>)}</div>
-  </section>;
+function DiffModal({ proposal, onClose }: { proposal: any; onClose: () => void }) {
+  return (
+    <div className="overlay" onMouseDown={onClose}>
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <span className="badge accent">提案 Proposal</span>
+          <div className="grow">
+            <div className="t">{proposal.title}</div>
+            <div className="s">{proposal.targetFiles?.join(", ")}</div>
+          </div>
+          <button className="btn btn-ghost sm icon" title="关闭" onClick={onClose}><Icon.close /></button>
+        </div>
+        <div className="modal-body">
+          {proposal.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{proposal.rationale}</div>}
+          <div className="diff">
+            <div className="hunk">@@ {proposal.type} · payload @@</div>
+            <pre>{JSON.stringify(proposal.payload, null, 2)}</pre>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <span className="hint">{proposal.type} · {proposal.targetFiles?.length ?? 0} 个目标文件</span>
+          <span className="spacer" style={{ flex: 1 }} />
+          <button className="btn btn-ghost sm" onClick={onClose}>关闭</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function InboxView({ refreshKey, onChat, notify }: { refreshKey: number; onChat: (prompt: string) => void; notify: (text: string) => void }) {
-  const [files, setFiles] = useState<any[]>([]); const [selected, setSelected] = useState<any>(null);
-  useEffect(() => { void api.inbox().then(setFiles).catch((error) => notify(error.message)); }, [notify, refreshKey]);
-  return <section className="view active inbox-view"><div className="section-toolbar"><div><h2>Inbox</h2><p>理解内容后，再生成归位提案</p></div><button className="secondary" onClick={() => onChat(`请扫描并分析 inbox 中的这些文件，为每个文件提出归位建议：${files.map((file) => file.path).join(", ")}`)}>让 Agent 分析全部</button></div><div className="split-view"><div className="card-list compact">{files.length === 0 ? <Empty>Inbox 已清空。</Empty> : files.map((file) => <div key={file.path} onClick={async () => setSelected({ file, data: await api.readInbox(file.path) })}><DataCard title={file.title || file.path.split("/").at(-1)} description={file.path} pills={[{ text: file.mediaType }, { text: formatDate(file.updatedAt) }]}/></div>)}</div>
-    <div className="detail-panel">{!selected ? <Empty>选择一个文件查看内容</Empty> : <><h2>{selected.file.title || selected.file.path}</h2><p className="muted">{selected.data.mediaType} · {selected.data.lineCount} 行</p><button className="secondary" onClick={() => onChat(`请阅读并为这个 inbox 文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button><pre>{selected.data.content}</pre></>}</div></div></section>;
-}
+/* ═══ Vault ═══════════════════════════════════════════════════════════ */
+const scopeLabel = (scope: string) => (scope === "inbox" ? "_inbox" : scope === "changes" ? "变更" : scope);
 
-function ProposalsView({ refreshKey, notify }: { refreshKey: number; notify: (text: string) => void }) {
-  const [status, setStatus] = useState<ProposalStatus>("proposed"); const [items, setItems] = useState<any[]>([]);
-  const { prompt: reasonPrompt, dialog: reasonDialog } = useReasonPrompt();
-  const load = useCallback(() => api.proposals(status).then(setItems), [status]); useEffect(() => { void load(); }, [load, refreshKey]);
-  const resolve = async (proposal: any, decision: "approve" | "reject") => {
-    if (decision === "approve" && !window.confirm(`批准提案「${proposal.title}」？`)) return;
-    let note: string | undefined;
-    if (decision === "reject") {
-      const reason = await reasonPrompt(`拒绝提案「${proposal.title}」的原因（可选）`);
-      if (reason === null) return; // cancelled the reject
-      note = reason || undefined;
-    }
-    const result = await api.resolveProposal(proposal.id, decision, note);
-    notify(result.resolved === false ? `应用失败：${result.reason}` : decision === "approve" ? "提案已应用" : "提案已拒绝");
-    await load();
+function VaultView({ scope, refreshKey, onChat, notify }: { scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void }) {
+  const [files, setFiles] = useState<any[]>([]);
+  const [changes, setChanges] = useState<any[]>([]);
+  const [selected, setSelected] = useState<{ file: any; data: any } | null>(null);
+  const isChanges = scope === "changes";
+  const isInbox = scope === "inbox";
+
+  const load = useCallback(() => {
+    setSelected(null);
+    if (isChanges) { setFiles([]); void api.changes().then(setChanges).catch((e) => notify(e.message)); }
+    else { setChanges([]); const p = isInbox ? api.inbox() : api.vaultFolder(scope); void p.then(setFiles).catch((e) => notify(e.message)); }
+  }, [scope, isChanges, isInbox, notify]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  const openFile = async (file: any, inboxScoped: boolean) => {
+    try {
+      const data = inboxScoped ? await api.readInbox(file.path) : await api.readFile(file.path);
+      setSelected({ file, data });
+    } catch (error) { notify((error as Error).message); }
   };
-  return <section className="view active"><div className="section-toolbar"><div><h2>变更提案</h2><p>所有 human-readable layer 修改的统一确认入口</p></div><div className="segmented">{(["proposed", "applied", "rejected"] as ProposalStatus[]).map((value) => <button key={value} className={status === value ? "active" : ""} onClick={() => setStatus(value)}>{({ proposed: "待确认", applied: "已应用", rejected: "已拒绝" })[value]}</button>)}</div></div><div className="card-list">{items.length === 0 ? <Empty>这个列表是空的。</Empty> : items.map((proposal) => <DataCard key={proposal.id} title={proposal.title} description={proposal.rationale} pills={[{ text: proposal.type }, { text: proposal.status }, { text: formatDate(proposal.createdAt) }, ...proposal.targetFiles.map((file: string) => ({ text: file }))]}>{proposal.status === "proposed" && <div className="card-actions"><button className="primary" onClick={() => void resolve(proposal, "approve")}>批准</button><button className="danger" onClick={() => void resolve(proposal, "reject")}>拒绝</button></div>}<details className="inline-detail"><summary>查看 proposal payload</summary><pre>{JSON.stringify(proposal.payload, null, 2)}</pre></details></DataCard>)}</div>{reasonDialog}</section>;
+  const resolveChange = async (id: string, outcome: "processed" | "dismissed") => {
+    await api.resolveChanges([id], outcome); notify(outcome === "processed" ? "已标记处理" : "已忽略"); load();
+  };
+
+  return (
+    <section className="view">
+      <div className="split">
+        <div className="file-pane">
+          <div className="pane-head">
+            <span style={{ color: "var(--fg-subtle)" }}>Vault</span><span>/</span>
+            <span style={{ color: "var(--fg)", fontWeight: 500 }}>{scopeLabel(scope)}</span>
+            <span className="spacer" />
+            <span className="mono" style={{ fontSize: 11 }}>{isChanges ? `${changes.length} 项` : `${files.length} 项`}</span>
+            <button className="btn btn-ghost sm icon" title="手动同步" onClick={async () => { const r = await api.sync(); notify(`同步完成：+${r.created} ~${r.modified} -${r.deleted}`); load(); }}><Icon.refresh /></button>
+          </div>
+          <div className="file-list">
+            {isChanges ? (
+              changes.length === 0 ? <Empty>没有待处理变更，药柜很安静。</Empty> : changes.map((change) => (
+                <div key={change.id} className={`file-row ${selected?.file.path === change.path ? "active" : ""}`} onClick={() => change.changeType !== "deleted" && openFile(change, false)}>
+                  <Icon.file />
+                  <div className="info">
+                    <div className="name">{lastSegment(change.path)}</div>
+                    <div className="sub">{change.source} · {formatDate(change.detectedAt)}</div>
+                  </div>
+                  <span className={`badge ${change.changeType === "created" ? "success" : change.changeType === "deleted" ? "danger" : "warning"}`}>{change.changeType}</span>
+                </div>
+              ))
+            ) : (
+              files.length === 0 ? <Empty>{isInbox ? "Inbox 已清空。" : "这个文件夹暂时没有 Markdown 文件。"}</Empty> : files.map((file) => (
+                <div key={file.path} className={`file-row ${selected?.file.path === file.path ? "active" : ""}`} onClick={() => openFile(file, isInbox)}>
+                  <Icon.file />
+                  <div className="info">
+                    <div className="name">{file.title || lastSegment(file.path)}</div>
+                    <div className="sub">{file.mediaType} · {formatDate(file.updatedAt)}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="preview-pane">
+          {!selected ? (
+            <Empty>选择一个文件查看内容</Empty>
+          ) : (
+            <div className="preview-inner">
+              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div className="doc-head">
+                  <div className="row"><span className="name">{selected.file.title || lastSegment(selected.file.path)}</span></div>
+                  <div className="meta">
+                    <span>{selected.data.mediaType}</span><span>·</span><span>{selected.data.lineCount} 行</span>
+                    {selected.file.path && <><span>·</span><span>{selected.file.path}</span></>}
+                  </div>
+                </div>
+                <div className="doc-body"><pre>{selected.data.content}</pre></div>
+              </div>
+              <div className="actions" style={{ marginTop: 14 }}>
+                <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>
+                {isChanges && (
+                  <>
+                    <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "processed")}>标记已处理</button>
+                    <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "dismissed")}>忽略</button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function KnowledgeView({ refreshKey, onChat }: { refreshKey: number; onChat: (prompt: string) => void }) {
-  const [data, setData] = useState<any>(null); useEffect(() => { void api.knowledge().then(setData); }, [refreshKey]);
-  return <section className="view active"><div className="section-toolbar"><div><h2>知识画像</h2><p>药柜当前主题、关系与维护机会</p></div><button className="secondary" onClick={() => onChat("请基于当前 knowledge profile 和 maintenance findings，告诉我最值得优先整理的三个方向。")}>和 Agent 讨论画像</button></div>{!data ? <Empty>加载中…</Empty> : <div className="knowledge-grid"><section className="knowledge-card"><h3>语义层状态</h3><div className="metric-row">{[[data.relationCount, "关系"], [data.canonicalCandidates.length, "Canonical candidates"], [data.maintenanceFindings.length, "维护建议"]].map(([value, label]) => <div className="metric" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></section><section className="knowledge-card"><h3>知识画像{data.profileStale ? " · 需要刷新" : ""}</h3><p>{data.profile?.overview || "尚未生成 knowledge profile。"}</p></section><section className="knowledge-card wide"><h3>维护工作台</h3>{data.maintenanceFindings.length === 0 ? <p>当前没有高优先级维护建议。</p> : <ul>{data.maintenanceFindings.map((finding: any, index: number) => <li key={index}>{finding.suggestedAction} · {finding.detail}</li>)}</ul>}</section></div>}</section>;
+/* ═══ Runs ════════════════════════════════════════════════════════════ */
+const OP_LABELS: Record<string, string> = {
+  edit: "编辑", move: "移动", archive: "归档", merge: "合并", promote: "提升",
+  canonical: "规范化", structure: "结构调整", ingest: "归入", capture: "捕获",
+};
+function RunsView({ refreshKey }: { refreshKey: number }) {
+  const [ops, setOps] = useState<any[] | null>(null);
+  const [filter, setFilter] = useState<string>("all");
+  useEffect(() => { void api.operations().then(setOps).catch(() => setOps([])); }, [refreshKey]);
+  const sources = useMemo(() => Array.from(new Set((ops ?? []).map((o) => o.source))).filter(Boolean), [ops]);
+  const shown = (ops ?? []).filter((o) => filter === "all" || o.source === filter);
+
+  return (
+    <div className="page">
+      <div className="page-inner">
+        <div className="filter-row">
+          <span className={`badge ${filter === "all" ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setFilter("all")}>全部 {ops?.length ?? 0}</span>
+          {sources.map((s) => (
+            <span key={s} className={`badge ${filter === s ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setFilter(s)}>{s}</span>
+          ))}
+        </div>
+        {ops === null ? <Empty>加载中…</Empty> : shown.length === 0 ? <Empty>还没有运行记录。Agent 的每次真实文件操作都会记录在这里。</Empty> : (
+          <div className="card list-card">
+            {shown.map((op) => (
+              <div className="run-row" key={op.id}>
+                <span className="id">{op.id.slice(0, 8)}</span>
+                <span className="badge success">{OP_LABELS[op.type] ?? op.type}</span>
+                <div className="info">
+                  <div className="t">{op.targetFiles?.map(lastSegment).join(", ") || op.detail || "—"}</div>
+                  <div className="d">{op.rationale || op.detail}</div>
+                </div>
+                <span className="badge">{op.source}</span>
+                <span className="time">{formatDate(op.appliedAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
-function DiagnosticsView({ refreshKey }: { refreshKey: number }) {
-  const [data, setData] = useState<any>(null); const load = useCallback(() => api.diagnostics().then(setData), []); useEffect(() => { void load(); }, [load, refreshKey]);
-  const card = (title: string, diagnostic: any) => <section className={`diagnostic-card status-${diagnostic.status}`}><div className="diagnostic-header"><h3>{title}</h3><span className="diagnostic-status">{diagnostic.detail}</span></div><p>{diagnostic.model ? `${diagnostic.model} · ${diagnostic.host}` : diagnostic.path}</p></section>;
-  return <section className="view active"><div className="section-toolbar"><div><h2>系统状态</h2><p>验证模型、Embedding 与本地药柜是否可用</p></div><button className="secondary" onClick={() => void load()}>重新检测</button></div>{!data ? <Empty>正在检测连接…</Empty> : <div className="diagnostics-grid">{card("对话模型", data.model)}{card("向量 Embedding", data.embedding)}{card("本地药柜", { status: data.vault.status === "read_write" ? "connected" : "unreachable", detail: data.vault.status === "read_write" ? "可读写" : "不可访问", path: data.vault.path })}<p className="diagnostic-time">检测时间：{formatDate(data.checkedAt)}</p></div>}</section>;
+/* ═══ Knowledge ═══════════════════════════════════════════════════════ */
+type Topic = { label: string; files: string[] };
+
+// A topic is well-covered relative to the biggest domain in the vault.
+const coverage = (count: number, max: number): [string, string] => {
+  const r = max > 0 ? count / max : 0;
+  return r >= 0.66 ? ["success", "覆盖良好"] : r >= 0.33 ? ["accent", "增长中"] : ["warning", "待整理"];
+};
+
+function TopicGraph({ topics }: { topics: Topic[] }) {
+  const nodes = topics.slice(0, 7);
+  if (nodes.length === 0) return null;
+  const cx = 450, cy = 95, rx = 300, ry = 62;
+  const max = Math.max(...nodes.map((t) => t.files.length), 1);
+  const pts = nodes.map((t, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
+    return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle), r: 5 + (t.files.length / max) * 6, label: t.label };
+  });
+  return (
+    <div className="graph-wrap">
+      <svg width="100%" height="100%" viewBox="0 0 900 190" preserveAspectRatio="xMidYMid slice">
+        {pts.map((p, i) => <line key={`l${i}`} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="var(--border-strong)" strokeWidth={1} />)}
+        <circle cx={cx} cy={cy} r={10} fill="var(--primary)" />
+        {pts.map((p, i) => <circle key={`c${i}`} cx={p.x} cy={p.y} r={p.r} fill="var(--accent-500)" />)}
+        {pts.map((p, i) => (
+          <text key={`t${i}`} x={p.x} y={p.y > cy ? p.y + 16 : p.y - 12} textAnchor="middle" fontSize={10.5} fill="var(--fg-muted)">{p.label}</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function KnowledgeView({ refreshKey, onChat }: { refreshKey: number; onChat: (p: string) => void }) {
+  const [data, setData] = useState<any>(null);
+  useEffect(() => { void api.knowledge().then(setData).catch(() => setData(null)); }, [refreshKey]);
+  const topics: Topic[] = data?.topics ?? [];
+  const maxFiles = Math.max(...topics.map((t) => t.files.length), 1);
+  const profile = data?.profile;
+
+  return (
+    <div className="page">
+      <div className="page-inner">
+        <div className="kb-head">
+          <div className="lead">{data ? `从语义层归纳出 ${topics.length} 个主题域 · ${data.relationCount} 条关系` + (data.profileStale ? " · 画像需刷新" : "") : "加载中…"}</div>
+          <span className="spacer" />
+          <button className="btn btn-secondary sm" onClick={() => onChat("请基于当前 knowledge profile 和 maintenance findings，告诉我最值得优先整理的三个方向。")}>和 Agent 讨论画像</button>
+        </div>
+
+        {!data ? <Empty>加载中…</Empty> : (
+          <>
+            <div className="metric-row">
+              <div className="metric"><strong>{topics.length}</strong><span>主题域</span></div>
+              <div className="metric"><strong>{data.relationCount}</strong><span>关系</span></div>
+              <div className="metric"><strong>{data.canonicalCandidates.length}</strong><span>Canonical 候选</span></div>
+              <div className="metric"><strong>{data.maintenanceFindings.length}</strong><span>维护建议</span></div>
+            </div>
+
+            {topics.length > 0 && <TopicGraph topics={topics} />}
+
+            {profile?.overview && (
+              <div className="card kb-card">
+                <h3>知识画像{data.profileStale ? " · 需要刷新" : ""}</h3>
+                <p>{profile.overview}</p>
+              </div>
+            )}
+
+            {topics.length > 0 && (
+              <div className="kb-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                {topics.map((t) => {
+                  const [badgeCls, badgeText] = coverage(t.files.length, maxFiles);
+                  return (
+                    <div className="card interactive kb-card" key={t.label} onClick={() => onChat(`请总结「${t.label}」这个主题域下我已有的笔记，指出重复、空白和值得深入的方向。`)}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <h3 style={{ margin: 0, flex: 1 }}>{t.label}</h3>
+                        <span className={`badge ${badgeCls}`}>{badgeText}</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+                        {t.files.slice(0, 2).map((f) => (
+                          <div key={f} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--fg-muted)", overflow: "hidden" }}>
+                            <Icon.file /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lastSegment(f)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)", fontSize: 11.5, color: "var(--fg-subtle)" }}>{t.files.length} 篇笔记</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="kb-grid">
+              {profile?.weakAreas?.length > 0 && (
+                <div className="card kb-card"><h3>薄弱区域</h3><ul>{profile.weakAreas.slice(0, 5).map((w: string, i: number) => <li key={i}>{w}</li>)}</ul></div>
+              )}
+              {profile?.recommendations?.length > 0 && (
+                <div className="card kb-card"><h3>建议</h3><ul>{profile.recommendations.slice(0, 5).map((r: string, i: number) => <li key={i}>{r}</li>)}</ul></div>
+              )}
+              <div className="card kb-card wide">
+                <h3>维护工作台</h3>
+                {data.maintenanceFindings.length === 0 ? <p>当前没有高优先级维护建议。</p> : (
+                  <ul>{data.maintenanceFindings.map((f: any, i: number) => <li key={i}><b style={{ color: "var(--fg)" }}>{f.suggestedAction}</b> · {f.detail}</li>)}</ul>
+                )}
+              </div>
+            </div>
+
+            {topics.length === 0 && !profile && (
+              <Empty>语义层还没有数据。让 Agent 先扫描并生成一次知识画像与关系图。</Empty>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ Settings ════════════════════════════════════════════════════════ */
+function DiagBadge({ diagnostic }: { diagnostic: any }) {
+  const ok = diagnostic.status === "connected" || diagnostic.status === "read_write";
+  const err = ["auth_error", "unreachable", "unavailable"].includes(diagnostic.status);
+  return <span className={`diag-status ${ok ? "ok" : err ? "err" : "warn"}`}><span className="dot" />{diagnostic.detail}</span>;
+}
+
+function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: string) => void }) {
+  const [data, setData] = useState<any>(null);
+  const load = useCallback(() => api.diagnostics().then(setData).catch((e) => notify(e.message)), [notify]);
+  useEffect(() => { void load(); }, [load, refreshKey]);
+
+  return (
+    <div className="page">
+      <div className="settings-inner">
+        <div className="card settings-card">
+          <div className="h">连接状态</div>
+          {!data ? <Empty>正在检测连接…</Empty> : (
+            <>
+              <div className="row-between">
+                <div className="grow"><div className="rt">对话与整理模型</div><div className="rd">{data.model.model ? `${data.model.model} · ${data.model.host}` : data.model.detail}</div></div>
+                <DiagBadge diagnostic={data.model} />
+              </div>
+              <div className="row-between">
+                <div className="grow"><div className="rt">向量 Embedding</div><div className="rd">{data.embedding.model ? `${data.embedding.model} · ${data.embedding.host}` : data.embedding.detail}</div></div>
+                <DiagBadge diagnostic={data.embedding} />
+              </div>
+              <div className="row-between">
+                <div className="grow"><div className="rt">本地药柜</div><div className="rd mono">{data.vault.path}</div></div>
+                <DiagBadge diagnostic={{ status: data.vault.status, detail: data.vault.status === "read_write" ? "可读写" : data.vault.status === "read_only" ? "只读" : "不可访问" }} />
+              </div>
+              <div className="help">检测时间：{formatDate(data.checkedAt)}</div>
+            </>
+          )}
+        </div>
+
+        <div className="card settings-card">
+          <div className="h">Vault</div>
+          <div className="field">
+            <label>Vault 路径</label>
+            <input className="input mono" value={data?.vault?.path ?? ""} readOnly style={{ fontSize: 12.5 }} />
+            <div className="help">Agent 会监听此文件夹的变更、整理 _inbox，并为全部笔记建立索引。</div>
+          </div>
+          <div className="row-between">
+            <div className="grow"><div className="rt">实时监听文件变更</div><div className="rd">关闭后仅在手动同步时扫描</div></div>
+            <span className="switch on"><i /></span>
+          </div>
+        </div>
+
+        <div className="card settings-card">
+          <div className="h">自动整理</div>
+          <div className="row-between">
+            <div className="grow"><div className="rt">自动处理 _inbox</div><div className="rd">改名、补全 frontmatter、生成摘要后提交提案</div></div>
+            <span className="switch on"><i /></span>
+          </div>
+          <div className="row-between">
+            <div className="grow"><div className="rt">提案自动采纳</div><div className="rd">内容修改始终需要你的确认</div></div>
+            <span className="switch"><i /></span>
+          </div>
+        </div>
+
+        <div className="actions">
+          <button className="btn btn-secondary sm" onClick={() => void load()}>重新检测</button>
+          <span className="spacer" style={{ flex: 1 }} />
+          <span className="hint">Apothecary</span>
+        </div>
+      </div>
+    </div>
+  );
 }

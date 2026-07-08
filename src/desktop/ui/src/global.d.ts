@@ -25,6 +25,8 @@ type ApothecaryApi = {
   resolveChanges(ids: string[], outcome: "processed" | "dismissed"): Promise<number>;
   sync(): Promise<any>;
   inbox(): Promise<any[]>;
+  vaultTree(): Promise<{ directories: Array<{ path: string; fileCount: number; markdownCount: number; totalBytes: number }>; totalFiles: number; markdownFiles: number }>;
+  vaultFolder(scopePath: string): Promise<any[]>;
   readInbox(filePath: string): Promise<any>;
   readFile(filePath: string): Promise<any>;
   proposals(status?: "proposed" | "applied" | "rejected"): Promise<any[]>;

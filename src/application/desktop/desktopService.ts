@@ -11,13 +11,24 @@ import { readVaultText } from "../../mastra/tools/read-vault-text.js";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { KnowledgeProfileSchema } from "../../domain/knowledgeProfile.js";
 import { loadProfileRefreshState } from "../../vault/profileState.js";
-import { loadCanonicalCandidates, loadRelations } from "../../vault/semanticStore.js";
+import { loadCanonicalCandidates, loadGraph, loadRelations } from "../../vault/semanticStore.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { apothecaryDb } from "../../config/apothecaryDb.js";
 import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
 import type { AgentRunEvent } from "./runEvents.js";
+
+// The frozen vault skeleton names the intake folder `_inbox` (see
+// classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
+const INBOX_DIR = "_inbox";
+
+// Meta files that describe a folder rather than being triageable content:
+// `README.md` directory indexes and `_inbox/ABOUT.md` entry notes (see the
+// organizer agent). They stay in place and are hidden from the file lists.
+const META_FILENAMES = new Set(["readme.md", "about.md"]);
+const isMetaFile = (relativePath: string): boolean =>
+  META_FILENAMES.has(path.posix.basename(relativePath).toLowerCase());
 
 export type DesktopChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -147,7 +158,7 @@ export class DesktopService {
   async inbox() {
     const scan = await scanVault({
       vaultPath: this.vaultPath,
-      scopePath: "inbox",
+      scopePath: INBOX_DIR,
       includeHash: false,
       ignore: VAULT_IGNORE_GLOBS,
     });
@@ -155,7 +166,7 @@ export class DesktopService {
       .filter(
         (file) =>
           (file.mediaType === "markdown" || file.extension === ".txt") &&
-          path.posix.basename(file.path) !== "README.md",
+          !isMetaFile(file.path),
       )
       .map((file) => ({
         path: file.path,
@@ -167,8 +178,45 @@ export class DesktopService {
       }));
   }
 
+  /** Top-level PARA folders with counts, for the Vault navigation tree. */
+  async vaultTree() {
+    const scan = await scanVault({
+      vaultPath: this.vaultPath,
+      includeHash: false,
+      ignore: VAULT_IGNORE_GLOBS,
+    });
+    return {
+      directories: scan.stats.topLevelDirectories,
+      totalFiles: scan.stats.totalFiles,
+      markdownFiles: scan.stats.markdownFiles,
+    };
+  }
+
+  /** Markdown/txt files inside a folder scope, for the Vault file list. */
+  async vaultFolder(scopePath: string) {
+    const scan = await scanVault({
+      vaultPath: this.vaultPath,
+      scopePath,
+      includeHash: false,
+      ignore: VAULT_IGNORE_GLOBS,
+    });
+    return scan.files
+      .filter(
+        (file) =>
+          (file.mediaType === "markdown" || file.extension === ".txt") &&
+          !isMetaFile(file.path),
+      )
+      .map((file) => ({
+        path: file.path,
+        mediaType: file.mediaType,
+        title: file.title,
+        updatedAt: file.updatedAt,
+        sizeBytes: file.sizeBytes,
+      }));
+  }
+
   async readInboxFile(filePath: string) {
-    if (!filePath.replaceAll("\\", "/").startsWith("inbox/")) throw new Error("not_an_inbox_file");
+    if (!filePath.replaceAll("\\", "/").startsWith(`${INBOX_DIR}/`)) throw new Error("not_an_inbox_file");
     return readVaultText(this.vaultPath, filePath);
   }
 
@@ -207,12 +255,18 @@ export class DesktopService {
 
   async knowledge() {
     const artifacts = getAgentArtifacts();
-    const [profileState, relations, candidates, superseded] = await Promise.all([
+    const [profileState, relations, candidates, superseded, graph] = await Promise.all([
       loadProfileRefreshState(apothecaryHome()),
       loadRelations(apothecaryHome()),
       loadCanonicalCandidates(apothecaryHome()),
       detectSupersededNotes(this.vaultPath),
+      loadGraph(apothecaryHome()).catch(() => ({ topics: [], concepts: [] })),
     ]);
+    // Top topic domains (label + member files), most-covered first, for the
+    // Knowledge view's domain cards and node graph.
+    const topics = [...graph.topics]
+      .sort((a, b) => b.files.length - a.files.length)
+      .slice(0, 8);
     let profile: unknown = null;
     try {
       profile = KnowledgeProfileSchema.parse(
@@ -227,6 +281,7 @@ export class DesktopService {
       relationCount: relations.relations.length,
       canonicalCandidates: candidates.candidates,
       maintenanceFindings: buildMaintenanceFindings({ superseded, candidates: candidates.candidates }),
+      topics,
     };
   }
 }
