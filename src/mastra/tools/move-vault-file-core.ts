@@ -42,15 +42,23 @@ export async function moveVaultFileCore(from: string, to: string): Promise<MoveV
   await fs.mkdir(path.dirname(toAbs), { recursive: true });
   await fs.rename(fromAbs, toAbs);
 
-  // Keep the vector index in sync; only markdown files participate.
+  // Keep the vector index in sync; only markdown files participate. Best-effort:
+  // the file has already moved on disk, so a failed or timed-out embedding call
+  // (unreachable endpoint) must never fail — or hang — the completed move. A stale
+  // index is repaired by a later reindex / semantic refresh.
   let reindexed = false;
-  if (from.endsWith(".md")) {
-    await removeFromIndex(from);
-    reindexed = true;
-  }
-  if (to.endsWith(".md")) {
-    await reindexFile(to);
-    reindexed = true;
+  try {
+    if (from.endsWith(".md")) {
+      await removeFromIndex(from);
+      reindexed = true;
+    }
+    if (to.endsWith(".md")) {
+      await reindexFile(to);
+      reindexed = true;
+    }
+  } catch (error) {
+    reindexed = false;
+    console.warn(`moveVaultFile: reindex failed for ${from} → ${to}:`, error);
   }
 
   // Keep directory note-indexes consistent (a README.md is itself an index, so

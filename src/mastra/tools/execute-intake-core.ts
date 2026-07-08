@@ -96,7 +96,9 @@ async function moveDirectoryInto(
         affected.add(relTarget);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.rename(abs, target);
-        if (relTarget.endsWith(".md")) await reindexFile(relTarget);
+        // Best-effort index sync: a slow/unreachable embedding endpoint must not
+        // hang or fail the completed move (see moveVaultFileCore).
+        if (relTarget.endsWith(".md")) await reindexFile(relTarget).catch(() => undefined);
       }
     }
   };

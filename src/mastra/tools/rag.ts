@@ -26,6 +26,12 @@ export const embedder = embeddingProvider.embeddingModel(
 );
 export const EMBEDDING_MODEL = embedder;
 
+// Bound every embedding round-trip so an unreachable or slow embedding endpoint
+// can never hang a file operation (e.g. the reindex during _inbox intake, which
+// otherwise freezes the whole agent run). On timeout the call throws, which the
+// callers treat as a best-effort index miss rather than a failure.
+const EMBEDDING_TIMEOUT_MS = Number(process.env.APOTHECARY_EMBEDDING_TIMEOUT_MS ?? 20_000);
+
 // ── Constants ──
 
 const INDEX_NAME = "vault_chunks";
@@ -176,6 +182,7 @@ export async function queryVault(
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: cleanedQuery,
+      abortSignal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
     });
     const results = await vs.query({
       indexName: INDEX_NAME,
@@ -292,6 +299,7 @@ async function embedChunks(chunks: ChunkDraft[]): Promise<number[][]> {
     const result = await embedMany({
       model: EMBEDDING_MODEL,
       values: batch.map((c) => c.content),
+      abortSignal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
     });
     embeddings.push(...(result.embeddings as unknown as number[][]));
   }
