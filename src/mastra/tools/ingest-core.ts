@@ -5,6 +5,8 @@ import { loadStructure, classifyWithStructure, type VaultStructure } from "./vau
 import { addReadmeEntry } from "../../vault/readmeIndex.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { recordOperation, type OperationType } from "../../vault/operationLedger.js";
+import { markSelfWrite } from "../../vault/selfWriteGuard.js";
+import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -73,19 +75,32 @@ export async function writeVaultNote(params: {
   const dirPath = path.dirname(filePath);
   await fs.mkdir(dirPath, { recursive: true });
 
+  const relativePath = path.relative(VAULT_PATH, filePath);
+  const readmePath = path.join(dirPath, "README.md");
+  const relativeReadme = path.relative(VAULT_PATH, readmePath);
+
   const timestamp = new Date().toISOString().split("T")[0];
   const fileContent = `---\ntitle: "${title}"\ntopic: "${label}"\ncreated: ${timestamp}\ntype: ${params.noteType}\nsource: ${params.source}\n---\n\n${params.content}`;
+  // Mark the note as the agent's own write BEFORE creating it: capture decides
+  // the filename here (not at proposal time), so the caller can't pre-mark it,
+  // and the slow reindex below opens a window the debounced watcher would catch
+  // and re-flag as an external "created" change.
+  markSelfWrite([relativePath]);
   await fs.writeFile(filePath, fileContent, "utf8");
 
-  const readmePath = path.join(dirPath, "README.md");
   const dateLabel = new Date().toLocaleDateString("zh-CN");
   const existing = await fs.readFile(readmePath, "utf8").catch(() => null);
   const nextReadme = addReadmeEntry(existing, { title, fileName, date: dateLabel, label });
   const readmeUpdated = nextReadme !== existing;
-  if (readmeUpdated) await fs.writeFile(readmePath, nextReadme, "utf8");
+  if (readmeUpdated) {
+    markSelfWrite([relativeReadme]);
+    await fs.writeFile(readmePath, nextReadme, "utf8");
+  }
 
-  const relativePath = path.relative(VAULT_PATH, filePath);
   await reindexFile(relativePath);
+  // Fold both writes into the sync baseline (and release the marks) so neither
+  // the watcher nor a later manual sync surfaces this note/README as external.
+  await commitSelfWrite(VAULT_PATH, readmeUpdated ? [relativePath, relativeReadme] : [relativePath]);
 
   await recordOperation({
     type: params.operationType,

@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createProposal, loadProposal } from "../vault/proposalStore.js";
 import { loadSummaries } from "../vault/semanticStore.js";
+import { loadSnapshot } from "../vault/syncSnapshot.js";
 import {
   initOperationLedger,
   setOperationLedgerClient,
@@ -105,5 +106,12 @@ describe("capture proposal end-to-end", () => {
 
     // ...and the derived artifacts were rebuilt (graph → relations exist on disk).
     await expect(access(path.join(vault, "semantic", "semantic-graph.json"))).resolves.toBeUndefined();
+
+    // Sync baseline: BOTH the new note and the README it updated are folded into
+    // the baseline, so the watcher / a later manual sync never re-flag the agent's
+    // own capture as an external change (the README fold was previously missing).
+    const snapshot = await loadSnapshot(vault);
+    expect(snapshot.files[notePath]).toBeDefined();
+    expect(snapshot.files["reflections/README.md"]).toBeDefined();
   });
 });

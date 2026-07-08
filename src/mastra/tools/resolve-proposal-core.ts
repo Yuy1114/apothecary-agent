@@ -7,6 +7,7 @@ import { mergeNotesCore } from "./merge-notes-core.js";
 import { writeVaultNote } from "./ingest-core.js";
 import { updateDirectoryKeywords } from "./vault-structure.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
@@ -253,6 +254,11 @@ export async function resolveProposalById(
   } catch (error) {
     console.warn(`resolveProposal: failed to update change baseline for ${id}:`, error);
   }
+
+  // The agent handled these paths, so clear any change queued for them earlier
+  // (e.g. a file manual sync flagged before this proposal applied) so it doesn't
+  // linger as a stale pending item.
+  await resolvePendingByPaths(outcome.affected ?? []);
 
   // Bring the semantic layer in step with the change before the proposal counts
   // as applied. Best-effort: the file change already succeeded, so a refresh
