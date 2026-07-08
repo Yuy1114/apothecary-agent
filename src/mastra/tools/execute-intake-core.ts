@@ -9,6 +9,7 @@ import { safeVaultPath } from "../../safety/pathSafety.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { loadIntakePlan, clearIntakePlan } from "../../vault/intakePlanStore.js";
+import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import type { IntakeDecision } from "../../domain/intakePlan.js";
 import { logger, startTimer } from "../../observability/logger.js";
 
@@ -195,6 +196,10 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
   // Record the batch's final on-disk state in the baseline (sources dropped,
   // targets hashed) and release the pending self-write marks.
   await commitSelfWrite(VAULT_PATH, affected);
+  // Clear pending changes for every path this batch handled (moves/archives are
+  // also cleared in their cores; this additionally covers directory merges and
+  // `leave` decisions) so processed inbox files don't linger as stale changes.
+  await resolvePendingByPaths([...affected, ...plan.decisions.map((d) => d.source)]);
   await clearIntakePlan();
   doneAll({ moved: report.moved, archived: report.archived, left: report.left, failed: report.failed });
   return report;

@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile, removeFromIndex } from "./rag.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import { updateReadmesForMove } from "./readme-index-core.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { logger } from "../../observability/logger.js";
@@ -78,6 +79,10 @@ export async function moveVaultFileCore(from: string, to: string): Promise<MoveV
     source: "moveVaultFile",
     detail: `${from} → ${to}`,
   });
+  // The agent handled these paths, so clear any change queued for them earlier
+  // (e.g. an inbox file that manual sync flagged as "created") — otherwise it
+  // lingers as a stale pending change after it has already been moved.
+  await resolvePendingByPaths([from, to]);
 
   return { moved: true, reindexed };
 }

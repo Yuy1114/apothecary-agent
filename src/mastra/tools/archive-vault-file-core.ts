@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { removeFromIndex } from "./rag.js";
 import { recordOperation } from "../../vault/operationLedger.js";
+import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import {
   archiveTargetPath,
   isArchivedPath,
@@ -99,6 +100,8 @@ export async function archiveVaultFileCore(
     source: "archiveVaultFile",
     detail: `${from} → ${moved.to}`,
   });
+  // Clear any pending change queued for this path — the agent just handled it.
+  await resolvePendingByPaths([from]);
 
   return { archived: true, from, to: moved.to, reindexed };
 }

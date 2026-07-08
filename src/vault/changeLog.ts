@@ -108,3 +108,26 @@ export async function resolveChanges(
   });
   return result.rowsAffected;
 }
+
+/**
+ * Mark any pending changes for the given paths as processed. Called when the
+ * agent itself acts on a path (move / archive / intake), so a change queued
+ * earlier — e.g. an inbox file first detected by manual sync — doesn't linger as
+ * a stale pending item after the agent has already handled it. Returns the count
+ * cleared. No-op when the ledger is uninitialised (tests / DB-less runs).
+ */
+export async function resolvePendingByPaths(
+  paths: Iterable<string>,
+  outcome: "processed" | "dismissed" = "processed",
+): Promise<number> {
+  if (!client) return 0;
+  const unique = [...new Set(paths)].filter(Boolean);
+  if (unique.length === 0) return 0;
+  const placeholders = unique.map(() => "?").join(", ");
+  const result = await client.execute({
+    sql: `UPDATE vault_change_log SET status = ?, processed_at = ?
+          WHERE path IN (${placeholders}) AND status = 'pending'`,
+    args: [outcome, nowIso(), ...unique],
+  });
+  return result.rowsAffected;
+}
