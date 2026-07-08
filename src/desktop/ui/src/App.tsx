@@ -23,7 +23,7 @@ const api = window.apothecary;
 const titles: Record<View, [string, string]> = {
   workspace: ["工作区 Workspace", "对话 · 提案 · 运行动态"],
   vault: ["Vault 文件库", "Inbox 与变更 · 监听中"],
-  runs: ["运行历史 Runs", "Agent 的操作记录"],
+  runs: ["审阅 Review", "检查并复核 Agent 对药柜的改动"],
   knowledge: ["知识体系 Knowledge", "主题域 · 关系 · 维护机会"],
   settings: ["设置 Settings", "本地配置 · 不会上传"],
 };
@@ -155,7 +155,7 @@ export function App() {
         <nav className="nav" aria-label="主要导航">
           <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
           <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
-          <NavItem id="runs" icon={<Icon.runs />} label="运行历史 Runs" active={view} onClick={setView} />
+          <NavItem id="runs" icon={<Icon.runs />} label="审阅 Review" active={view} onClick={setView} />
           <NavItem id="knowledge" icon={<Icon.knowledge />} label="知识体系 Knowledge" active={view} onClick={setView} />
         </nav>
 
@@ -185,7 +185,7 @@ export function App() {
         {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal}
           activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} />}
         {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} />}
-        {view === "runs" && <RunsView refreshKey={refreshKey} />}
+        {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
         {view === "settings" && <SettingsView refreshKey={refreshKey} notify={notify} />}
       </main>
@@ -727,40 +727,99 @@ const OP_LABELS: Record<string, string> = {
   edit: "编辑", move: "移动", archive: "归档", merge: "合并", promote: "提升",
   canonical: "规范化", structure: "结构调整", ingest: "归入", capture: "捕获",
 };
-function RunsView({ refreshKey }: { refreshKey: number }) {
+// Operations whose reverse is well-defined (just move the file back).
+const REVERSIBLE_OPS = new Set(["move", "archive"]);
+const opLabel = (op: any) => OP_LABELS[op.type] ?? op.type;
+// For move/archive the ledger stores [from, to]; the result lives at the last entry.
+const opFromTo = (op: any): { from: string; to: string } | null =>
+  (op.type === "move" || op.type === "archive") && op.targetFiles?.length >= 2
+    ? { from: op.targetFiles[0], to: op.targetFiles[op.targetFiles.length - 1] }
+    : null;
+const opResultPath = (op: any): string | undefined =>
+  (op.type === "move" || op.type === "archive") ? op.targetFiles?.at(-1) : op.targetFiles?.[0];
+
+// 审阅 Review — inspect what the agent actually changed (operation ledger), and
+// hand a suspicious change back to the agent to reverse via the proposal/approval
+// loop (no direct destructive backend). Complements 变更 (external edits).
+function ReviewView({ refreshKey, onChat, notify }: { refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void }) {
   const [ops, setOps] = useState<any[] | null>(null);
   const [filter, setFilter] = useState<string>("all");
-  useEffect(() => { void api.operations().then(setOps).catch(() => setOps([])); }, [refreshKey]);
-  const sources = useMemo(() => Array.from(new Set((ops ?? []).map((o) => o.source))).filter(Boolean), [ops]);
-  const shown = (ops ?? []).filter((o) => filter === "all" || o.source === filter);
+  const [selected, setSelected] = useState<{ op: any; content?: string } | null>(null);
+  const reload = useCallback(() => { setSelected(null); void api.operations().then(setOps).catch(() => setOps([])); }, []);
+  useEffect(() => { reload(); }, [reload, refreshKey]);
+  const types = useMemo(() => Array.from(new Set((ops ?? []).map((o) => o.type))).filter(Boolean), [ops]);
+  const shown = (ops ?? []).filter((o) => filter === "all" || o.type === filter);
+
+  const inspect = async (op: any) => {
+    const target = opResultPath(op);
+    let content: string | undefined;
+    if (target && /\.(md|txt)$/i.test(target)) {
+      try { content = (await api.readFile(target)).content; } catch { content = undefined; }
+    }
+    setSelected({ op, content });
+  };
+  const handToAgent = (op: any) => {
+    const ft = opFromTo(op);
+    onChat(ft
+      ? `请撤销 Agent 之前的这次「${opLabel(op)}」改动：把 "${ft.to}" 还原回 "${ft.from}"。先说明你将如何操作，再按流程提出提案。`
+      : `请复核 Agent 之前的这次「${opLabel(op)}」改动，必要时撤销：${op.targetFiles?.join(", ")}（当时原因：${op.rationale || op.detail || "—"}）`);
+  };
 
   return (
-    <div className="page">
-      <div className="page-inner">
-        <div className="filter-row">
-          <span className={`badge ${filter === "all" ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setFilter("all")}>全部 {ops?.length ?? 0}</span>
-          {sources.map((s) => (
-            <span key={s} className={`badge ${filter === s ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setFilter(s)}>{s}</span>
-          ))}
-        </div>
-        {ops === null ? <Empty>加载中…</Empty> : shown.length === 0 ? <Empty>还没有运行记录。Agent 的每次真实文件操作都会记录在这里。</Empty> : (
-          <div className="card list-card">
-            {shown.map((op) => (
-              <div className="run-row" key={op.id}>
-                <span className="id">{op.id.slice(0, 8)}</span>
-                <span className="badge success">{OP_LABELS[op.type] ?? op.type}</span>
-                <div className="info">
-                  <div className="t">{op.targetFiles?.map(lastSegment).join(", ") || op.detail || "—"}</div>
-                  <div className="d">{op.rationale || op.detail}</div>
-                </div>
-                <span className="badge">{op.source}</span>
-                <span className="time">{formatDate(op.appliedAt)}</span>
-              </div>
+    <section className="view">
+      <div className="split">
+        <div className="file-pane">
+          <div className="pane-head" style={{ flexWrap: "wrap", gap: 6 }}>
+            <span className={`badge ${filter === "all" ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setFilter("all")}>全部 {ops?.length ?? 0}</span>
+            {types.map((t) => (
+              <span key={t} className={`badge ${filter === t ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setFilter(t)}>{OP_LABELS[t] ?? t}</span>
             ))}
+            <span className="spacer" />
+            <button className="btn btn-ghost sm icon" title="刷新" onClick={reload}><Icon.refresh /></button>
           </div>
-        )}
+          <div className="file-list">
+            {ops === null ? <Empty>加载中…</Empty> : shown.length === 0 ? <Empty>还没有 Agent 改动记录。Agent 每次真实修改文件都会记录在这里供你审阅。</Empty> : shown.map((op) => {
+              const ft = opFromTo(op);
+              return (
+                <div key={op.id} className={`file-row ${selected?.op.id === op.id ? "active" : ""}`} onClick={() => void inspect(op)}>
+                  <span className="badge success" style={{ flex: "none" }}>{opLabel(op)}</span>
+                  <div className="info">
+                    <div className="name">{ft ? `${lastSegment(ft.from)} → ${lastSegment(ft.to)}` : (op.targetFiles?.map(lastSegment).join(", ") || op.detail || "—")}</div>
+                    <div className="sub">{op.source} · {formatDate(op.appliedAt)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="preview-pane">
+          {!selected ? <Empty>选择一条改动，查看 Agent 做了什么</Empty> : (
+            <div className="preview-inner">
+              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div className="doc-head">
+                  <div className="row"><span className="badge success">{opLabel(selected.op)}</span><span className="name" style={{ fontSize: 14 }}>{opFromTo(selected.op) ? "文件移动 / 归档" : "文件改动"}</span></div>
+                  {opFromTo(selected.op) && (
+                    <div className="path-row">
+                      <span className="path-old">{opFromTo(selected.op)!.from}</span><span>→</span><span className="path-new">{opFromTo(selected.op)!.to}</span>
+                    </div>
+                  )}
+                  <div className="meta"><span>{selected.op.source}</span><span>·</span><span>{formatDate(selected.op.appliedAt)}</span>{selected.op.id && <><span>·</span><span>{selected.op.id.slice(0, 8)}</span></>}</div>
+                  {(selected.op.rationale || selected.op.detail) && <div className="hint" style={{ lineHeight: 1.6 }}>{selected.op.rationale || selected.op.detail}</div>}
+                </div>
+                {selected.content !== undefined
+                  ? <div className="doc-body"><pre>{selected.content}</pre></div>
+                  : <div className="doc-body"><p className="muted">目标不是文本文件（或文件已移动/删除），无法预览内容。</p></div>}
+              </div>
+              <div className="actions" style={{ marginTop: 14 }}>
+                <button className="btn btn-secondary sm" onClick={() => handToAgent(selected.op)}>{REVERSIBLE_OPS.has(selected.op.type) ? "让 Agent 撤销这次改动" : "让 Agent 复核"}</button>
+                {opResultPath(selected.op) && <span className="hint mono">{opResultPath(selected.op)}</span>}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
