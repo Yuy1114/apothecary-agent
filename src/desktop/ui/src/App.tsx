@@ -14,6 +14,7 @@ type AgentRun = {
   proposals: RunProposal[];
 };
 type TimelineItem = { kind: "user"; id: string; content: string } | { kind: "run"; run: AgentRun };
+type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string };
 
 const api = window.apothecary;
 
@@ -120,7 +121,25 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [refreshDashboard]);
 
+  const [threads, setThreads] = useState<DesktopThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [threadNonce, setThreadNonce] = useState(0);
+  const loadThreads = useCallback(() => api.threads().then(setThreads).catch(() => undefined), []);
+  useEffect(() => { void loadThreads(); }, [loadThreads]);
+
   const openChat = useCallback((prompt: string) => { setQueuedPrompt(prompt); setView("workspace"); }, []);
+  // Explicit conversation switches bump threadNonce so WorkspaceView reloads;
+  // a locally-minted thread (onThreadCreated) must NOT bump it, or the in-flight
+  // timeline would be wiped by a reload.
+  const selectThread = useCallback((id: string) => { setActiveThreadId(id); setThreadNonce((n) => n + 1); setView("workspace"); }, []);
+  const newThread = useCallback(() => { setActiveThreadId(null); setThreadNonce((n) => n + 1); setView("workspace"); }, []);
+  const onThreadCreated = useCallback((id: string) => { setActiveThreadId(id); void loadThreads(); }, [loadThreads]);
+  const deleteThread = useCallback(async (id: string) => {
+    await api.deleteThread(id);
+    if (activeThreadId === id) newThread();
+    await loadThreads();
+  }, [activeThreadId, newThread, loadThreads]);
+
   const [eyebrowTitle, eyebrowDesc] = titles[view];
 
   return (
@@ -138,7 +157,8 @@ export function App() {
           <NavItem id="knowledge" icon={<Icon.knowledge />} label="知识体系 Knowledge" active={view} onClick={setView} />
         </nav>
 
-        <SidePanel view={view} dashboard={dashboard} onPrompt={openChat} refreshKey={refreshKey} vaultScope={vaultScope} setVaultScope={setVaultScope} />
+        <SidePanel view={view} dashboard={dashboard} refreshKey={refreshKey} vaultScope={vaultScope} setVaultScope={setVaultScope}
+          threads={threads} activeThreadId={activeThreadId} onSelectThread={selectThread} onNewThread={newThread} onDeleteThread={deleteThread} />
 
         <div className="side-foot">
           <nav className="nav">
@@ -160,7 +180,8 @@ export function App() {
           <button className="btn btn-ghost sm icon" title="刷新当前页面" onClick={refresh}><Icon.refresh /></button>
         </header>
 
-        {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal} />}
+        {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal}
+          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} />}
         {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "runs" && <RunsView refreshKey={refreshKey} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
@@ -192,16 +213,25 @@ const QUICK_PROMPTS: Array<[string, string]> = [
   ["查看知识画像", "根据当前药柜，总结我的核心知识主题和薄弱区域。"],
 ];
 
-function SidePanel({ view, dashboard, onPrompt, refreshKey, vaultScope, setVaultScope }: {
-  view: View; dashboard: any; onPrompt: (p: string) => void; refreshKey: number; vaultScope: string; setVaultScope: (s: string) => void;
+function SidePanel({ view, dashboard, refreshKey, vaultScope, setVaultScope, threads, activeThreadId, onSelectThread, onNewThread, onDeleteThread }: {
+  view: View; dashboard: any; refreshKey: number; vaultScope: string; setVaultScope: (s: string) => void;
+  threads: DesktopThread[]; activeThreadId: string | null; onSelectThread: (id: string) => void; onNewThread: () => void; onDeleteThread: (id: string) => void;
 }) {
   if (view === "workspace") {
     return (
       <div className="side-panel">
-        <div className="side-head"><span>快捷提问</span></div>
-        {QUICK_PROMPTS.map(([label, prompt]) => (
-          <button className="prompt-chip" key={label} onClick={() => onPrompt(prompt)}>{label}</button>
-        ))}
+        <div className="side-head"><span>对话历史</span><span className="side-action" onClick={onNewThread}>+ 新对话</span></div>
+        <div className="side-list">
+          {threads.length === 0 ? <div className="side-empty">还没有对话。发送第一条消息开始。</div> : threads.map((t) => (
+            <div className={`side-row ${activeThreadId === t.id ? "active" : ""}`} key={t.id} onClick={() => onSelectThread(t.id)}>
+              <div className="side-row-top">
+                <span className="t">{t.title}</span>
+                <span className="time">{formatDate(t.updatedAt)}</span>
+                <button className="row-del" title="删除对话" onClick={(e) => { e.stopPropagation(); if (window.confirm(`删除对话「${t.title}」？`)) void onDeleteThread(t.id); }}>×</button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -258,15 +288,35 @@ function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: str
 }
 
 /* ═══ Workspace ═══════════════════════════════════════════════════════ */
-function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff }: {
+function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads }: {
   refreshKey: number; dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void; notify: (t: string) => void; openDiff: (p: any) => void;
+  activeThreadId: string | null; threadNonce: number; onThreadCreated: (id: string) => void; refreshThreads: () => void;
 }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [pending, setPending] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  // The conversation this view is sending into; a local mint on first send does
+  // not go through activeThreadId re-render, so keep the live id in a ref.
+  const threadRef = useRef<string | null>(activeThreadId);
   const { prompt: reasonPrompt, dialog: reasonDialog } = useReasonPrompt();
   const busy = timeline.some((item) => item.kind === "run" && (item.run.status === "running" || item.run.status === "awaiting"));
+
+  // Reload the timeline when the user explicitly switches / starts a conversation
+  // (threadNonce bumps). Historical assistant turns replay as plain completed
+  // bubbles — tool steps and proposals are live-only.
+  useEffect(() => {
+    threadRef.current = activeThreadId;
+    if (!activeThreadId) { setTimeline([]); return; }
+    let cancelled = false;
+    void api.threadMessages(activeThreadId).then((msgs) => {
+      if (cancelled) return;
+      setTimeline(msgs.map((m) => m.role === "user"
+        ? { kind: "user", id: crypto.randomUUID(), content: m.content }
+        : { kind: "run", run: { id: crypto.randomUUID(), text: m.content, status: "completed", label: "", tools: [], proposals: [] } }));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [threadNonce]);
 
   const loadPending = useCallback(() => api.proposals("proposed").then(setPending).catch(() => undefined), []);
   useEffect(() => { void loadPending(); }, [loadPending, refreshKey, dashboard?.pendingProposals]);
@@ -294,8 +344,8 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
       if (event.type === "failed") return { ...item, run: { ...run, status: "failed", label: event.message } };
       return item;
     }));
-    if (event.type === "completed" || event.type === "failed") void refreshDashboard();
-  }), [refreshDashboard]);
+    if (event.type === "completed" || event.type === "failed") { void refreshDashboard(); refreshThreads(); }
+  }), [refreshDashboard, refreshThreads]);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [timeline]);
 
@@ -311,8 +361,17 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     const userItem: TimelineItem = { kind: "user", id: crypto.randomUUID(), content };
     const runItem: TimelineItem = { kind: "run", run: { id: runId, text: "", status: "running", label: "正在启动 Agent Run", tools: [], proposals: [] } };
     setTimeline((items) => [...items, userItem, runItem]); setInput("");
+    // First message of a fresh conversation mints and titles a thread so it
+    // shows up in history immediately; subsequent turns reuse it.
+    let threadId = threadRef.current;
+    const isNew = !threadId;
+    if (!threadId) { threadId = crypto.randomUUID(); threadRef.current = threadId; }
     try {
-      await api.startRun(runId, [...conversationFrom(timeline), { role: "user", content }]);
+      if (isNew) {
+        await api.createThread(threadId, content.slice(0, 30));
+        onThreadCreated(threadId);
+      }
+      await api.startRun(runId, [...conversationFrom(timeline), { role: "user", content }], threadId);
     } catch (error) {
       setTimeline((items) => items.map((item) => item.kind === "run" && item.run.id === runId ? { ...item, run: { ...item.run, status: "failed", label: (error as Error).message } } : item));
     }
@@ -360,7 +419,16 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     <section className="view">
       <div className="scroll feed" ref={scrollRef}>
         <div className="feed-inner">
-          <div className="date-divider">今天</div>
+          {timeline.length === 0 && (
+            <div className="msg-agent">
+              <div className="agent-col">
+                <div className="agent-text">你好。我可以帮你检索知识、处理变更、归位 inbox，或把对话沉淀成可审阅的提案。</div>
+                <div className="chips">
+                  {QUICK_PROMPTS.map(([label, prompt]) => <div className="chip" key={label} onClick={() => void send(prompt)}>{label}</div>)}
+                </div>
+              </div>
+            </div>
+          )}
 
           {standalone.map((proposal) => (
             <div className="msg-agent" key={proposal.id}>
@@ -370,12 +438,6 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
               </div>
             </div>
           ))}
-
-          <div className="msg-agent">
-            <div className="agent-col">
-              <div className="agent-text">你好。我可以帮你检索知识、处理变更、归位 inbox，或把对话沉淀成可审阅的提案。</div>
-            </div>
-          </div>
 
           {timeline.map((item) => item.kind === "user"
             ? <div className="msg-user" key={item.id}><div className="bubble">{item.content}</div></div>

@@ -32,6 +32,9 @@ const isMetaFile = (relativePath: string): boolean =>
 
 export type DesktopChatMessage = { role: "user" | "assistant"; content: string };
 
+/** A persisted conversation, backed by one Mastra memory thread. */
+export type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string };
+
 /** Human decision injected back into a suspended `proposeChange` tool call. */
 export type ProposalResumeData = {
   proposalId: string;
@@ -40,11 +43,13 @@ export type ProposalResumeData = {
 };
 
 export type DesktopServiceDeps = {
-  chat: (messages: DesktopChatMessage[]) => Promise<string>;
+  // `threadId` scopes the turn to a persisted conversation (Mastra memory thread).
+  chat: (messages: DesktopChatMessage[], threadId?: string) => Promise<string>;
   streamChat?: (
     messages: DesktopChatMessage[],
     emit: (event: AgentRunEvent) => void,
     runId: string,
+    threadId?: string,
   ) => Promise<void>;
   resumeRun?: (
     runId: string,
@@ -52,6 +57,11 @@ export type DesktopServiceDeps = {
     emit: (event: AgentRunEvent) => void,
   ) => Promise<void>;
   cancelRun?: (runId: string) => boolean;
+  // Conversation history, backed by Mastra memory threads.
+  listThreads?: () => Promise<DesktopThread[]>;
+  threadMessages?: (threadId: string) => Promise<DesktopChatMessage[]>;
+  createThread?: (threadId: string, title?: string) => Promise<void>;
+  deleteThread?: (threadId: string) => Promise<void>;
 };
 
 export class DesktopService {
@@ -73,26 +83,44 @@ export class DesktopService {
     ]);
   }
 
-  chat(messages: DesktopChatMessage[]): Promise<string> {
+  chat(messages: DesktopChatMessage[], threadId?: string): Promise<string> {
     if (messages.length === 0 || messages.at(-1)?.role !== "user") {
       throw new Error("chat_requires_user_message");
     }
-    return this.deps.chat(messages.slice(-20));
+    return this.deps.chat(messages.slice(-20), threadId);
   }
 
-  streamChat(messages: DesktopChatMessage[], emit: (event: AgentRunEvent) => void, runId: string): Promise<void> {
+  streamChat(messages: DesktopChatMessage[], emit: (event: AgentRunEvent) => void, runId: string, threadId?: string): Promise<void> {
     if (messages.length === 0 || messages.at(-1)?.role !== "user") {
       throw new Error("chat_requires_user_message");
     }
     if (!this.deps.streamChat) {
       return this.deps
-        .chat(messages.slice(-20))
+        .chat(messages.slice(-20), threadId)
         .then((text) => {
           emit({ type: "text_delta", text });
           emit({ type: "completed" });
         });
     }
-    return this.deps.streamChat(messages.slice(-20), emit, runId);
+    return this.deps.streamChat(messages.slice(-20), emit, runId, threadId);
+  }
+
+  /** List persisted conversations (Mastra memory threads), newest first. */
+  threads(): Promise<DesktopThread[]> {
+    return this.deps.listThreads?.() ?? Promise.resolve([]);
+  }
+
+  /** Load a conversation's user/assistant messages for replay in the timeline. */
+  threadMessages(threadId: string): Promise<DesktopChatMessage[]> {
+    return this.deps.threadMessages?.(threadId) ?? Promise.resolve([]);
+  }
+
+  createThread(threadId: string, title?: string): Promise<void> {
+    return this.deps.createThread?.(threadId, title) ?? Promise.resolve();
+  }
+
+  deleteThread(threadId: string): Promise<void> {
+    return this.deps.deleteThread?.(threadId) ?? Promise.resolve();
   }
 
   /**

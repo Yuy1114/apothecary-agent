@@ -241,6 +241,9 @@ a:hover { text-decoration: underline; }
 .side-row-top .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 500; font-size: 12.5px; }
 .side-row-top .time { font-size: 10.5px; color: var(--fg-subtle); flex: none; }
 .side-row .sub { font-size: 11.5px; color: var(--fg-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-row .row-del { border: 0; background: transparent; color: var(--fg-subtle); font-size: 15px; line-height: 1; padding: 0 2px; border-radius: var(--radius-sm); opacity: 0; flex: none; }
+.side-row:hover .row-del { opacity: 1; }
+.side-row .row-del:hover { color: var(--danger); background: var(--bg-subtle); }
 .side-empty { padding: 12px 10px; font-size: 12px; color: var(--fg-subtle); }
 .tree-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; color: var(--fg-muted); }
 .tree-row:hover { background: var(--bg-muted); color: var(--fg); }

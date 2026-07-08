@@ -12,6 +12,8 @@ import {
   ResolveProposalInputSchema,
   ResumeRunInputSchema,
   StartRunInputSchema,
+  ThreadIdInputSchema,
+  CreateThreadInputSchema,
 } from "./contracts.js";
 
 export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): void {
@@ -21,7 +23,7 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
     return service.chat(messages);
   });
   ipcMain.handle(DesktopChannel.startRun, (ipcEvent, input) => {
-    const { runId, messages } = StartRunInputSchema.parse(input);
+    const { runId, messages, threadId } = StartRunInputSchema.parse(input);
     const send = (event: AgentRunEvent) => {
       if (!ipcEvent.sender.isDestroyed()) ipcEvent.sender.send(DesktopChannel.runEvent, { runId, event });
     };
@@ -31,7 +33,7 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
     void (async () => {
       send({ type: "status", phase: "started", label: "Agent Run 已开始" });
       try {
-        await service.streamChat(messages, send, runId);
+        await service.streamChat(messages, send, runId, threadId);
       } catch (error) {
         send({ type: "failed", message: error instanceof Error ? error.message : "Agent 执行失败" });
       }
@@ -82,4 +84,17 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   ipcMain.handle(DesktopChannel.operations, () => service.operations());
   ipcMain.handle(DesktopChannel.knowledge, () => service.knowledge());
   ipcMain.handle(DesktopChannel.diagnostics, () => service.diagnostics());
+  ipcMain.handle(DesktopChannel.threads, () => service.threads());
+  ipcMain.handle(DesktopChannel.threadMessages, (_event, input) => {
+    const { threadId } = ThreadIdInputSchema.parse(input);
+    return service.threadMessages(threadId);
+  });
+  ipcMain.handle(DesktopChannel.createThread, (_event, input) => {
+    const { threadId, title } = CreateThreadInputSchema.parse(input);
+    return service.createThread(threadId, title);
+  });
+  ipcMain.handle(DesktopChannel.deleteThread, (_event, input) => {
+    const { threadId } = ThreadIdInputSchema.parse(input);
+    return service.deleteThread(threadId);
+  });
 }

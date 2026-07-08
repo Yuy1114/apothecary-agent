@@ -125,26 +125,45 @@ async function createService(): Promise<DesktopService> {
   await fs.mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
   const desktopRuntime = createDesktopRuntime(runtimeRoot);
   const apothecaryAgent = desktopRuntime.getAgent("apothecaryAgent");
-  // The agent's memory (observational + working) is thread-scoped, so generate()
-  // needs a thread + resource. Give this desktop session one identity so memory
-  // has a valid thread; a fresh thread per launch keeps sessions clean.
-  const memory = { resource: "apothecary-desktop", thread: `desktop-${randomUUID()}` };
+  // The agent's memory (observational + working) is thread-scoped. Each desktop
+  // conversation is one persisted thread under a stable resource, so history can
+  // be listed and reopened. `boundMemory` is the storage-backed handle.
+  const RESOURCE = "apothecary-desktop";
+  const boundMemory = await apothecaryAgent.getMemory();
+  // Fallback thread for turns that arrive without a conversation id (e.g. the
+  // non-UI chat() path), so memory always has a valid thread.
+  const fallbackThread = `desktop-${randomUUID()}`;
+  const memoryFor = (threadId?: string) => ({ resource: RESOURCE, thread: threadId ?? fallbackThread });
+
+  // Best-effort extraction of display text from a stored memory message, whose
+  // content may be a plain string, an array of parts, or a V2 `{ parts }` object.
+  const messageText = (content: unknown): string => {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) return content.map((p) => (typeof p === "string" ? p : (p as any)?.text ?? "")).join("");
+    if (content && typeof content === "object") {
+      const c = content as any;
+      if (typeof c.content === "string") return c.content;
+      if (Array.isArray(c.parts)) return c.parts.map((p: any) => (p?.type === "text" ? p.text : "")).join("");
+    }
+    return "";
+  };
+
   const service = new DesktopService({
     vaultPath,
     projectRoot: runtimeRoot,
     deps: {
-      chat: async (messages) => {
+      chat: async (messages, threadId) => {
         // Allow enough tool-call steps to actually finish a maintenance task
         // (scan + read several files + produce proposals) in one turn.
         const result = await apothecaryAgent.generate(formatConversation(messages), {
-          memory,
+          memory: memoryFor(threadId),
           maxSteps: 20,
         });
         return result.text;
       },
-      streamChat: async (messages, emit, runId) => {
+      streamChat: async (messages, emit, runId, threadId) => {
         const output = await apothecaryAgent.stream(formatConversation(messages), {
-          memory,
+          memory: memoryFor(threadId),
           maxSteps: 20,
           runId,
           // Opt this run into the proposeChange suspend/resume gate so a proposal
@@ -158,6 +177,33 @@ async function createService(): Promise<DesktopService> {
         await pumpAgentStream(output, emit);
       },
       cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),
+      listThreads: async () => {
+        if (!boundMemory) return [];
+        const { threads } = await boundMemory.listThreads({ filter: { resourceId: RESOURCE }, perPage: false });
+        return threads
+          .map((t) => ({
+            id: t.id,
+            title: (t.title && t.title.trim()) || "新对话",
+            createdAt: new Date(t.createdAt).toISOString(),
+            updatedAt: new Date(t.updatedAt).toISOString(),
+          }))
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      },
+      threadMessages: async (threadId) => {
+        if (!boundMemory) return [];
+        const { messages } = await boundMemory.recall({ threadId, resourceId: RESOURCE, perPage: false });
+        return messages
+          .filter((m: any) => m.role === "user" || m.role === "assistant")
+          .map((m: any) => ({ role: m.role as "user" | "assistant", content: messageText(m.content) }))
+          .filter((m) => m.content.trim().length > 0);
+      },
+      createThread: async (threadId, title) => {
+        if (!boundMemory) return;
+        await boundMemory.createThread({ resourceId: RESOURCE, threadId, title });
+      },
+      deleteThread: async (threadId) => {
+        await boundMemory?.deleteThread(threadId);
+      },
     },
   });
   await service.initialize();

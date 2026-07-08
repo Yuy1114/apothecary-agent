@@ -11,6 +11,14 @@ export const ChatInputSchema = z.object({
 
 export const StartRunInputSchema = ChatInputSchema.extend({
   runId: z.string().uuid(),
+  threadId: z.string().min(1).optional(),
+});
+
+export const ThreadIdInputSchema = z.object({ threadId: z.string().min(1) });
+
+export const CreateThreadInputSchema = z.object({
+  threadId: z.string().min(1),
+  title: z.string().max(200).optional(),
 });
 
 export const ResumeRunInputSchema = z.object({
@@ -61,4 +69,8 @@ export const DesktopChannel = {
   operations: "apothecary:operations",
   knowledge: "apothecary:knowledge",
   diagnostics: "apothecary:diagnostics",
+  threads: "apothecary:threads",
+  threadMessages: "apothecary:thread-messages",
+  createThread: "apothecary:create-thread",
+  deleteThread: "apothecary:delete-thread",
 } as const;

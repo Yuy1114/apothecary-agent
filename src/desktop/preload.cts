@@ -20,14 +20,18 @@ const channel = {
   operations: "apothecary:operations",
   knowledge: "apothecary:knowledge",
   diagnostics: "apothecary:diagnostics",
+  threads: "apothecary:threads",
+  threadMessages: "apothecary:thread-messages",
+  createThread: "apothecary:create-thread",
+  deleteThread: "apothecary:delete-thread",
 } as const;
 
 contextBridge.exposeInMainWorld("apothecary", {
   dashboard: () => ipcRenderer.invoke(channel.dashboard),
   chat: (messages: Array<{ role: "user" | "assistant"; content: string }>) =>
     ipcRenderer.invoke(channel.chat, { messages }),
-  startRun: (runId: string, messages: Array<{ role: "user" | "assistant"; content: string }>) =>
-    ipcRenderer.invoke(channel.startRun, { runId, messages }),
+  startRun: (runId: string, messages: Array<{ role: "user" | "assistant"; content: string }>, threadId?: string) =>
+    ipcRenderer.invoke(channel.startRun, { runId, messages, threadId }),
   resumeRun: (runId: string, proposalId: string, decision: "approve" | "reject", note?: string) =>
     ipcRenderer.invoke(channel.resumeRun, { runId, proposalId, decision, note }),
   cancelRun: (runId: string) => ipcRenderer.invoke(channel.cancelRun, { runId }),
@@ -52,4 +56,8 @@ contextBridge.exposeInMainWorld("apothecary", {
   operations: () => ipcRenderer.invoke(channel.operations),
   knowledge: () => ipcRenderer.invoke(channel.knowledge),
   diagnostics: () => ipcRenderer.invoke(channel.diagnostics),
+  threads: () => ipcRenderer.invoke(channel.threads),
+  threadMessages: (threadId: string) => ipcRenderer.invoke(channel.threadMessages, { threadId }),
+  createThread: (threadId: string, title?: string) => ipcRenderer.invoke(channel.createThread, { threadId, title }),
+  deleteThread: (threadId: string) => ipcRenderer.invoke(channel.deleteThread, { threadId }),
 });

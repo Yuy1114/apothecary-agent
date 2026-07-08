@@ -12,7 +12,7 @@ type AgentRunEvent =
 type ApothecaryApi = {
   dashboard(): Promise<any>;
   chat(messages: ChatMessage[]): Promise<string>;
-  startRun(runId: string, messages: ChatMessage[]): Promise<{ runId: string }>;
+  startRun(runId: string, messages: ChatMessage[], threadId?: string): Promise<{ runId: string }>;
   resumeRun(
     runId: string,
     proposalId: string,
@@ -34,6 +34,10 @@ type ApothecaryApi = {
   operations(): Promise<any[]>;
   knowledge(): Promise<any>;
   diagnostics(): Promise<any>;
+  threads(): Promise<Array<{ id: string; title: string; createdAt: string; updatedAt: string }>>;
+  threadMessages(threadId: string): Promise<ChatMessage[]>;
+  createThread(threadId: string, title?: string): Promise<void>;
+  deleteThread(threadId: string): Promise<void>;
 };
 
 interface Window {
