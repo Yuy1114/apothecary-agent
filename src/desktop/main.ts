@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell } from "electron";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,11 @@ import {
   firstAvailableVaultPath,
   loadDesktopSettings,
   saveDesktopSettings,
+  sanitizeSettings,
+  settingsEnv,
+  type DesktopSettings,
 } from "./settings.js";
+import { SaveSettingsInputSchema, SettingsChannel } from "./contracts.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..", "..");
@@ -24,6 +28,66 @@ let vaultPath = legacyDefaultVaultPath;
 
 function settingsPath(): string {
   return path.join(app.getPath("userData"), "desktop-settings.json");
+}
+
+// Secrets are encrypted with the OS keychain-backed key (Electron safeStorage)
+// and stored as base64 ciphertext. Where encryption is unavailable (e.g. Linux
+// without a keyring) we fall back to base64 so the app still works locally.
+function encryptSecret(plain: string): string {
+  if (safeStorage.isEncryptionAvailable()) return safeStorage.encryptString(plain).toString("base64");
+  return Buffer.from(plain, "utf8").toString("base64");
+}
+function decryptSecret(enc?: string): string | undefined {
+  if (!enc) return undefined;
+  const buf = Buffer.from(enc, "base64");
+  try {
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
+  } catch {
+    // fall through to the base64 fallback below
+  }
+  return buf.toString("utf8");
+}
+
+/** Load settings, merge a patch, persist. Never clobbers fields not in `patch`. */
+async function persistSettings(patch: Partial<DesktopSettings>): Promise<DesktopSettings> {
+  const existing = (await loadDesktopSettings(settingsPath())) ?? { vaultPath };
+  const merged = { ...existing, ...patch };
+  await saveDesktopSettings(settingsPath(), merged);
+  return merged;
+}
+
+/** Push a settings object into process.env so the runtime picks it up on load. */
+function applySettingsToEnv(settings: DesktopSettings): void {
+  Object.assign(process.env, settingsEnv(settings, {
+    deepseekApiKey: decryptSecret(settings.deepseekApiKeyEnc),
+    embeddingApiKey: decryptSecret(settings.embeddingApiKeyEnc),
+  }));
+}
+
+function registerSettingsIpc(): void {
+  ipcMain.handle(SettingsChannel.get, async () => {
+    const settings = (await loadDesktopSettings(settingsPath())) ?? { vaultPath };
+    return sanitizeSettings(settings);
+  });
+  ipcMain.handle(SettingsChannel.save, async (_event, input) => {
+    const { deepseekApiKey, embeddingApiKey, ...config } = SaveSettingsInputSchema.parse(input ?? {});
+    const patch: Partial<DesktopSettings> = { ...config };
+    // A provided key value replaces (non-empty) or clears ("") the stored secret;
+    // an absent field leaves it untouched.
+    if (deepseekApiKey !== undefined) patch.deepseekApiKeyEnc = deepseekApiKey ? encryptSecret(deepseekApiKey) : undefined;
+    if (embeddingApiKey !== undefined) patch.embeddingApiKeyEnc = embeddingApiKey ? encryptSecret(embeddingApiKey) : undefined;
+    const merged = await persistSettings(patch);
+    applySettingsToEnv(merged); // diagnostics (which read env live) reflect immediately
+    return sanitizeSettings(merged);
+  });
+  ipcMain.handle(SettingsChannel.chooseVault, async () => {
+    const selected = await chooseVaultPath();
+    if (!selected) return null;
+    const resolved = path.resolve(selected);
+    await persistSettings({ vaultPath: resolved });
+    return resolved;
+  });
+  ipcMain.handle(SettingsChannel.relaunch, () => { app.relaunch(); app.exit(0); });
 }
 
 async function chooseVaultPath(): Promise<string | null> {
@@ -53,7 +117,7 @@ async function resolveVaultPath(): Promise<string> {
 
   const selectedPath = await chooseVaultPath();
   if (!selectedPath) throw new Error("vault_selection_cancelled");
-  await saveDesktopSettings(settingsPath(), { vaultPath: selectedPath });
+  await persistSettings({ vaultPath: path.resolve(selectedPath) });
   return path.resolve(selectedPath);
 }
 
@@ -70,7 +134,7 @@ function installApplicationMenu(): void {
           click: async () => {
             const selectedPath = await chooseVaultPath();
             if (!selectedPath || path.resolve(selectedPath) === vaultPath) return;
-            await saveDesktopSettings(settingsPath(), { vaultPath: path.resolve(selectedPath) });
+            await persistSettings({ vaultPath: path.resolve(selectedPath) });
             app.relaunch();
             app.exit(0);
           },
@@ -247,10 +311,14 @@ app
   .then(async () => {
     vaultPath = await resolveVaultPath();
     process.env.APOTHECARY_VAULT_PATH = vaultPath;
-    await saveDesktopSettings(settingsPath(), { vaultPath });
+    const settings = await persistSettings({ vaultPath });
+    // Apply saved model/key/URL config to env BEFORE the runtime loads, since
+    // rag.ts and the agent read these at module-load time.
+    applySettingsToEnv(settings);
     installApplicationMenu();
     const service = await createService();
     registerDesktopIpc(ipcMain, service);
+    registerSettingsIpc();
     await createWindow();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) void createWindow();

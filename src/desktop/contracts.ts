@@ -49,6 +49,31 @@ export const ResolveProposalInputSchema = z.object({
   note: z.string().max(2_000).optional(),
 });
 
+// Settings/config edits carry secrets and OS-level actions (safeStorage, dialog,
+// relaunch), so they are handled in the main process, not through DesktopService.
+export const SaveSettingsInputSchema = z.object({
+  vaultPath: z.string().min(1).optional(),
+  chatModel: z.string().max(200).optional(),
+  deepseekBaseUrl: z.string().max(500).optional(),
+  embeddingBaseUrl: z.string().max(500).optional(),
+  embeddingModel: z.string().max(200).optional(),
+  embeddingTimeoutMs: z.number().int().positive().max(600_000).optional(),
+  watch: z.boolean().optional(),
+  autoIntake: z.boolean().optional(),
+  // Plaintext keys from the form: a non-empty value sets/replaces, "" clears, and
+  // an absent field leaves the stored (encrypted) key untouched.
+  deepseekApiKey: z.string().max(500).optional(),
+  embeddingApiKey: z.string().max(500).optional(),
+});
+export type SaveSettingsInput = z.infer<typeof SaveSettingsInputSchema>;
+
+export const SettingsChannel = {
+  get: "apothecary:settings-get",
+  save: "apothecary:settings-save",
+  chooseVault: "apothecary:settings-choose-vault",
+  relaunch: "apothecary:app-relaunch",
+} as const;
+
 export const DesktopChannel = {
   dashboard: "apothecary:dashboard",
   chat: "apothecary:chat",

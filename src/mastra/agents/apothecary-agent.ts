@@ -37,7 +37,8 @@ export const apothecaryAgent = new Agent({
   id: "apothecary-agent",
   name: "Apothecary",
   description: "The unified conversational entrance to the local knowledge apothecary.",
-  model: "deepseek/deepseek-v4-flash",
+  // Overridable from desktop Settings (applied to env before the runtime loads).
+  model: process.env.APOTHECARY_CHAT_MODEL ?? "deepseek/deepseek-v4-flash",
   memory: apothecaryMemory,
   scorers: agentRuntimeScorers,
   inputProcessors: [new VaultSemanticRecallProcessor()],

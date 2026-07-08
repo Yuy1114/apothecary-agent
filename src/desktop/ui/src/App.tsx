@@ -841,31 +841,87 @@ function DiagBadge({ diagnostic }: { diagnostic: any }) {
   return <span className={`diag-status ${ok ? "ok" : err ? "err" : "warn"}`}><span className="dot" />{diagnostic.detail}</span>;
 }
 
+type SettingsForm = { chatModel: string; deepseekBaseUrl: string; embeddingBaseUrl: string; embeddingModel: string; embeddingTimeoutMs: string; watch: boolean; autoIntake: boolean };
+
 function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: string) => void }) {
-  const [data, setData] = useState<any>(null);
-  const load = useCallback(() => api.diagnostics().then(setData).catch((e) => notify(e.message)), [notify]);
-  useEffect(() => { void load(); }, [load, refreshKey]);
+  const [diag, setDiag] = useState<any>(null);
+  const [settings, setSettings] = useState<DesktopSettingsView | null>(null);
+  const [form, setForm] = useState<SettingsForm | null>(null);
+  const [dkKey, setDkKey] = useState("");
+  const [emKey, setEmKey] = useState("");
+  const [needsRestart, setNeedsRestart] = useState(false);
+
+  const loadDiag = useCallback(() => api.diagnostics().then(setDiag).catch((e) => notify(e.message)), [notify]);
+  const loadSettings = useCallback(() => api.getSettings().then((s) => {
+    setSettings(s);
+    setForm({
+      chatModel: s.chatModel ?? "", deepseekBaseUrl: s.deepseekBaseUrl ?? "", embeddingBaseUrl: s.embeddingBaseUrl ?? "",
+      embeddingModel: s.embeddingModel ?? "", embeddingTimeoutMs: s.embeddingTimeoutMs ? String(s.embeddingTimeoutMs) : "",
+      watch: s.watch !== false, autoIntake: s.autoIntake !== false,
+    });
+  }).catch((e) => notify(e.message)), [notify]);
+  useEffect(() => { void loadDiag(); void loadSettings(); }, [loadDiag, loadSettings, refreshKey]);
+
+  const set = <K extends keyof SettingsForm>(k: K, v: SettingsForm[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
+
+  const save = async () => {
+    if (!form) return;
+    const patch: SaveSettingsPatch = {
+      chatModel: form.chatModel.trim() || undefined,
+      deepseekBaseUrl: form.deepseekBaseUrl.trim() || undefined,
+      embeddingBaseUrl: form.embeddingBaseUrl.trim() || undefined,
+      embeddingModel: form.embeddingModel.trim() || undefined,
+      embeddingTimeoutMs: form.embeddingTimeoutMs ? Number(form.embeddingTimeoutMs) : undefined,
+      watch: form.watch, autoIntake: form.autoIntake,
+    };
+    if (dkKey) patch.deepseekApiKey = dkKey;
+    if (emKey) patch.embeddingApiKey = emKey;
+    try {
+      const next = await api.saveSettings(patch);
+      setSettings(next); setDkKey(""); setEmKey(""); setNeedsRestart(true);
+      notify("设置已保存"); void loadDiag();
+    } catch (e) { notify((e as Error).message); }
+  };
+
+  const changeVault = async () => {
+    const picked = await api.chooseVault();
+    if (picked) { setSettings((s) => (s ? { ...s, vaultPath: picked } : s)); setNeedsRestart(true); notify("Vault 已更新，重启后生效"); }
+  };
+
+  if (!form) return <div className="page"><Empty>加载设置…</Empty></div>;
 
   return (
     <div className="page">
       <div className="settings-inner">
+        {needsRestart && (
+          <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, borderColor: "var(--border-strong)" }}>
+            <span className="badge accent">需重启</span>
+            <span style={{ flex: 1, fontSize: 13 }}>模型 / 密钥 / 地址 / 监听等更改需要重启应用才能完全生效。</span>
+            <button className="btn btn-primary sm" onClick={() => void api.relaunchApp()}>立即重启</button>
+          </div>
+        )}
+
         <div className="card settings-card">
           <div className="h">连接状态</div>
-          {!data ? <Empty>正在检测连接…</Empty> : (
+          {!diag ? <Empty>正在检测连接…</Empty> : (
             <>
               <div className="row-between">
-                <div className="grow"><div className="rt">对话与整理模型</div><div className="rd">{data.model.model ? `${data.model.model} · ${data.model.host}` : data.model.detail}</div></div>
-                <DiagBadge diagnostic={data.model} />
+                <div className="grow"><div className="rt">对话与整理模型</div><div className="rd">{diag.model.model ? `${diag.model.model} · ${diag.model.host}` : diag.model.detail}</div></div>
+                <DiagBadge diagnostic={diag.model} />
               </div>
               <div className="row-between">
-                <div className="grow"><div className="rt">向量 Embedding</div><div className="rd">{data.embedding.model ? `${data.embedding.model} · ${data.embedding.host}` : data.embedding.detail}</div></div>
-                <DiagBadge diagnostic={data.embedding} />
+                <div className="grow"><div className="rt">向量 Embedding</div><div className="rd">{diag.embedding.model ? `${diag.embedding.model} · ${diag.embedding.host}` : diag.embedding.detail}</div></div>
+                <DiagBadge diagnostic={diag.embedding} />
               </div>
               <div className="row-between">
-                <div className="grow"><div className="rt">本地药柜</div><div className="rd mono">{data.vault.path}</div></div>
-                <DiagBadge diagnostic={{ status: data.vault.status, detail: data.vault.status === "read_write" ? "可读写" : data.vault.status === "read_only" ? "只读" : "不可访问" }} />
+                <div className="grow"><div className="rt">本地药柜</div><div className="rd mono">{diag.vault.path}</div></div>
+                <DiagBadge diagnostic={{ status: diag.vault.status, detail: diag.vault.status === "read_write" ? "可读写" : diag.vault.status === "read_only" ? "只读" : "不可访问" }} />
               </div>
-              <div className="help">检测时间：{formatDate(data.checkedAt)}</div>
+              <div className="actions" style={{ marginTop: 4 }}>
+                <button className="btn btn-secondary sm" onClick={() => void loadDiag()}>重新检测</button>
+                <span className="spacer" style={{ flex: 1 }} />
+                <span className="hint">检测时间：{formatDate(diag.checkedAt)}</span>
+              </div>
             </>
           )}
         </div>
@@ -874,29 +930,53 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
           <div className="h">Vault</div>
           <div className="field">
             <label>Vault 路径</label>
-            <input className="input mono" value={data?.vault?.path ?? ""} readOnly style={{ fontSize: 12.5 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input className="input mono" value={settings?.vaultPath ?? ""} readOnly style={{ fontSize: 12.5 }} />
+              <button className="btn btn-secondary sm" style={{ flex: "none" }} onClick={() => void changeVault()}>更换…</button>
+            </div>
             <div className="help">Agent 会监听此文件夹的变更、整理 _inbox，并为全部笔记建立索引。</div>
           </div>
           <div className="row-between">
             <div className="grow"><div className="rt">实时监听文件变更</div><div className="rd">关闭后仅在手动同步时扫描</div></div>
-            <span className="switch on"><i /></span>
+            <button className={`switch ${form.watch ? "on" : ""}`} onClick={() => set("watch", !form.watch)}><i /></button>
           </div>
+        </div>
+
+        <div className="card settings-card">
+          <div className="h">模型与密钥</div>
+          <div className="field">
+            <label>对话模型</label>
+            <input className="input" value={form.chatModel} placeholder="deepseek/deepseek-v4-flash" onChange={(e) => set("chatModel", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>DeepSeek API Key</label>
+            <input className="input mono" type="password" value={dkKey} placeholder={settings?.hasDeepseekKey ? "已配置 · 留空保持不变" : "sk-…"} onChange={(e) => setDkKey(e.target.value)} style={{ fontSize: 12.5 }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="field"><label>Embedding 模型</label><input className="input" value={form.embeddingModel} placeholder="text-embedding-3-small" onChange={(e) => set("embeddingModel", e.target.value)} /></div>
+            <div className="field"><label>Embedding 超时 (ms)</label><input className="input" type="number" value={form.embeddingTimeoutMs} placeholder="20000" onChange={(e) => set("embeddingTimeoutMs", e.target.value)} /></div>
+          </div>
+          <div className="field">
+            <label>Embedding 地址</label>
+            <input className="input mono" value={form.embeddingBaseUrl} placeholder="https://api.aihubmix.com/v1" onChange={(e) => set("embeddingBaseUrl", e.target.value)} style={{ fontSize: 12.5 }} />
+          </div>
+          <div className="field">
+            <label>Embedding API Key</label>
+            <input className="input mono" type="password" value={emKey} placeholder={settings?.hasEmbeddingKey ? "已配置 · 留空保持不变" : "sk-…"} onChange={(e) => setEmKey(e.target.value)} style={{ fontSize: 12.5 }} />
+          </div>
+          <div className="help">密钥经 safeStorage（系统 keychain）加密后仅保存在本机，不上传、也不会回传到界面。</div>
         </div>
 
         <div className="card settings-card">
           <div className="h">自动整理</div>
           <div className="row-between">
             <div className="grow"><div className="rt">自动处理 _inbox</div><div className="rd">改名、补全 frontmatter、生成摘要后提交提案</div></div>
-            <span className="switch on"><i /></span>
-          </div>
-          <div className="row-between">
-            <div className="grow"><div className="rt">提案自动采纳</div><div className="rd">内容修改始终需要你的确认</div></div>
-            <span className="switch"><i /></span>
+            <button className={`switch ${form.autoIntake ? "on" : ""}`} onClick={() => set("autoIntake", !form.autoIntake)}><i /></button>
           </div>
         </div>
 
         <div className="actions">
-          <button className="btn btn-secondary sm" onClick={() => void load()}>重新检测</button>
+          <button className="btn btn-primary sm" onClick={() => void save()}>保存设置</button>
           <span className="spacer" style={{ flex: 1 }} />
           <span className="hint">Apothecary</span>
         </div>

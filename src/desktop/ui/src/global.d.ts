@@ -1,4 +1,20 @@
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type DesktopSettingsView = {
+  vaultPath: string;
+  chatModel?: string;
+  deepseekBaseUrl?: string;
+  embeddingBaseUrl?: string;
+  embeddingModel?: string;
+  embeddingTimeoutMs?: number;
+  watch?: boolean;
+  autoIntake?: boolean;
+  hasDeepseekKey: boolean;
+  hasEmbeddingKey: boolean;
+};
+type SaveSettingsPatch = Partial<Omit<DesktopSettingsView, "hasDeepseekKey" | "hasEmbeddingKey">> & {
+  deepseekApiKey?: string;
+  embeddingApiKey?: string;
+};
 type ProposalDecisionState = { proposalId: string; title: string; type: string; targetFiles: string[] };
 type AgentRunEvent =
   | { type: "status"; phase: "started" | "thinking"; label: string }
@@ -34,6 +50,10 @@ type ApothecaryApi = {
   operations(): Promise<any[]>;
   knowledge(): Promise<any>;
   diagnostics(): Promise<any>;
+  getSettings(): Promise<DesktopSettingsView>;
+  saveSettings(patch: SaveSettingsPatch): Promise<DesktopSettingsView>;
+  chooseVault(): Promise<string | null>;
+  relaunchApp(): Promise<void>;
   threads(): Promise<Array<{ id: string; title: string; createdAt: string; updatedAt: string }>>;
   threadMessages(threadId: string): Promise<ChatMessage[]>;
   createThread(threadId: string, title?: string): Promise<void>;

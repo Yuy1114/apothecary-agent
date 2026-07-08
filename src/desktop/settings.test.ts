@@ -6,6 +6,8 @@ import {
   firstAvailableVaultPath,
   loadDesktopSettings,
   saveDesktopSettings,
+  sanitizeSettings,
+  settingsEnv,
 } from "./settings.js";
 
 const temporaryDirectories: string[] = [];
@@ -48,5 +50,42 @@ describe("desktop settings", () => {
     await fs.writeFile(settingsPath, "not-json", "utf8");
 
     await expect(loadDesktopSettings(settingsPath)).resolves.toBeNull();
+  });
+
+  it("round-trips extended config fields (incl. encrypted key blobs)", async () => {
+    const root = await temporaryDirectory();
+    const settingsPath = path.join(root, "desktop-settings.json");
+    const settings = {
+      vaultPath: path.join(root, "vault"),
+      chatModel: "deepseek/deepseek-v4-flash",
+      embeddingBaseUrl: "https://api.aihubmix.com/v1",
+      embeddingTimeoutMs: 15000,
+      watch: false,
+      deepseekApiKeyEnc: "Y2lwaGVy",
+    };
+    await saveDesktopSettings(settingsPath, settings);
+    await expect(loadDesktopSettings(settingsPath)).resolves.toEqual(settings);
+  });
+
+  it("sanitizeSettings hides key ciphertext behind booleans", () => {
+    const view = sanitizeSettings({ vaultPath: "/v", embeddingApiKeyEnc: "x" });
+    expect(view).toMatchObject({ vaultPath: "/v", hasEmbeddingKey: true, hasDeepseekKey: false });
+    expect(view).not.toHaveProperty("embeddingApiKeyEnc");
+  });
+
+  it("settingsEnv maps only defined values and encodes watch-off", () => {
+    expect(
+      settingsEnv(
+        { vaultPath: "/v", embeddingBaseUrl: "https://e/v1", embeddingModel: "m", watch: false },
+        { embeddingApiKey: "sk-emb" },
+      ),
+    ).toEqual({
+      APOTHECARY_EMBEDDING_BASE_URL: "https://e/v1",
+      APOTHECARY_EMBEDDING_MODEL: "m",
+      APOTHECARY_EMBEDDING_API_KEY: "sk-emb",
+      APOTHECARY_DESKTOP_WATCH: "0",
+    });
+    // No keys, watch on → empty env (fall back to ambient/defaults).
+    expect(settingsEnv({ vaultPath: "/v", watch: true })).toEqual({});
   });
 });
