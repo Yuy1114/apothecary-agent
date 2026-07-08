@@ -40,6 +40,18 @@ describe("desktop Agent Run events", () => {
     })).toBeNull();
   });
 
+  it("maps a native tool-approval pause into an awaiting-approval event", () => {
+    expect(eventFromMastraChunk({
+      type: "tool-call-approval",
+      payload: { toolCallId: "call-4", toolName: "executeIntake", args: {}, resumeSchema: "{}" },
+    })).toEqual({ type: "awaiting_approval", toolCallId: "call-4", toolName: "executeIntake" });
+    // tool-execution-approval (subagent-nested) maps the same way.
+    expect(eventFromMastraChunk({
+      type: "tool-execution-approval",
+      payload: { toolCallId: "call-5", toolName: "executeIntake", args: {} },
+    })).toMatchObject({ type: "awaiting_approval", toolName: "executeIntake" });
+  });
+
   it("maps stream errors into a renderer-safe failure", () => {
     expect(eventFromMastraChunk({ type: "error", payload: { error: "provider down" } })).toEqual({
       type: "failed",

@@ -56,6 +56,14 @@ export type DesktopServiceDeps = {
     resumeData: ProposalResumeData,
     emit: (event: AgentRunEvent) => void,
   ) => Promise<void>;
+  // Native Mastra tool approval (requireApproval tools like executeIntake):
+  // approve or decline the paused tool call, then resume the run in-context.
+  approveToolCall?: (
+    runId: string,
+    toolCallId: string,
+    decision: "approve" | "decline",
+    emit: (event: AgentRunEvent) => void,
+  ) => Promise<void>;
   cancelRun?: (runId: string) => boolean;
   // Conversation history, backed by Mastra memory threads.
   listThreads?: () => Promise<DesktopThread[]>;
@@ -149,6 +157,21 @@ export class DesktopService {
       : { proposalId, decision: "failed", note: result.reason };
     await this.deps.resumeRun?.(runId, resumeData, emit);
     return result;
+  }
+
+  /**
+   * Resolve a native tool-approval gate (e.g. executeIntake's `requireApproval`).
+   * Approving runs the tool and resumes the run; declining resumes with the tool
+   * skipped. Either way the continued agent output streams back over the runId.
+   */
+  async resolveApproval(
+    runId: string,
+    toolCallId: string,
+    decision: "approve" | "decline",
+    emit: (event: AgentRunEvent) => void,
+  ): Promise<{ resolved: boolean }> {
+    await this.deps.approveToolCall?.(runId, toolCallId, decision, emit);
+    return { resolved: true };
   }
 
   cancelRun(runId: string): boolean {

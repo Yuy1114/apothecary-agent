@@ -6,6 +6,9 @@ export type AgentRunEvent =
   | { type: "tool_started"; toolCallId: string; toolName: string }
   | { type: "tool_completed"; toolCallId: string; toolName: string; failed: boolean }
   | { type: "awaiting_decision"; toolCallId: string; proposal: ProposalDecisionState }
+  // Native Mastra tool approval (`requireApproval: true`, e.g. executeIntake):
+  // the run pauses before the tool runs, awaiting an approve/decline decision.
+  | { type: "awaiting_approval"; toolCallId: string; toolName: string }
   | { type: "completed" }
   | { type: "failed"; message: string };
 
@@ -28,6 +31,13 @@ export function eventFromMastraChunk(chunk: unknown): AgentRunEvent | null {
       toolName: payload.toolName,
       failed: payload.isError === true,
     };
+  }
+  if (
+    (type === "tool-call-approval" || type === "tool-execution-approval") &&
+    typeof payload.toolCallId === "string" &&
+    typeof payload.toolName === "string"
+  ) {
+    return { type: "awaiting_approval", toolCallId: payload.toolCallId, toolName: payload.toolName };
   }
   if (type === "tool-call-suspended" && typeof payload.toolCallId === "string") {
     const suspend = (payload.suspendPayload ?? {}) as Record<string, unknown>;

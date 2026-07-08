@@ -22,6 +22,7 @@ type AgentRunEvent =
   | { type: "tool_started"; toolCallId: string; toolName: string }
   | { type: "tool_completed"; toolCallId: string; toolName: string; failed: boolean }
   | { type: "awaiting_decision"; toolCallId: string; proposal: ProposalDecisionState }
+  | { type: "awaiting_approval"; toolCallId: string; toolName: string }
   | { type: "completed" }
   | { type: "failed"; message: string };
 
@@ -35,6 +36,7 @@ type ApothecaryApi = {
     decision: "approve" | "reject",
     note?: string,
   ): Promise<{ resolved: boolean; reason?: string }>;
+  resolveApproval(runId: string, toolCallId: string, decision: "approve" | "decline"): Promise<{ resolved: boolean }>;
   cancelRun(runId: string): Promise<{ canceled: boolean }>;
   onRunEvent(listener: (message: { runId: string; event: AgentRunEvent }) => void): () => void;
   changes(): Promise<any[]>;

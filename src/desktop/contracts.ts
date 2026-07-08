@@ -30,6 +30,12 @@ export const ResumeRunInputSchema = z.object({
 
 export const CancelRunInputSchema = z.object({ runId: z.string().uuid() });
 
+export const ResolveApprovalInputSchema = z.object({
+  runId: z.string().uuid(),
+  toolCallId: z.string().min(1),
+  decision: z.enum(["approve", "decline"]),
+});
+
 export const ResolveChangesInputSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
   outcome: z.enum(["processed", "dismissed"]),
@@ -79,6 +85,7 @@ export const DesktopChannel = {
   chat: "apothecary:chat",
   startRun: "apothecary:start-run",
   resumeRun: "apothecary:resume-run",
+  resolveApproval: "apothecary:resolve-approval",
   cancelRun: "apothecary:cancel-run",
   runEvent: "apothecary:run-event",
   changes: "apothecary:changes",

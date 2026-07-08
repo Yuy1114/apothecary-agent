@@ -191,6 +191,8 @@ async function pumpAgentStream(
       logger[event.failed ? "warn" : "info"]("run", `${event.failed ? "✗" : "✓"} tool ${event.toolName} +${ms}ms`);
     } else if (event.type === "awaiting_decision") {
       logger.info("run", `⏸ awaiting decision (${event.proposal.type})`);
+    } else if (event.type === "awaiting_approval") {
+      logger.info("run", `⏸ awaiting approval to run ${event.toolName}`);
     }
     emit(event);
   }
@@ -262,6 +264,13 @@ async function createService(): Promise<DesktopService> {
       resumeRun: async (runId, resumeData, emit) => {
         logger.info("run", `▷ resume ${runId.slice(0, 8)} (${resumeData.decision})`);
         const output = await apothecaryAgent.resumeStream(resumeData, { runId });
+        await pumpAgentStream(output, emit, runId);
+      },
+      approveToolCall: async (runId, toolCallId, decision, emit) => {
+        logger.info("run", `▷ ${decision} tool ${runId.slice(0, 8)}`);
+        const output = decision === "approve"
+          ? await apothecaryAgent.approveToolCall({ runId, toolCallId })
+          : await apothecaryAgent.declineToolCall({ runId, toolCallId });
         await pumpAgentStream(output, emit, runId);
       },
       cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),

@@ -4,6 +4,7 @@ import type { AgentRunEvent } from "../application/desktop/runEvents.js";
 import {
   CancelRunInputSchema,
   ChatInputSchema,
+  ResolveApprovalInputSchema,
   DesktopChannel,
   ListProposalsInputSchema,
   ReadInboxInputSchema,
@@ -48,6 +49,15 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
     // Applies the decision (approve => resolveProposal) and resumes the run; the
     // continued agent output streams back over runEvent on the same runId.
     return service.resumeRun(runId, proposalId, decision, send, note);
+  });
+  ipcMain.handle(DesktopChannel.resolveApproval, (ipcEvent, input) => {
+    const { runId, toolCallId, decision } = ResolveApprovalInputSchema.parse(input);
+    const send = (event: AgentRunEvent) => {
+      if (!ipcEvent.sender.isDestroyed()) ipcEvent.sender.send(DesktopChannel.runEvent, { runId, event });
+    };
+    // Approve => run the gated tool and resume; decline => resume with it skipped.
+    // The continued agent output streams back over runEvent on the same runId.
+    return service.resolveApproval(runId, toolCallId, decision, send);
   });
   ipcMain.handle(DesktopChannel.cancelRun, (_event, input) => {
     const { runId } = CancelRunInputSchema.parse(input);

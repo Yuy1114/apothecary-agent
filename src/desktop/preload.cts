@@ -5,6 +5,7 @@ const channel = {
   chat: "apothecary:chat",
   startRun: "apothecary:start-run",
   resumeRun: "apothecary:resume-run",
+  resolveApproval: "apothecary:resolve-approval",
   cancelRun: "apothecary:cancel-run",
   runEvent: "apothecary:run-event",
   changes: "apothecary:changes",
@@ -38,6 +39,8 @@ contextBridge.exposeInMainWorld("apothecary", {
     ipcRenderer.invoke(channel.startRun, { runId, messages, threadId }),
   resumeRun: (runId: string, proposalId: string, decision: "approve" | "reject", note?: string) =>
     ipcRenderer.invoke(channel.resumeRun, { runId, proposalId, decision, note }),
+  resolveApproval: (runId: string, toolCallId: string, decision: "approve" | "decline") =>
+    ipcRenderer.invoke(channel.resolveApproval, { runId, toolCallId, decision }),
   cancelRun: (runId: string) => ipcRenderer.invoke(channel.cancelRun, { runId }),
   onRunEvent: (listener: (message: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, message: unknown) => listener(message);

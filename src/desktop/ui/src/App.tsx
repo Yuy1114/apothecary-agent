@@ -5,6 +5,7 @@ type Message = { role: "user" | "assistant"; content: string };
 type ProposalStatus = "proposed" | "applied" | "rejected";
 type RunTool = { toolCallId: string; toolName: string; status: "running" | "completed" | "failed" };
 type RunProposal = ProposalDecisionState & { decision?: "approving" | "applied" | "rejected" | "failed"; decisionDetail?: string };
+type RunApproval = { toolCallId: string; toolName: string; decision?: "approving" | "approved" | "declined" };
 type AgentRun = {
   id: string;
   text: string;
@@ -12,6 +13,7 @@ type AgentRun = {
   label: string;
   tools: RunTool[];
   proposals: RunProposal[];
+  approvals: RunApproval[];
 };
 type TimelineItem = { kind: "user"; id: string; content: string } | { kind: "run"; run: AgentRun };
 type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string };
@@ -313,7 +315,7 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
       if (cancelled) return;
       setTimeline(msgs.map((m) => m.role === "user"
         ? { kind: "user", id: crypto.randomUUID(), content: m.content }
-        : { kind: "run", run: { id: crypto.randomUUID(), text: m.content, status: "completed", label: "", tools: [], proposals: [] } }));
+        : { kind: "run", run: { id: crypto.randomUUID(), text: m.content, status: "completed", label: "", tools: [], proposals: [], approvals: [] } }));
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [threadNonce]);
@@ -340,6 +342,7 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
       if (event.type === "tool_started") return { ...item, run: { ...run, label: `正在使用 ${event.toolName}`, tools: [...run.tools, { toolCallId: event.toolCallId, toolName: event.toolName, status: "running" }] } };
       if (event.type === "tool_completed") return { ...item, run: { ...run, tools: run.tools.map((tool) => tool.toolCallId === event.toolCallId ? { ...tool, status: event.failed ? "failed" : "completed" } : tool) } };
       if (event.type === "awaiting_decision") return { ...item, run: { ...run, status: "awaiting", label: "等待你确认提案", proposals: [...run.proposals, event.proposal] } };
+      if (event.type === "awaiting_approval") return { ...item, run: { ...run, status: "awaiting", label: `等待你批准执行 ${event.toolName}`, approvals: [...run.approvals, { toolCallId: event.toolCallId, toolName: event.toolName }] } };
       if (event.type === "completed") return { ...item, run: { ...run, status: "completed", label: run.proposals.some((proposal) => !proposal.decision) ? "等待你的决定" : "Agent Run 已完成" } };
       if (event.type === "failed") return { ...item, run: { ...run, status: "failed", label: event.message } };
       return item;
@@ -359,7 +362,7 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     const content = text.trim(); if (!content || busy) return;
     const runId = crypto.randomUUID();
     const userItem: TimelineItem = { kind: "user", id: crypto.randomUUID(), content };
-    const runItem: TimelineItem = { kind: "run", run: { id: runId, text: "", status: "running", label: "正在启动 Agent Run", tools: [], proposals: [] } };
+    const runItem: TimelineItem = { kind: "run", run: { id: runId, text: "", status: "running", label: "正在启动 Agent Run", tools: [], proposals: [], approvals: [] } };
     setTimeline((items) => [...items, userItem, runItem]); setInput("");
     // First message of a fresh conversation mints and titles a thread so it
     // shows up in history immediately; subsequent turns reuse it.
@@ -392,6 +395,23 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     const result = await api.resumeRun(runId, proposal.proposalId, decision, note);
     const finalDecision = !result.resolved ? "failed" : decision === "approve" ? "applied" : "rejected";
     setTimeline((items) => updateRunProposal(items, runId, proposal.proposalId, { decision: finalDecision, decisionDetail: result.reason }));
+    await refreshDashboard();
+  };
+
+  // Native tool-approval gate (e.g. executeIntake). Approve => the tool runs and
+  // the run continues; decline => the run continues with the tool skipped. The
+  // continuation streams onto this same run bubble via onRunEvent.
+  const resolveApproval = async (runId: string, approval: RunApproval, decision: "approve" | "decline") => {
+    if (decision === "approve" && !window.confirm(`批准 Agent 执行 ${approval.toolName}？`)) return;
+    setTimeline((items) => items.map((item) =>
+      item.kind === "run" && item.run.id === runId
+        ? { ...item, run: { ...item.run, status: "running", label: decision === "approve" ? `正在执行 ${approval.toolName}…` : "正在继续…", approvals: item.run.approvals.map((a) => a.toolCallId === approval.toolCallId ? { ...a, decision: "approving" } : a) } }
+        : item));
+    const result = await api.resolveApproval(runId, approval.toolCallId, decision);
+    setTimeline((items) => items.map((item) =>
+      item.kind === "run" && item.run.id === runId
+        ? { ...item, run: { ...item.run, approvals: item.run.approvals.map((a) => a.toolCallId === approval.toolCallId ? { ...a, decision: result.resolved ? (decision === "approve" ? "approved" : "declined") : undefined } : a) } }
+        : item));
     await refreshDashboard();
   };
 
@@ -441,7 +461,7 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
 
           {timeline.map((item) => item.kind === "user"
             ? <div className="msg-user" key={item.id}><div className="bubble">{item.content}</div></div>
-            : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onCancel={() => void api.cancelRun(item.run.id)} />)}
+            : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onApprove={(approval, decision) => void resolveApproval(item.run.id, approval, decision)} onCancel={() => void api.cancelRun(item.run.id)} />)}
         </div>
       </div>
 
@@ -472,7 +492,9 @@ function updateRunProposal(items: TimelineItem[], runId: string, proposalId: str
 const runBadge = (status: AgentRun["status"]): [string, string] =>
   status === "running" ? ["warning", "运行中"] : status === "awaiting" ? ["accent", "待确认"] : status === "failed" ? ["danger", "失败"] : ["success", "已完成"];
 
-function AgentRunBubble({ run, onResolve, onCancel }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onCancel: () => void }) {
+const TOOL_LABELS: Record<string, string> = { executeIntake: "应用 inbox 整理计划（移动 / 归档）" };
+
+function AgentRunBubble({ run, onResolve, onApprove, onCancel }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onApprove: (approval: RunApproval, decision: "approve" | "decline") => void; onCancel: () => void }) {
   const [badgeCls, badgeText] = runBadge(run.status);
   return (
     <div className="msg-agent">
@@ -517,6 +539,29 @@ function AgentRunBubble({ run, onResolve, onCancel }: { run: AgentRun; onResolve
               {proposal.decision && (
                 <span className={`decision ${proposal.decision === "approving" ? "" : proposal.decision}`}>
                   {proposal.decision === "approving" ? "正在执行…" : proposal.decision === "applied" ? "已采纳并应用" : proposal.decision === "rejected" ? "已忽略" : `执行失败：${proposal.decisionDetail}`}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+        {run.approvals.map((approval) => (
+          <div className="card prop-card" key={approval.toolCallId}>
+            <div className="prop-head">
+              <span className="badge warning">需要批准</span>
+              <span className="t">执行 {approval.toolName}</span>
+              <span className="spacer" />
+            </div>
+            <div className="prop-body">
+              <div className="hint">{TOOL_LABELS[approval.toolName] ?? "Agent 请求执行一个会修改文件的操作。"}</div>
+              {!approval.decision && (
+                <div className="actions">
+                  <button className="btn btn-primary sm" onClick={() => onApprove(approval, "approve")}>批准执行</button>
+                  <button className="btn btn-ghost sm" onClick={() => onApprove(approval, "decline")}>拒绝</button>
+                </div>
+              )}
+              {approval.decision && (
+                <span className={`decision ${approval.decision === "approving" ? "" : approval.decision === "approved" ? "applied" : "rejected"}`}>
+                  {approval.decision === "approving" ? "正在执行…" : approval.decision === "approved" ? "已批准并执行" : "已拒绝"}
                 </span>
               )}
             </div>
