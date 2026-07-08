@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { PinoLogger } from "@mastra/loggers";
 import { apothecaryAgent } from "../mastra/agents/apothecary-agent.js";
 import { setVectorStore } from "../mastra/tools/rag.js";
 import { fileChangedWorkflow, fileDeletedWorkflow } from "../mastra/workflows/sync-workflow.js";
@@ -31,6 +32,9 @@ export function createDesktopRuntime(projectRoot: string) {
     vectors: { vaultChunks: vectorStore },
     workspace,
     memory: { apothecary: apothecaryMemory },
+    // Mastra's internal agent/tool/workflow logs. Its pretty stream writes to
+    // stdout, which initFileLogging() tees into ~/.apothecary/logs/desktop.log.
+    logger: new PinoLogger({ name: "apothecary-desktop", level: "info" }),
   });
 
   // Live change awareness is on by default (the packaged app owns its own

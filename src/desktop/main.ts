@@ -20,6 +20,9 @@ import {
   type DesktopSettings,
 } from "./settings.js";
 import { SaveSettingsInputSchema, SettingsChannel } from "./contracts.js";
+import { initFileLogging } from "./logging.js";
+import { apothecaryHome } from "../config/apothecaryHome.js";
+import { logger } from "../observability/logger.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..", "..");
@@ -168,11 +171,31 @@ function formatConversation(messages: DesktopChatMessage[]): string {
 async function pumpAgentStream(
   output: { fullStream: AsyncIterable<unknown>; status: string },
   emit: (event: AgentRunEvent) => void,
+  runId: string,
 ): Promise<void> {
+  // Per-tool timing so a slow/stuck run is visible in the log: which tool it is
+  // in and for how long. This is the trace to look at when "processing _inbox"
+  // appears to hang (e.g. executeIntake spinning on an embedding call).
+  const runStarted = Date.now();
+  const toolStarts = new Map<string, { name: string; at: number }>();
+  logger.info("run", `▶ start ${runId.slice(0, 8)}`);
   for await (const chunk of output.fullStream) {
     const event = eventFromMastraChunk(chunk);
-    if (event) emit(event);
+    if (!event) continue;
+    if (event.type === "tool_started") {
+      toolStarts.set(event.toolCallId, { name: event.toolName, at: Date.now() });
+      logger.info("run", `→ tool ${event.toolName}`, { runId: runId.slice(0, 8) });
+    } else if (event.type === "tool_completed") {
+      const s = toolStarts.get(event.toolCallId);
+      const ms = s ? Date.now() - s.at : 0;
+      logger[event.failed ? "warn" : "info"]("run", `${event.failed ? "✗" : "✓"} tool ${event.toolName} +${ms}ms`);
+    } else if (event.type === "awaiting_decision") {
+      logger.info("run", `⏸ awaiting decision (${event.proposal.type})`);
+    }
+    emit(event);
   }
+  const total = Date.now() - runStarted;
+  logger.info("run", `■ ${output.status} +${total}ms ${runId.slice(0, 8)}`);
   if (output.status === "success") emit({ type: "completed" });
   else if (output.status === "canceled") emit({ type: "failed", message: "Agent Run 已取消" });
 }
@@ -234,11 +257,12 @@ async function createService(): Promise<DesktopService> {
           // pauses the run for the desktop's approve/reject decision.
           requestContext: new RequestContext([["awaitDesktopDecision", true]]),
         });
-        await pumpAgentStream(output, emit);
+        await pumpAgentStream(output, emit, runId);
       },
       resumeRun: async (runId, resumeData, emit) => {
+        logger.info("run", `▷ resume ${runId.slice(0, 8)} (${resumeData.decision})`);
         const output = await apothecaryAgent.resumeStream(resumeData, { runId });
-        await pumpAgentStream(output, emit);
+        await pumpAgentStream(output, emit, runId);
       },
       cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),
       listThreads: async () => {
@@ -309,6 +333,8 @@ async function createWindow(): Promise<void> {
 app
   .whenReady()
   .then(async () => {
+    const logFile = await initFileLogging(path.join(apothecaryHome(), "logs")).catch(() => null);
+    logger.info("app", `Apothecary desktop starting${logFile ? ` · log → ${logFile}` : ""}`);
     vaultPath = await resolveVaultPath();
     process.env.APOTHECARY_VAULT_PATH = vaultPath;
     const settings = await persistSettings({ vaultPath });

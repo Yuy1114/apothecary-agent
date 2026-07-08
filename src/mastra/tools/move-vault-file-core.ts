@@ -4,6 +4,7 @@ import { reindexFile, removeFromIndex } from "./rag.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { updateReadmesForMove } from "./readme-index-core.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
+import { logger } from "../../observability/logger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -58,7 +59,7 @@ export async function moveVaultFileCore(from: string, to: string): Promise<MoveV
     }
   } catch (error) {
     reindexed = false;
-    console.warn(`moveVaultFile: reindex failed for ${from} → ${to}:`, error);
+    logger.warn("move", `reindex failed ${from} → ${to} (index left stale)`, error instanceof Error ? error.message : String(error));
   }
 
   // Keep directory note-indexes consistent (a README.md is itself an index, so

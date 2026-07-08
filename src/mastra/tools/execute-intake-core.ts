@@ -10,6 +10,7 @@ import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { loadIntakePlan, clearIntakePlan } from "../../vault/intakePlanStore.js";
 import type { IntakeDecision } from "../../domain/intakePlan.js";
+import { logger, startTimer } from "../../observability/logger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
@@ -135,6 +136,8 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
     failed: 0,
     failures: [],
   };
+  const doneAll = startTimer("intake", `executeIntake (${plan.decisions.length} decisions)`);
+  logger.info("intake", `start · ${plan.decisions.length} decisions`);
 
   // Every path this batch touches, so the change baseline can be updated once at
   // the end — keeping the watcher and manual sync from re-flagging these system
@@ -142,6 +145,7 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
   const affected = new Set<string>();
 
   for (const decision of plan.decisions) {
+    const done = startTimer("intake", `${decision.action} ${decision.source}`);
     try {
       if (decision.action === "leave") {
         report.left += 1;
@@ -182,6 +186,8 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
       }
     } catch (error) {
       report.failures.push({ source: decision.source, reason: error instanceof Error ? error.message : "error" });
+    } finally {
+      done();
     }
   }
 
@@ -190,5 +196,6 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
   // targets hashed) and release the pending self-write marks.
   await commitSelfWrite(VAULT_PATH, affected);
   await clearIntakePlan();
+  doneAll({ moved: report.moved, archived: report.archived, left: report.left, failed: report.failed });
   return report;
 }

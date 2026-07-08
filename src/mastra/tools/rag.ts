@@ -8,6 +8,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { createVectorQueryTool, MDocument } from "@mastra/rag";
 import { getFrontmatterKey } from "../../vault/frontmatter.js";
+import { logger, startTimer } from "../../observability/logger.js";
 
 // ── Embedding model ──
 
@@ -147,7 +148,13 @@ export async function reindexFile(
   }
 
   await ensureIndex();
+  // Log a start line BEFORE the network-bound embedding call so a slow/stuck
+  // endpoint is visible as "started, never finished" (the completion line only
+  // prints on success; the call is bounded by EMBEDDING_TIMEOUT_MS).
+  logger.info("rag", `reindex ${normalizedPath} · embedding ${chunks.length} chunks…`);
+  const done = startTimer("rag", `reindex ${normalizedPath} done`);
   const embeddings = await embedChunks(chunks);
+  done();
   const vs = getVectorStore();
 
   await vs.upsert({
