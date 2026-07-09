@@ -22,6 +22,11 @@ export type ExecuteIntakeReport = {
   left: number;
   failed: number;
   failures: { source: string; reason: string }[];
+  // Every path this batch touched (move sources + targets, archive sources,
+  // directory-merge endpoints) — the set a follow-on semantic refresh needs so
+  // moved notes get re-summarized and vacated `_inbox` paths pruned. `leave`
+  // sources are excluded: nothing about them changed on disk.
+  affected: string[];
 };
 
 /** dest (a directory) + rename|basename → the vault-relative target path (files only). */
@@ -136,6 +141,7 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
     left: 0,
     failed: 0,
     failures: [],
+    affected: [],
   };
   const doneAll = startTimer("intake", `executeIntake (${plan.decisions.length} decisions)`);
   logger.info("intake", `start · ${plan.decisions.length} decisions`);
@@ -201,6 +207,7 @@ export async function executeIntake(): Promise<ExecuteIntakeReport> {
   // `leave` decisions) so processed inbox files don't linger as stale changes.
   await resolvePendingByPaths([...affected, ...plan.decisions.map((d) => d.source)]);
   await clearIntakePlan();
+  report.affected = [...affected];
   doneAll({ moved: report.moved, archived: report.archived, left: report.left, failed: report.failed });
   return report;
 }

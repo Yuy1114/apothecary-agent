@@ -68,6 +68,11 @@ describe("executeIntake", () => {
 
     // Plan consumed.
     expect((await loadIntakePlan(vault)).decisions).toHaveLength(0);
+
+    // `affected` reports the touched paths (so a follow-on semantic refresh can
+    // re-summarize the target and prune the vacated source) but not `leave`s.
+    expect(new Set(report.affected)).toEqual(new Set(["_inbox/note.md", "notes/note.md", "_inbox/old.md"]));
+    expect(report.affected).not.toContain("_inbox/keep.md");
   });
 
   it("merges a directory's contents INTO dest instead of nesting it", async () => {

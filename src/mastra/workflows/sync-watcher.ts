@@ -8,7 +8,7 @@ import { isArchivedPath } from "../../vault/archive.js";
 import { hashFile } from "../../vault/hash.js";
 import { loadSnapshot, commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
-import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { syncSemanticsFromChanges, syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
 import { executeIntake } from "../tools/execute-intake-core.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
@@ -178,11 +178,21 @@ async function runAutoIntake(mastra: Mastra): Promise<void> {
         `Vault watcher: auto-intake done (moved=${report.moved}, archived=${report.archived}, left=${report.left}, failed=${report.failed})`,
       );
     }
-    // Nudge a semantic pass to drain any other pending edits. NB: executeIntake
-    // clears the moved files' pending-change entries, so — as with the interactive
-    // intake path — their summaries/graph refresh on the next full semantic pass,
-    // not here. Search still works immediately (the move core reindexes them).
-    if (report.moved) scheduleSemanticSync();
+    // Close the loop inline: unlike the interactive path (user present to trigger
+    // a refresh), the unattended pass refreshes the semantic layer for exactly the
+    // paths it touched — moved notes re-summarized, vacated `_inbox` paths pruned,
+    // graph + relations rebuilt. executeIntake already cleared these from the
+    // pending queue, so we pass the paths explicitly rather than via the ledger.
+    if (report.affected.length > 0) {
+      try {
+        const sem = await syncSemanticsForPaths({ vaultPath: VAULT_PATH, paths: report.affected });
+        if (sem.refreshed || sem.pruned) {
+          console.log(`Vault watcher: auto-intake semantics synced (refreshed=${sem.refreshed}, pruned=${sem.pruned})`);
+        }
+      } catch (error) {
+        console.warn("Vault watcher: auto-intake semantic refresh failed:", error);
+      }
+    }
   } catch (error) {
     console.warn("Vault watcher: auto-intake failed:", error);
   } finally {
