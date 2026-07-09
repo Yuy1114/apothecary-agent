@@ -276,15 +276,28 @@ async function createService(): Promise<DesktopService> {
       cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),
       listThreads: async () => {
         if (!boundMemory) return [];
-        const { threads } = await boundMemory.listThreads({ filter: { resourceId: RESOURCE }, perPage: false });
-        return threads
-          .map((t) => ({
+        const memory = boundMemory;
+        const { threads } = await memory.listThreads({ filter: { resourceId: RESOURCE }, perPage: false });
+        // Attach a one-line preview (last human/assistant message) so the history
+        // sidebar shows more than the title. Best-effort per thread; recall without
+        // a search string is a plain message read (no embedding), so it stays cheap.
+        const mapped = await Promise.all(threads.map(async (t) => {
+          let preview = "";
+          try {
+            const { messages } = await memory.recall({ threadId: t.id, resourceId: RESOURCE, perPage: false });
+            const last = [...messages].reverse().find((m: any) =>
+              (m.role === "user" || m.role === "assistant") && messageText(m.content).trim().length > 0);
+            if (last) preview = messageText(last.content).replace(/\s+/g, " ").trim().slice(0, 80);
+          } catch { /* preview is optional */ }
+          return {
             id: t.id,
             title: (t.title && t.title.trim()) || "新对话",
             createdAt: new Date(t.createdAt).toISOString(),
             updatedAt: new Date(t.updatedAt).toISOString(),
-          }))
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+            preview,
+          };
+        }));
+        return mapped.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       },
       threadMessages: async (threadId) => {
         if (!boundMemory) return [];

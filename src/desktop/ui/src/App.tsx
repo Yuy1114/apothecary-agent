@@ -1,4 +1,5 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Markdown } from "./markdown.js";
 
 type View = "workspace" | "vault" | "runs" | "knowledge" | "settings";
 type Message = { role: "user" | "assistant"; content: string };
@@ -16,7 +17,7 @@ type AgentRun = {
   approvals: RunApproval[];
 };
 type TimelineItem = { kind: "user"; id: string; content: string } | { kind: "run"; run: AgentRun };
-type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string };
+type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string; preview?: string };
 
 const api = window.apothecary;
 
@@ -31,6 +32,11 @@ const titles: Record<View, [string, string]> = {
 const formatDate = (value?: string) =>
   value ? new Date(value).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const lastSegment = (p?: string) => (p ? p.split(/[\\/]/).filter(Boolean).at(-1) ?? p : "");
+/** Peel a leading `---\n…\n---` YAML frontmatter block off note content. */
+const splitFrontmatter = (content: string): { frontmatter: string | null; body: string } => {
+  const match = /^---\n([\s\S]*?)\n---\s*\n?/.exec(content ?? "");
+  return match ? { frontmatter: match[1].trim(), body: content.slice(match[0].length) } : { frontmatter: null, body: content ?? "" };
+};
 
 /* ── Icons (16-viewBox strokes, matching the imported design) ────────── */
 const S = (d: string, size = 15) => (
@@ -106,6 +112,10 @@ export function App() {
   const [queuedPrompt, setQueuedPrompt] = useState("");
   const [diffProposal, setDiffProposal] = useState<any>(null);
   const [vaultScope, setVaultScope] = useState<string>("inbox");
+  // A request to open a specific note in the Vault view (from a RAG source chip
+  // or an in-answer link). The nonce forces VaultView to re-open even if the same
+  // path is clicked twice.
+  const [vaultTarget, setVaultTarget] = useState<{ path: string; nonce: number } | null>(null);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -130,6 +140,15 @@ export function App() {
   useEffect(() => { void loadThreads(); }, [loadThreads]);
 
   const openChat = useCallback((prompt: string) => { setQueuedPrompt(prompt); setView("workspace"); }, []);
+  // Jump to a note in the Vault view: scope the tree to its top-level folder and
+  // ask VaultView to open the exact file.
+  const openInVault = useCallback((filePath: string) => {
+    const normalized = filePath.replace(/\\/g, "/").replace(/^\.\//, "");
+    const top = normalized.split("/")[0];
+    setVaultScope(top === "_inbox" ? "inbox" : top || "inbox");
+    setVaultTarget({ path: normalized, nonce: Date.now() });
+    setView("vault");
+  }, []);
   // Explicit conversation switches bump threadNonce so WorkspaceView reloads;
   // a locally-minted thread (onThreadCreated) must NOT bump it, or the in-flight
   // timeline would be wiped by a reload.
@@ -149,7 +168,6 @@ export function App() {
       <aside className="sidebar">
         <div className="sidebar-top" />
         <div className="brand">
-          <div className="brand-mark">A</div>
           <div className="brand-text"><strong>Apothecary</strong><span>Knowledge workspace</span></div>
         </div>
         <nav className="nav" aria-label="主要导航">
@@ -183,8 +201,8 @@ export function App() {
         </header>
 
         {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal}
-          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} />}
-        {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} />}
+          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} openInVault={openInVault} />}
+        {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} />}
         {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
         {view === "settings" && <SettingsView refreshKey={refreshKey} notify={notify} />}
@@ -231,6 +249,7 @@ function SidePanel({ view, dashboard, refreshKey, vaultScope, setVaultScope, thr
                 <span className="time">{formatDate(t.updatedAt)}</span>
                 <button className="row-del" title="删除对话" onClick={(e) => { e.stopPropagation(); if (window.confirm(`删除对话「${t.title}」？`)) void onDeleteThread(t.id); }}>×</button>
               </div>
+              {t.preview && <span className="sub">{t.preview}</span>}
             </div>
           ))}
         </div>
@@ -290,14 +309,46 @@ function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: str
 }
 
 /* ═══ Workspace ═══════════════════════════════════════════════════════ */
-function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads }: {
+function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads, openInVault }: {
   refreshKey: number; dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void; notify: (t: string) => void; openDiff: (p: any) => void;
-  activeThreadId: string | null; threadNonce: number; onThreadCreated: (id: string) => void; refreshThreads: () => void;
+  activeThreadId: string | null; threadNonce: number; onThreadCreated: (id: string) => void; refreshThreads: () => void; openInVault: (path: string) => void;
 }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [pending, setPending] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // @-mention: the vault note list (loaded once) and the in-progress `@query`
+  // token being typed, plus the notes the user has referenced so their paths can
+  // be handed to the agent on send.
+  const [allNotes, setAllNotes] = useState<Array<{ path: string; title: string }>>([]);
+  const [mention, setMention] = useState<{ start: number; query: string; index: number } | null>(null);
+  const refsRef = useRef<Array<{ title: string; path: string }>>([]);
+  useEffect(() => { void api.notes().then(setAllNotes).catch(() => undefined); }, [refreshKey]);
+  const mentionMatches = useMemo(() => {
+    if (!mention) return [];
+    const q = mention.query.toLowerCase();
+    return allNotes
+      .filter((note) => !q || note.title.toLowerCase().includes(q) || note.path.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [mention, allNotes]);
+
+  // Re-scan for an active `@token` ending at the caret whenever the text/caret moves.
+  const syncMention = (value: string, caret: number) => {
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(value.slice(0, caret));
+    setMention(match ? { start: caret - match[1].length - 1, query: match[1], index: 0 } : null);
+  };
+  const applyMention = (note: { path: string; title: string }) => {
+    if (!mention) return;
+    const before = input.slice(0, mention.start);
+    const after = input.slice(mention.start + 1 + mention.query.length);
+    const insert = `@${note.title} `;
+    setInput(before + insert + after);
+    if (!refsRef.current.some((r) => r.path === note.path)) refsRef.current.push({ title: note.title, path: note.path });
+    setMention(null);
+    const caret = (before + insert).length;
+    requestAnimationFrame(() => { const ta = inputRef.current; if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = caret; } });
+  };
   // The conversation this view is sending into; a local mint on first send does
   // not go through activeThreadId re-render, so keep the live id in a ref.
   const threadRef = useRef<string | null>(activeThreadId);
@@ -359,11 +410,18 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
   }, []).slice(-19);
 
   const send = async (text: string) => {
-    const content = text.trim(); if (!content || busy) return;
+    const typed = text.trim(); if (!typed || busy) return;
+    // Hand the agent the concrete paths of any notes the user @-referenced (kept
+    // only if the mention still survives in the text), so it can read them directly.
+    const activeRefs = refsRef.current.filter((ref) => typed.includes(`@${ref.title}`));
+    const content = activeRefs.length
+      ? `${typed}\n\n（请重点参考这些笔记：${activeRefs.map((ref) => ref.path).join("、")}）`
+      : typed;
+    refsRef.current = [];
     const runId = crypto.randomUUID();
     const userItem: TimelineItem = { kind: "user", id: crypto.randomUUID(), content };
     const runItem: TimelineItem = { kind: "run", run: { id: runId, text: "", status: "running", label: "正在启动 Agent Run", tools: [], proposals: [], approvals: [] } };
-    setTimeline((items) => [...items, userItem, runItem]); setInput("");
+    setTimeline((items) => [...items, userItem, runItem]); setInput(""); setMention(null);
     // First message of a fresh conversation mints and titles a thread so it
     // shows up in history immediately; subsequent turns reuse it.
     let threadId = threadRef.current;
@@ -428,6 +486,32 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     await loadPending(); await refreshDashboard();
   };
 
+  const onComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    // The @-mention popup owns the arrow/enter/tab/escape keys while it is open.
+    if (mention && mentionMatches.length > 0) {
+      if (event.key === "ArrowDown") { event.preventDefault(); setMention({ ...mention, index: (mention.index + 1) % mentionMatches.length }); return; }
+      if (event.key === "ArrowUp") { event.preventDefault(); setMention({ ...mention, index: (mention.index - 1 + mentionMatches.length) % mentionMatches.length }); return; }
+      if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); applyMention(mentionMatches[mention.index]); return; }
+      if (event.key === "Escape") { event.preventDefault(); setMention(null); return; }
+    }
+    // Never intercept while an IME candidate window is open — Enter there commits
+    // the Chinese/Japanese selection, it must not send the message.
+    if (event.nativeEvent.isComposing || event.key !== "Enter") return;
+    if (event.metaKey || event.ctrlKey) {
+      // Cmd/Ctrl+Enter → insert a newline at the caret (textareas don't by default).
+      event.preventDefault();
+      const ta = event.currentTarget;
+      const { selectionStart, selectionEnd, value } = ta;
+      const next = `${value.slice(0, selectionStart)}\n${value.slice(selectionEnd)}`;
+      setInput(next);
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = selectionStart + 1; });
+      return;
+    }
+    if (event.shiftKey) return; // Shift+Enter keeps the default newline.
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit(); // Plain Enter sends.
+  };
+
   const submit = (event: FormEvent) => { event.preventDefault(); void send(input); };
   useEffect(() => {
     if (!queuedPrompt) return;
@@ -461,17 +545,33 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
 
           {timeline.map((item) => item.kind === "user"
             ? <div className="msg-user" key={item.id}><div className="bubble">{item.content}</div></div>
-            : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onApprove={(approval, decision) => void resolveApproval(item.run.id, approval, decision)} onCancel={() => void api.cancelRun(item.run.id)} />)}
+            : <AgentRunBubble key={item.run.id} run={item.run} onResolve={(proposal, decision) => void resolveInlineProposal(item.run.id, proposal, decision)} onApprove={(approval, decision) => void resolveApproval(item.run.id, approval, decision)} onCancel={() => void api.cancelRun(item.run.id)} onOpenSource={openInVault} onOpenDiff={openDiff} />)}
         </div>
       </div>
 
       <form className="composer" onSubmit={submit}>
         <div className="composer-inner">
-          <textarea rows={2} value={input} onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
-            placeholder="向知识库提问，或让 Apothecary 整理文件…" />
+          {mention && mentionMatches.length > 0 && (
+            <div className="mention-pop">
+              {mentionMatches.map((note, index) => (
+                <div key={note.path} className={`mention-row ${index === mention.index ? "active" : ""}`}
+                  onMouseDown={(event) => { event.preventDefault(); applyMention(note); }}
+                  onMouseEnter={() => setMention({ ...mention, index })}>
+                  <Icon.file /><span className="name">{note.title}</span><span className="path">{note.path}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {mention && mentionMatches.length === 0 && (
+            <div className="mention-pop"><div className="mention-empty">没有匹配的笔记</div></div>
+          )}
+          <textarea ref={inputRef} rows={2} value={input}
+            onChange={(event) => { setInput(event.target.value); syncMention(event.target.value, event.target.selectionStart ?? event.target.value.length); }}
+            onKeyDown={onComposerKeyDown}
+            placeholder="向知识库提问，或让 Apothecary 整理文件…（Enter 发送 · Cmd+Enter 换行）" />
           <div className="composer-bar">
-            <span className="hint">所有真实文件修改都需要提案确认</span>
+            <span className="composer-pill" title="引用一篇笔记，把它的路径交给 Agent"
+              onClick={() => { const ta = inputRef.current; if (!ta) return; ta.focus(); const caret = ta.selectionStart ?? input.length; const next = `${input.slice(0, caret)}@${input.slice(caret)}`; setInput(next); requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = caret + 1; syncMention(next, caret + 1); }); }}>@ 引用笔记</span>
             <span className="spacer" />
             <span className="hint">检索范围：整个 vault</span>
             <button type="submit" className="btn btn-primary sm" disabled={busy}>发送</button>
@@ -494,7 +594,45 @@ const runBadge = (status: AgentRun["status"]): [string, string] =>
 
 const TOOL_LABELS: Record<string, string> = { executeIntake: "应用 inbox 整理计划（移动 / 归档）" };
 
-function AgentRunBubble({ run, onResolve, onApprove, onCancel }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onApprove: (approval: RunApproval, decision: "approve" | "decline") => void; onCancel: () => void }) {
+// The agent is instructed to end a vault answer with a `来源：a.md、b.md` line
+// listing the files it actually cited. Peel that line off so the body renders as
+// clean markdown and the sources become clickable chips.
+function splitSources(text: string): { body: string; sources: string[] } {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim() === "") continue;
+    const match = /^\s*来源\s*[：:]\s*(.+)$/.exec(lines[i]);
+    if (match) {
+      const sources = match[1]
+        .split(/[、,，;；]/)
+        .map((s) => s.trim().replace(/^[`[「【]+|[`\]」】。.]+$/g, "").trim())
+        .filter((s) => /\.[a-z]+$/i.test(s));
+      if (sources.length > 0) return { body: lines.slice(0, i).join("\n").trimEnd(), sources };
+    }
+    break; // Only the last non-empty line can be the citation line.
+  }
+  return { body: text, sources: [] };
+}
+
+function AgentAnswer({ text, onOpenSource }: { text: string; onOpenSource?: (path: string) => void }) {
+  const { body, sources } = splitSources(text);
+  return (
+    <>
+      <Markdown className="agent-text" text={body} />
+      {sources.length > 0 && (
+        <div className="chips">
+          {sources.map((source) => (
+            <div className="chip" key={source} title={source} onClick={() => onOpenSource?.(source)}>
+              <Icon.file /><span>{lastSegment(source)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function AgentRunBubble({ run, onResolve, onApprove, onCancel, onOpenSource, onOpenDiff }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onApprove: (approval: RunApproval, decision: "approve" | "decline") => void; onCancel: () => void; onOpenSource?: (path: string) => void; onOpenDiff?: (p: any) => void }) {
   const [badgeCls, badgeText] = runBadge(run.status);
   return (
     <div className="msg-agent">
@@ -519,7 +657,7 @@ function AgentRunBubble({ run, onResolve, onApprove, onCancel }: { run: AgentRun
             )}
           </div>
         )}
-        {run.text && <div className="agent-text">{run.text}</div>}
+        {run.text && <AgentAnswer text={run.text} onOpenSource={onOpenSource} />}
         {run.proposals.map((proposal) => (
           <div className="card prop-card" key={proposal.proposalId}>
             <div className="prop-head">
@@ -529,10 +667,11 @@ function AgentRunBubble({ run, onResolve, onApprove, onCancel }: { run: AgentRun
               <span className="meta">{proposal.type}</span>
             </div>
             <div className="prop-body">
-              <div className="hint mono">{proposal.targetFiles?.join(", ") || "待执行时确定"}</div>
+              <ProposalDiffBody proposalId={proposal.proposalId} compact />
               {!proposal.decision && (
                 <div className="actions">
                   <button className="btn btn-primary sm" onClick={() => onResolve(proposal, "approve")}>采纳提案</button>
+                  <button className="btn btn-secondary sm" onClick={() => onOpenDiff?.({ id: proposal.proposalId, title: proposal.title, type: proposal.type })}>查看完整 diff</button>
                   <button className="btn btn-ghost sm" onClick={() => onResolve(proposal, "reject")}>忽略</button>
                 </div>
               )}
@@ -573,6 +712,70 @@ function AgentRunBubble({ run, onResolve, onApprove, onCancel }: { run: AgentRun
   );
 }
 
+type ProposalDiffData = { type: string; path?: string; pathChange?: { from: string; to: string }; before?: string; after?: string; note?: string };
+type DiffLine = { type: "add" | "del" | "ctx"; text: string };
+
+// LCS line diff. Bounded: for very large notes the O(n·m) table is skipped in
+// favour of a whole-block replace, which still reads correctly and stays fast.
+function lineDiff(before: string, after: string): DiffLine[] {
+  const a = (before ?? "").split("\n");
+  const b = (after ?? "").split("\n");
+  const n = a.length, m = b.length;
+  if (n * m > 400_000) return [...a.map((text) => ({ type: "del" as const, text })), ...b.map((text) => ({ type: "add" as const, text }))];
+  const dp = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: DiffLine[] = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ type: "ctx", text: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ type: "del", text: a[i] }); i++; }
+    else { out.push({ type: "add", text: b[j] }); j++; }
+  }
+  while (i < n) out.push({ type: "del", text: a[i++] });
+  while (j < m) out.push({ type: "add", text: b[j++] });
+  return out;
+}
+const diffSign = (t: DiffLine["type"]) => (t === "add" ? "+ " : t === "del" ? "- " : "  ");
+
+function DiffView({ diff, compact }: { diff: ProposalDiffData; compact?: boolean }) {
+  const all = diff.before != null || diff.after != null ? lineDiff(diff.before ?? "", diff.after ?? "") : [];
+  // Compact preview: drop unchanged context and cap the number of shown edits.
+  const changed = all.filter((l) => l.type !== "ctx");
+  const shown = compact ? changed.slice(0, 10) : all;
+  const hiddenCount = compact ? changed.length - shown.length : 0;
+  return (
+    <div className="prop-diff-view">
+      {diff.pathChange && (
+        <div className="pathchange">
+          <span className="from">{diff.pathChange.from}</span>
+          <span className="arrow">→</span>
+          <span className="to">{diff.pathChange.to}</span>
+        </div>
+      )}
+      {diff.note && <div className="hint" style={{ lineHeight: 1.6 }}>{diff.note}</div>}
+      {shown.length > 0 && (
+        <div className="diff">
+          <div className="hunk">@@ {diff.path ?? diff.type} @@</div>
+          <div className="lines">
+            {shown.map((line, index) => <div key={index} className={`dl ${line.type}`}>{diffSign(line.type)}{line.text || " "}</div>)}
+          </div>
+          {hiddenCount > 0 && <div className="hunk">…还有 {hiddenCount} 处变更，点「查看完整 diff」</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Fetch + render a proposal's diff; shared by the inline card and the modal. */
+function ProposalDiffBody({ proposalId, compact }: { proposalId: string; compact?: boolean }) {
+  const [diff, setDiff] = useState<ProposalDiffData | null>(null);
+  useEffect(() => { let alive = true; void api.proposalDiff(proposalId).then((d) => { if (alive) setDiff(d); }).catch(() => undefined); return () => { alive = false; }; }, [proposalId]);
+  if (!diff) return <div className="hint">正在载入变更…</div>;
+  return <DiffView diff={diff} compact={compact} />;
+}
+
 function ProposalCard({ proposal, onApprove, onReject, onDiff }: { proposal: any; onApprove: () => void; onReject: () => void; onDiff: () => void }) {
   return (
     <div className="card prop-card">
@@ -584,7 +787,7 @@ function ProposalCard({ proposal, onApprove, onReject, onDiff }: { proposal: any
       </div>
       <div className="prop-body">
         {proposal.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{proposal.rationale}</div>}
-        {proposal.targetFiles?.length > 0 && <div className="hint mono">{proposal.targetFiles.join(", ")}</div>}
+        <ProposalDiffBody proposalId={proposal.id} compact />
         <div className="actions">
           <button className="btn btn-primary sm" onClick={onApprove}>采纳提案</button>
           <button className="btn btn-secondary sm" onClick={onDiff}>查看完整 diff</button>
@@ -611,10 +814,7 @@ function DiffModal({ proposal, onClose }: { proposal: any; onClose: () => void }
         </div>
         <div className="modal-body">
           {proposal.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{proposal.rationale}</div>}
-          <div className="diff">
-            <div className="hunk">@@ {proposal.type} · payload @@</div>
-            <pre>{JSON.stringify(proposal.payload, null, 2)}</pre>
-          </div>
+          <ProposalDiffBody proposalId={proposal.id} />
         </div>
         <div className="modal-foot">
           <span className="hint">{proposal.type} · {proposal.targetFiles?.length ?? 0} 个目标文件</span>
@@ -629,7 +829,7 @@ function DiffModal({ proposal, onClose }: { proposal: any; onClose: () => void }
 /* ═══ Vault ═══════════════════════════════════════════════════════════ */
 const scopeLabel = (scope: string) => (scope === "inbox" ? "_inbox" : scope === "changes" ? "变更" : scope);
 
-function VaultView({ scope, refreshKey, onChat, notify }: { scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void }) {
+function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void; target?: { path: string; nonce: number } | null }) {
   const [files, setFiles] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
   const [selected, setSelected] = useState<{ file: any; data: any } | null>(null);
@@ -649,6 +849,14 @@ function VaultView({ scope, refreshKey, onChat, notify }: { scope: string; refre
       setSelected({ file, data });
     } catch (error) { notify((error as Error).message); }
   };
+
+  // A jump request (RAG source chip / in-answer link): open the exact note by
+  // path, independent of the current folder listing.
+  useEffect(() => {
+    if (!target?.path) return;
+    const inboxScoped = target.path.replace(/\\/g, "/").startsWith("_inbox/");
+    void openFile({ path: target.path }, inboxScoped);
+  }, [target?.nonce]);
   const resolveChange = async (id: string, outcome: "processed" | "dismissed") => {
     await api.resolveChanges([id], outcome); notify(outcome === "processed" ? "已标记处理" : "已忽略"); load();
   };
@@ -703,7 +911,17 @@ function VaultView({ scope, refreshKey, onChat, notify }: { scope: string; refre
                     {selected.file.path && <><span>·</span><span>{selected.file.path}</span></>}
                   </div>
                 </div>
-                <div className="doc-body"><pre>{selected.data.content}</pre></div>
+                {(() => {
+                  const isMd = /\.md$/i.test(selected.file.path ?? "") || selected.data.mediaType === "markdown";
+                  if (!isMd) return <div className="doc-body"><pre>{selected.data.content}</pre></div>;
+                  const { frontmatter, body } = splitFrontmatter(selected.data.content);
+                  return (
+                    <div className="doc-body">
+                      {frontmatter && <pre className="frontmatter">{frontmatter}</pre>}
+                      <Markdown text={body} />
+                    </div>
+                  );
+                })()}
               </div>
               <div className="actions" style={{ marginTop: 14 }}>
                 <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>

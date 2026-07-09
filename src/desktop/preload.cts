@@ -17,7 +17,9 @@ const channel = {
   readInbox: "apothecary:read-inbox",
   readFile: "apothecary:read-file",
   proposals: "apothecary:proposals",
+  proposalDiff: "apothecary:proposal-diff",
   resolveProposal: "apothecary:resolve-proposal",
+  notes: "apothecary:notes",
   operations: "apothecary:operations",
   knowledge: "apothecary:knowledge",
   diagnostics: "apothecary:diagnostics",
@@ -58,8 +60,10 @@ contextBridge.exposeInMainWorld("apothecary", {
   readFile: (filePath: string) => ipcRenderer.invoke(channel.readFile, { filePath }),
   proposals: (status?: "proposed" | "applied" | "rejected") =>
     ipcRenderer.invoke(channel.proposals, { status }),
+  proposalDiff: (id: string) => ipcRenderer.invoke(channel.proposalDiff, { id }),
   resolveProposal: (id: string, decision: "approve" | "reject", note?: string) =>
     ipcRenderer.invoke(channel.resolveProposal, { id, decision, note }),
+  notes: () => ipcRenderer.invoke(channel.notes),
   operations: () => ipcRenderer.invoke(channel.operations),
   knowledge: () => ipcRenderer.invoke(channel.knowledge),
   diagnostics: () => ipcRenderer.invoke(channel.diagnostics),

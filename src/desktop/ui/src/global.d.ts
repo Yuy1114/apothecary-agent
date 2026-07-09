@@ -48,7 +48,12 @@ type ApothecaryApi = {
   readInbox(filePath: string): Promise<any>;
   readFile(filePath: string): Promise<any>;
   proposals(status?: "proposed" | "applied" | "rejected"): Promise<any[]>;
+  proposalDiff(id: string): Promise<{
+    type: string; path?: string; pathChange?: { from: string; to: string };
+    before?: string; after?: string; note?: string;
+  }>;
   resolveProposal(id: string, decision: "approve" | "reject", note?: string): Promise<any>;
+  notes(): Promise<Array<{ path: string; title: string }>>;
   operations(): Promise<any[]>;
   knowledge(): Promise<any>;
   diagnostics(): Promise<any>;
@@ -56,7 +61,7 @@ type ApothecaryApi = {
   saveSettings(patch: SaveSettingsPatch): Promise<DesktopSettingsView>;
   chooseVault(): Promise<string | null>;
   relaunchApp(): Promise<void>;
-  threads(): Promise<Array<{ id: string; title: string; createdAt: string; updatedAt: string }>>;
+  threads(): Promise<Array<{ id: string; title: string; createdAt: string; updatedAt: string; preview?: string }>>;
   threadMessages(threadId: string): Promise<ChatMessage[]>;
   createThread(threadId: string, title?: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;

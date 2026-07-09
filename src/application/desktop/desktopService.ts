@@ -2,7 +2,7 @@ import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
 import { initChangeLog, listPendingChanges, resolveChanges } from "../../vault/changeLog.js";
 import { initOperationLedger, listOperations } from "../../vault/operationLedger.js";
-import { listProposals } from "../../vault/proposalStore.js";
+import { listProposals, loadProposal } from "../../vault/proposalStore.js";
 import { resolveProposalById } from "../../mastra/tools/resolve-proposal-core.js";
 import { manualSync } from "../../mastra/tools/manual-sync-core.js";
 import { scanVault } from "../../vault/scanner.js";
@@ -33,7 +33,7 @@ const isMetaFile = (relativePath: string): boolean =>
 export type DesktopChatMessage = { role: "user" | "assistant"; content: string };
 
 /** A persisted conversation, backed by one Mastra memory thread. */
-export type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string };
+export type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string; preview?: string };
 
 /** Human decision injected back into a suspended `proposeChange` tool call. */
 export type ProposalResumeData = {
@@ -281,6 +281,55 @@ export class DesktopService {
 
   resolveProposal(id: string, decision: "approve" | "reject", note?: string) {
     return resolveProposalById(id, decision, note);
+  }
+
+  /**
+   * A presentation-ready diff for a proposal: a path change and/or before→after
+   * content, derived per proposal type from its payload. `before` is the current
+   * on-disk content (empty for a new file); the renderer turns before/after into
+   * a line diff. Reading is best-effort so a missing target never breaks the view.
+   */
+  async proposalDiff(id: string): Promise<{
+    type: string; path?: string; pathChange?: { from: string; to: string };
+    before?: string; after?: string; note?: string;
+  }> {
+    const proposal = await loadProposal(apothecaryHome(), id);
+    if (!proposal) return { type: "unknown" };
+    const readSafe = async (relativePath?: string): Promise<string | undefined> => {
+      if (!relativePath) return undefined;
+      try { return (await readVaultText(this.vaultPath, relativePath)).content; } catch { return undefined; }
+    };
+    const payload = proposal.payload as any;
+    switch (proposal.type) {
+      case "move":
+        return { type: "move", pathChange: { from: payload.from, to: payload.to } };
+      case "archive":
+        return { type: "archive", pathChange: { from: payload.from, to: "archive/" }, note: "移入归档区" };
+      case "edit":
+        return { type: "edit", path: payload.filePath, before: await readSafe(payload.filePath), after: payload.suggestedContent };
+      case "capture":
+        return { type: "capture", after: payload.content, note: payload.topic ? `主题提示：${payload.topic}` : "归位目标在应用时分类" };
+      case "merge":
+        return { type: "merge", pathChange: { from: payload.sourcePath, to: payload.canonicalPath }, before: await readSafe(payload.canonicalPath), after: payload.canonicalContent, note: "合并后源笔记归档" };
+      case "view_promotion":
+        return { type: "view_promotion", pathChange: { from: payload.sourceViewPath, to: payload.targetPath }, after: payload.content };
+      case "canonical_note":
+        return { type: "canonical_note", path: payload.canonicalPath, before: await readSafe(payload.canonicalPath), after: payload.content, note: payload.supersedes?.length ? `将取代：${payload.supersedes.join("、")}` : undefined };
+      case "structure": {
+        const parts = [payload.add?.length ? `新增关键词：${payload.add.join("、")}` : "", payload.remove?.length ? `移除关键词：${payload.remove.join("、")}` : ""].filter(Boolean);
+        return { type: "structure", path: payload.directory, note: parts.join("；") || "调整目录分类关键词" };
+      }
+      default:
+        return { type: "unknown" };
+    }
+  }
+
+  /** Flat list of vault notes (path + title) for the composer's @-mention picker. */
+  async notes(): Promise<Array<{ path: string; title: string }>> {
+    const scan = await scanVault({ vaultPath: this.vaultPath, includeHash: false, ignore: VAULT_IGNORE_GLOBS });
+    return scan.files
+      .filter((file) => file.mediaType === "markdown" && !isMetaFile(file.path))
+      .map((file) => ({ path: file.path, title: file.title || path.posix.basename(file.path) }));
   }
 
   operations(limit = 50) {

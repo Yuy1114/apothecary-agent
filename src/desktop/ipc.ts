@@ -11,6 +11,7 @@ import {
   ResolveChangesInputSchema,
   VaultFolderInputSchema,
   ResolveProposalInputSchema,
+  ProposalDiffInputSchema,
   ResumeRunInputSchema,
   StartRunInputSchema,
   ThreadIdInputSchema,
@@ -87,10 +88,15 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
     const { status } = ListProposalsInputSchema.parse(input ?? {});
     return service.proposals(status);
   });
+  ipcMain.handle(DesktopChannel.proposalDiff, (_event, input) => {
+    const { id } = ProposalDiffInputSchema.parse(input);
+    return service.proposalDiff(id);
+  });
   ipcMain.handle(DesktopChannel.resolveProposal, (_event, input) => {
     const parsed = ResolveProposalInputSchema.parse(input);
     return service.resolveProposal(parsed.id, parsed.decision, parsed.note);
   });
+  ipcMain.handle(DesktopChannel.notes, () => service.notes());
   ipcMain.handle(DesktopChannel.operations, () => service.operations());
   ipcMain.handle(DesktopChannel.knowledge, () => service.knowledge());
   ipcMain.handle(DesktopChannel.diagnostics, () => service.diagnostics());
