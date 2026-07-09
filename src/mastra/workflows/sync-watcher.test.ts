@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyWatchEvent } from "./sync-watcher.js";
+import { classifyWatchEvent, shouldScheduleAutoIntake } from "./sync-watcher.js";
 
 describe("classifyWatchEvent", () => {
   it("is unchanged when the current hash matches the baseline (a self-write echo)", () => {
@@ -20,5 +20,22 @@ describe("classifyWatchEvent", () => {
 
   it("is unchanged when the file is gone and the baseline never had it", () => {
     expect(classifyWatchEvent(null, null)).toBe("unchanged");
+  });
+});
+
+describe("shouldScheduleAutoIntake", () => {
+  it("schedules for an _inbox change when enabled", () => {
+    expect(shouldScheduleAutoIntake("_inbox/note.md", true)).toBe(true);
+    expect(shouldScheduleAutoIntake("_inbox/sub/note.md", true)).toBe(true);
+  });
+
+  it("never schedules when the feature is off", () => {
+    expect(shouldScheduleAutoIntake("_inbox/note.md", false)).toBe(false);
+  });
+
+  it("never schedules for changes outside _inbox", () => {
+    expect(shouldScheduleAutoIntake("notes/note.md", true)).toBe(false);
+    // A sibling prefix must not match — only the `_inbox/` folder counts.
+    expect(shouldScheduleAutoIntake("_inbox-archive/note.md", true)).toBe(false);
   });
 });

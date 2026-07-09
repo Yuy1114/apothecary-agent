@@ -961,7 +961,7 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
     setForm({
       chatModel: s.chatModel ?? "", deepseekBaseUrl: s.deepseekBaseUrl ?? "", embeddingBaseUrl: s.embeddingBaseUrl ?? "",
       embeddingModel: s.embeddingModel ?? "", embeddingTimeoutMs: s.embeddingTimeoutMs ? String(s.embeddingTimeoutMs) : "",
-      watch: s.watch !== false, autoIntake: s.autoIntake !== false,
+      watch: s.watch !== false, autoIntake: s.autoIntake === true,
     });
   }).catch((e) => notify(e.message)), [notify]);
   useEffect(() => { void loadDiag(); void loadSettings(); }, [loadDiag, loadSettings, refreshKey]);
@@ -1074,7 +1074,7 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
         <div className="card settings-card">
           <div className="h">自动整理</div>
           <div className="row-between">
-            <div className="grow"><div className="rt">自动处理 _inbox</div><div className="rd">改名、补全 frontmatter、生成摘要后提交提案</div></div>
+            <div className="grow"><div className="rt">自动归位 _inbox</div><div className="rd">新文件落入 _inbox 后自动归档到 PARA 目录，无需逐批审批；低置信度的留在原处，所有移动可在「审阅」里撤销。改动模型/开关后需重启生效。</div></div>
             <button className={`switch ${form.autoIntake ? "on" : ""}`} onClick={() => set("autoIntake", !form.autoIntake)}><i /></button>
           </div>
         </div>

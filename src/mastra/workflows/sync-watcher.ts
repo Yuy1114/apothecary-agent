@@ -9,6 +9,7 @@ import { hashFile } from "../../vault/hash.js";
 import { loadSnapshot, commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { executeIntake } from "../tools/execute-intake-core.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
 
@@ -30,16 +31,29 @@ export function classifyWatchEvent(
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 
+// The frozen vault skeleton names the intake folder `_inbox` (see classifyLayer
+// / the organizer agent). Content landing here is a candidate for auto-intake.
+const INBOX_PREFIX = "_inbox/";
+
 // Debounce the semantic refresh: a save burst (or a batch import) should settle
 // into a single incremental pass rather than one LLM summary run per fs event.
 const SEMANTIC_SYNC_DEBOUNCE_MS = Number(
   process.env.APOTHECARY_SEMANTIC_SYNC_DEBOUNCE_MS ?? 8_000,
 );
 
+// Debounce auto-intake a little longer than the semantic pass so a drop-burst
+// (and the eager reindex it triggers) settles before the organizer surveys.
+const AUTO_INTAKE_DEBOUNCE_MS = Number(
+  process.env.APOTHECARY_AUTO_INTAKE_DEBOUNCE_MS ?? 12_000,
+);
+
 let watcher: FSWatcher | null = null;
 let semanticSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let semanticSyncRunning = false;
 let semanticSyncPending = false;
+let autoIntakeTimer: ReturnType<typeof setTimeout> | null = null;
+let autoIntakeRunning = false;
+let autoIntakePending = false;
 
 function toPortablePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
@@ -53,6 +67,21 @@ function isIgnoredPath(relativePath: string): boolean {
   // Dotfiles/dirs (.agent, .obsidian, …) and the archive subtree are not active
   // vault content — archived notes must not re-enter the change→semantic pipeline.
   return relativePath.startsWith(".") || isArchivedPath(relativePath);
+}
+
+/**
+ * A watcher event should trigger auto-intake iff the feature is opted in and the
+ * change landed inside `_inbox` (the only place a new drop should be filed from).
+ * Pure so the trigger rule is unit-tested without spinning up an fs watcher.
+ */
+export function shouldScheduleAutoIntake(relativePath: string, enabled: boolean): boolean {
+  return enabled && relativePath.startsWith(INBOX_PREFIX);
+}
+
+// Opt-in only (see settingsEnv → APOTHECARY_AUTO_INTAKE): auto-filing moves real
+// files without a per-batch approval, so it stays off unless explicitly enabled.
+function autoIntakeEnabled(): boolean {
+  return process.env.APOTHECARY_AUTO_INTAKE === "1";
 }
 
 // Mastra.getWorkflow() resolves by registration key (see index.ts), NOT the
@@ -112,6 +141,65 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
   // Keep the semantic layer live: refresh summaries/graph for the changed files
   // once the burst settles. Debounced and isolated so it never crashes the host.
   scheduleSemanticSync();
+
+  // A new drop into `_inbox` (and only there) is a candidate for auto-filing: if
+  // the user opted in, plan+apply it in the background once the burst settles.
+  if (shouldScheduleAutoIntake(relativePath, autoIntakeEnabled())) scheduleAutoIntake(mastra);
+}
+
+/**
+ * Auto-intake pass: run the organizer subagent headlessly to (re)build the intake
+ * plan for the current `_inbox`, then apply it via the audited executeIntake core
+ * (moves/archives land in the operation ledger and are revertable from the desktop
+ * Review view). Opt-in — the user has traded the per-batch approval gate for
+ * automation, so nothing here prompts. Best-effort and fully isolated: a failure
+ * logs and leaves `_inbox` untouched rather than crashing the watcher host.
+ *
+ * Single-flight with a trailing re-run: drops that arrive mid-pass schedule one
+ * more pass when this one settles, so nothing is stranded in `_inbox`.
+ */
+async function runAutoIntake(mastra: Mastra): Promise<void> {
+  if (autoIntakeRunning) {
+    autoIntakePending = true;
+    return;
+  }
+  autoIntakeRunning = true;
+  try {
+    // Planning only — the organizer never moves files; it records one decision
+    // per entry into the durable intake plan that executeIntake then applies.
+    await mastra
+      .getAgent("organizer")
+      .generate("勘查 _inbox 并为每个条目产出迁移决策（recordDecision）。低置信度的留在 _inbox。", {
+        maxSteps: 20,
+      });
+    const report = await executeIntake();
+    if (report.moved || report.archived || report.failed) {
+      console.log(
+        `Vault watcher: auto-intake done (moved=${report.moved}, archived=${report.archived}, left=${report.left}, failed=${report.failed})`,
+      );
+    }
+    // Nudge a semantic pass to drain any other pending edits. NB: executeIntake
+    // clears the moved files' pending-change entries, so — as with the interactive
+    // intake path — their summaries/graph refresh on the next full semantic pass,
+    // not here. Search still works immediately (the move core reindexes them).
+    if (report.moved) scheduleSemanticSync();
+  } catch (error) {
+    console.warn("Vault watcher: auto-intake failed:", error);
+  } finally {
+    autoIntakeRunning = false;
+    if (autoIntakePending) {
+      autoIntakePending = false;
+      scheduleAutoIntake(mastra);
+    }
+  }
+}
+
+function scheduleAutoIntake(mastra: Mastra): void {
+  if (autoIntakeTimer) clearTimeout(autoIntakeTimer);
+  autoIntakeTimer = setTimeout(() => {
+    autoIntakeTimer = null;
+    void runAutoIntake(mastra);
+  }, AUTO_INTAKE_DEBOUNCE_MS);
 }
 
 async function runSemanticSync(): Promise<void> {

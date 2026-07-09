@@ -88,4 +88,11 @@ describe("desktop settings", () => {
     // No keys, watch on → empty env (fall back to ambient/defaults).
     expect(settingsEnv({ vaultPath: "/v", watch: true })).toEqual({});
   });
+
+  it("settingsEnv opts into auto-intake only on an explicit true", () => {
+    expect(settingsEnv({ vaultPath: "/v", autoIntake: true })).toEqual({ APOTHECARY_AUTO_INTAKE: "1" });
+    // Unset or false must stay manual — auto-filing moves files without approval.
+    expect(settingsEnv({ vaultPath: "/v" })).toEqual({});
+    expect(settingsEnv({ vaultPath: "/v", autoIntake: false })).toEqual({});
+  });
 });

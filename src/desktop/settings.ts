@@ -49,6 +49,10 @@ export function settingsEnv(
   put("APOTHECARY_EMBEDDING_MODEL", settings.embeddingModel);
   if (settings.embeddingTimeoutMs) env.APOTHECARY_EMBEDDING_TIMEOUT_MS = String(settings.embeddingTimeoutMs);
   if (settings.watch === false) env.APOTHECARY_DESKTOP_WATCH = "0";
+  // Opt-in only: auto-intake files-in-place from `_inbox` without a per-batch
+  // approval, so it must be turned on explicitly (an unset/false toggle stays
+  // manual). The watcher reads this env; it takes effect on the next relaunch.
+  if (settings.autoIntake === true) env.APOTHECARY_AUTO_INTAKE = "1";
   return env;
 }
 

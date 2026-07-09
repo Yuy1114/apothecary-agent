@@ -3,6 +3,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { PinoLogger } from "@mastra/loggers";
 import { apothecaryAgent } from "../mastra/agents/apothecary-agent.js";
+import { organizer } from "../mastra/agents/organizer.js";
 import { setVectorStore } from "../mastra/tools/rag.js";
 import { fileChangedWorkflow, fileDeletedWorkflow } from "../mastra/workflows/sync-workflow.js";
 import { startVaultWatcher } from "../mastra/workflows/sync-watcher.js";
@@ -23,7 +24,9 @@ export function createDesktopRuntime(projectRoot: string) {
   setVectorStore(vectorStore);
 
   const runtime = new Mastra({
-    agents: { apothecaryAgent },
+    // The organizer is registered top-level (not only as apothecary's subagent)
+    // so the vault watcher can run it headlessly for auto-intake via getAgent.
+    agents: { apothecaryAgent, organizer },
     workflows: { fileChangedWorkflow, fileDeletedWorkflow },
     storage: new LibSQLStore({
       id: "apothecary-desktop-storage",
