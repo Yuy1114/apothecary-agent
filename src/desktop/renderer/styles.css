@@ -446,6 +446,11 @@ a:hover { text-decoration: underline; }
 .md-code { font-family: var(--font-mono); font-size: 0.9em; background: var(--bg-muted); padding: 1px 5px; border-radius: var(--radius-sm); }
 .md-pre { margin: 0 0 10px; padding: 10px 12px; background: var(--bg-muted); border-radius: var(--radius-md); overflow-x: auto; }
 .md-pre code { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre; }
+.md-table-wrap { overflow-x: auto; margin: 0 0 10px; }
+.md-table { border-collapse: collapse; font-size: 12.5px; width: auto; min-width: 40%; }
+.md-table th, .md-table td { border: 1px solid var(--border); padding: 5px 11px; text-align: left; vertical-align: top; }
+.md-table th { background: var(--bg-subtle); font-weight: 600; white-space: nowrap; }
+.md-table tr:nth-child(even) td { background: color-mix(in srgb, var(--bg-subtle) 45%, transparent); }
 
 /* ─── Composer @-mention ─────────────────────────────────────────────── */
 .mention-pop { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 6px); max-height: 240px; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); z-index: 40; padding: 4px; }

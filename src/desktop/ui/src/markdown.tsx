@@ -50,8 +50,25 @@ type Block =
   | { kind: "ul"; items: string[] }
   | { kind: "ol"; items: string[] }
   | { kind: "quote"; text: string }
+  | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "hr" }
   | { kind: "p"; text: string };
+
+/** A GFM table delimiter row, e.g. `|---|:--:|`. */
+function isTableSep(line: string): boolean {
+  return /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(line) && line.includes("-");
+}
+/** Split a `| a | b |` row into trimmed cells, dropping the outer pipes. */
+function splitTableRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((cell) => cell.trim());
+}
+/** A header row followed by a delimiter row starts a table. */
+function startsTable(lines: string[], i: number): boolean {
+  return lines[i].includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1]);
+}
 
 /** Split source into block-level chunks. */
 function parseBlocks(src: string): Block[] {
@@ -68,6 +85,15 @@ function parseBlocks(src: string): Block[] {
       while (i < lines.length && !lines[i].trimStart().startsWith("```")) { body.push(lines[i]); i++; }
       i++; // closing fence
       blocks.push({ kind: "code", text: body.join("\n") });
+      continue;
+    }
+    // GFM table (header row + `|---|` delimiter + body rows)
+    if (startsTable(lines, i)) {
+      const header = splitTableRow(line);
+      i += 2; // consume header + delimiter
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim() !== "" && lines[i].includes("|")) { rows.push(splitTableRow(lines[i])); i++; }
+      blocks.push({ kind: "table", header, rows });
       continue;
     }
     // Heading
@@ -100,7 +126,8 @@ function parseBlocks(src: string): Block[] {
     const para: string[] = [];
     while (
       i < lines.length && lines[i].trim() !== "" &&
-      !/^(#{1,6})\s|^\s*>|^\s*[-*+]\s+|^\s*\d+[.)]\s+|^\s*```/.test(lines[i])
+      !/^(#{1,6})\s|^\s*>|^\s*[-*+]\s+|^\s*\d+[.)]\s+|^\s*```/.test(lines[i]) &&
+      !startsTable(lines, i)
     ) { para.push(lines[i]); i++; }
     blocks.push({ kind: "p", text: para.join("\n") });
   }
@@ -124,6 +151,19 @@ export function Markdown({ text, className }: { text: string; className?: string
             return <ol key={key}>{block.items.map((it, j) => <li key={j}>{renderInline(it, `${key}-${j}`)}</li>)}</ol>;
           case "quote":
             return <blockquote key={key}>{renderInline(block.text, key)}</blockquote>;
+          case "table":
+            return (
+              <div key={key} className="md-table-wrap">
+                <table className="md-table">
+                  <thead><tr>{block.header.map((cell, j) => <th key={j}>{renderInline(cell, `${key}-h${j}`)}</th>)}</tr></thead>
+                  <tbody>
+                    {block.rows.map((row, ri) => (
+                      <tr key={ri}>{block.header.map((_, ci) => <td key={ci}>{renderInline(row[ci] ?? "", `${key}-r${ri}-${ci}`)}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           case "hr":
             return <hr key={key} />;
           default:
