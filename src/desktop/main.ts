@@ -232,6 +232,26 @@ async function createService(): Promise<DesktopService> {
     return "";
   };
 
+  // Legacy repair: threads written by the old formatConversation path stored the
+  // whole running `用户:/Apothecary:` transcript in each message (compounding every
+  // turn). Recover just this turn's real content — the last segment for its role —
+  // so multi-turn history replays as individual messages instead of one big blob.
+  // Clean (post-fix) messages have no such markers and pass through untouched.
+  const USER_PREFIX = "用户: ";
+  const AGENT_PREFIX = "Apothecary: ";
+  const recoverTurn = (role: "user" | "assistant", raw: unknown): string => {
+    const text = messageText(raw).trim();
+    const isTranscript = text.startsWith(USER_PREFIX) || text.startsWith(AGENT_PREFIX) || /\n\n(?:用户|Apothecary): /.test(text);
+    if (!isTranscript) return text;
+    const marker = role === "user" ? USER_PREFIX : AGENT_PREFIX;
+    const nlIdx = text.lastIndexOf(`\n${marker}`);
+    const from = nlIdx >= 0 ? nlIdx + 1 + marker.length : text.startsWith(marker) ? marker.length : 0;
+    let segment = text.slice(from);
+    const nextTurn = segment.search(/\n\n(?:用户|Apothecary): /);
+    if (nextTurn >= 0) segment = segment.slice(0, nextTurn);
+    return segment.trim();
+  };
+
   const service = new DesktopService({
     vaultPath,
     projectRoot: runtimeRoot,
@@ -300,16 +320,9 @@ async function createService(): Promise<DesktopService> {
       threadMessages: async (threadId) => {
         if (!boundMemory) return [];
         const { messages } = await boundMemory.recall({ threadId, resourceId: RESOURCE, perPage: false });
-        // Defensive: threads written by the old formatConversation path stored a
-        // "用户:/Apothecary:" prefix in the content — strip a leading one so legacy
-        // history replays cleanly (new turns are already stored without it).
-        const stripPrefix = (role: "user" | "assistant", text: string): string => {
-          const prefix = role === "user" ? "用户: " : "Apothecary: ";
-          return text.startsWith(prefix) ? text.slice(prefix.length) : text;
-        };
         return messages
           .filter((m: any) => m.role === "user" || m.role === "assistant")
-          .map((m: any) => ({ role: m.role as "user" | "assistant", content: stripPrefix(m.role, messageText(m.content).trim()) }))
+          .map((m: any) => ({ role: m.role as "user" | "assistant", content: recoverTurn(m.role, m.content) }))
           .filter((m) => m.content.trim().length > 0);
       },
       createThread: async (threadId, title) => {
