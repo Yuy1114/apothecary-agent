@@ -156,11 +156,6 @@ function rendererPath(): string {
   return path.join(app.getAppPath(), "dist", "desktop", "ui", "index.html");
 }
 
-function formatConversation(messages: DesktopChatMessage[]): string {
-  return messages
-    .map((message) => `${message.role === "user" ? "用户" : "Apothecary"}: ${message.content}`)
-    .join("\n\n");
-}
 
 /**
  * Drain an agent stream (first run or a resumed run), mapping Mastra chunks to
@@ -242,16 +237,19 @@ async function createService(): Promise<DesktopService> {
     projectRoot: runtimeRoot,
     deps: {
       chat: async (messages, threadId) => {
-        // Allow enough tool-call steps to actually finish a maintenance task
-        // (scan + read several files + produce proposals) in one turn.
-        const result = await apothecaryAgent.generate(formatConversation(messages), {
+        // Send only the latest user turn; prior turns come from thread memory
+        // (lastMessages). Passing a hand-formatted transcript would persist the
+        // "用户:/Apothecary:" prefixes into the stored message, which then leak
+        // back when the conversation is replayed from history.
+        // Allow enough tool-call steps to finish a maintenance task in one turn.
+        const result = await apothecaryAgent.generate(messages.at(-1)?.content ?? "", {
           memory: memoryFor(threadId),
           maxSteps: 20,
         });
         return result.text;
       },
       streamChat: async (messages, emit, runId, threadId) => {
-        const output = await apothecaryAgent.stream(formatConversation(messages), {
+        const output = await apothecaryAgent.stream(messages.at(-1)?.content ?? "", {
           memory: memoryFor(threadId),
           maxSteps: 20,
           runId,
@@ -302,9 +300,16 @@ async function createService(): Promise<DesktopService> {
       threadMessages: async (threadId) => {
         if (!boundMemory) return [];
         const { messages } = await boundMemory.recall({ threadId, resourceId: RESOURCE, perPage: false });
+        // Defensive: threads written by the old formatConversation path stored a
+        // "用户:/Apothecary:" prefix in the content — strip a leading one so legacy
+        // history replays cleanly (new turns are already stored without it).
+        const stripPrefix = (role: "user" | "assistant", text: string): string => {
+          const prefix = role === "user" ? "用户: " : "Apothecary: ";
+          return text.startsWith(prefix) ? text.slice(prefix.length) : text;
+        };
         return messages
           .filter((m: any) => m.role === "user" || m.role === "assistant")
-          .map((m: any) => ({ role: m.role as "user" | "assistant", content: messageText(m.content) }))
+          .map((m: any) => ({ role: m.role as "user" | "assistant", content: stripPrefix(m.role, messageText(m.content).trim()) }))
           .filter((m) => m.content.trim().length > 0);
       },
       createThread: async (threadId, title) => {
