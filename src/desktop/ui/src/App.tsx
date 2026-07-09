@@ -167,9 +167,6 @@ export function App() {
     <div className="win">
       <aside className="sidebar">
         <div className="sidebar-top" />
-        <div className="brand">
-          <div className="brand-text"><strong>Apothecary</strong><span>Knowledge workspace</span></div>
-        </div>
         <nav className="nav" aria-label="主要导航">
           <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
           <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
