@@ -5,13 +5,14 @@ import path from "node:path";
 
 /**
  * The port registry is the one thing in the layering that no type check can
- * verify: a composition root that forgets `setSearchIndex()` compiles fine and
+ * verify: a composition root that forgets `installPorts()` compiles fine and
  * throws the first time a use case touches the index. Nine application modules
  * resolve a port at call time, and every unit test installs a fake — so the
  * real wiring is otherwise never exercised.
  *
  * This drives the Electron root for real (minus the watcher) and asserts the
- * ports go from unusable to usable.
+ * ports go from unusable to usable. installPorts.test.ts covers the function
+ * itself, which the Studio root shares.
  */
 let home: string;
 

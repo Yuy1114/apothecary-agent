@@ -50,16 +50,20 @@
 
 ### 组合根
 
-每个入口都必须装配**全部**端口：
+两个入口，各调**一次** `installPorts()`：
 
 - `src/mastra/index.ts`（Studio）
 - `src/desktop/runtime.ts`（Electron）
 
 ```ts
-setVectorStore(vectorStore);
-setSearchIndex(ragSearchIndex);
-setFileSummarizer(generateFileSummary);
+installPorts(vectorStore);   // src/mastra/adapters/installPorts.ts
 ```
+
+「装配端口」是一个内聚的职责，不要在根里散着写 `setX()`——加第四个注册表端口时，只改一个根就会漏。向量库也一起在这里注入：`ragSearchIndex` 委托给 `rag.ts`，没有向量库它答不了查询，这是一个决定不是两个。
+
+显式传参的端口（`KnowledgeViewWriter`、`ReviewerModel`）在各自调用点递交，不进 `installPorts`。
+
+覆盖情况：`desktop/runtime.test.ts` 真实驱动 Electron 根；`mastra/adapters/installPorts.test.ts` 直接测这个函数。Studio 根没法在测试里驱动（它的模块体会对真实 vault 跑一次 manualSync），但它调的是同一个函数——**唯一没被覆盖的是「某个根压根没调 installPorts」，那是一行显眼的代码，不是三行**。
 
 ## 适配器（mastra/adapters/）
 

@@ -11,11 +11,7 @@ import {
 } from "@mastra/observability";
 
 import { apothecaryAgent } from "./agents/apothecary-agent.js";
-import { setVectorStore } from "./tools/rag.js";
-import { ragSearchIndex } from "./adapters/ragSearchIndex.js";
-import { setSearchIndex } from "../application/ports/searchIndex.js";
-import { generateFileSummary } from "./adapters/mastraFileSummarizer.js";
-import { setFileSummarizer } from "../application/ports/fileSummarizer.js";
+import { installPorts } from "./adapters/installPorts.js";
 import {
   fullReindexWorkflow,
   fileChangedWorkflow,
@@ -70,9 +66,7 @@ const vaultVector = new LibSQLVector({
   id: "vault-chunks",
   url: VECTOR_DB_PATH,
 });
-setVectorStore(vaultVector);
-setSearchIndex(ragSearchIndex);
-setFileSummarizer(generateFileSummary);
+installPorts(vaultVector);
 
 const applicationStorage = new LibSQLStore({
   id: "apothecary-storage",
