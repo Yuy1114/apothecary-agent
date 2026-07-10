@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
+import { setSearchIndex, nullSearchIndex } from "../ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,7 +11,7 @@ import type { ProposalType } from "../../domain/proposal.js";
 setSearchIndex(nullSearchIndex);
 
 let vault: string;
-let resolveProposalById: typeof import("./resolve-proposal-core.js").resolveProposalById;
+let resolveProposalById: typeof import("./resolveProposal.js").resolveProposalById;
 
 // Stub the LLM-backed post-apply semantic refresh; it is exercised separately.
 const refreshDeps = { postApplyRefresh: vi.fn(async () => {}) };
@@ -41,7 +41,7 @@ beforeAll(async () => {
     "directories:\n  reflections/:\n    description: 反思\n    keywords:\n      - 反思\n  notes/:\n    description: 笔记\naliases: {}\n",
     "utf8",
   );
-  ({ resolveProposalById } = await import("./resolve-proposal-core.js"));
+  ({ resolveProposalById } = await import("./resolveProposal.js"));
 });
 
 afterAll(async () => {

@@ -22,7 +22,7 @@ const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
 setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 let vault: string;
-let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;
+let resolveProposalById: typeof import("../application/proposals/resolveProposal.js").resolveProposalById;
 
 beforeEach(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-recovery-e2e-"));
@@ -30,7 +30,7 @@ beforeEach(async () => {
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
   reindexFile.mockClear();
-  ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
+  ({ resolveProposalById } = await import("../application/proposals/resolveProposal.js"));
 });
 
 afterEach(async () => {

@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { addReadmeEntry, removeReadmeEntry } from "../../vault/readmeIndex.js";
 import { parseMarkdownSnapshot } from "../../vault/markdown.js";
-import { loadStructure } from "./vault-structure.js";
+import { loadStructure } from "../../vault/structureStore.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 

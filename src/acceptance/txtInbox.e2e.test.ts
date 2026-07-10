@@ -5,14 +5,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createProposal, loadProposal } from "../vault/proposalStore.js";
 import { initOperationLedger, listOperations, setOperationLedgerClient } from "../vault/operationLedger.js";
-import { readVaultText } from "../mastra/tools/read-vault-text.js";
+import { readVaultText } from "../vault/readText.js";
 
 const reindexFile = vi.fn(async () => ({ added: 0 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
 setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 let vault: string;
-let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;
+let resolveProposalById: typeof import("../application/proposals/resolveProposal.js").resolveProposalById;
 const abs = (rel: string) => path.join(vault, rel);
 
 beforeEach(async () => {
@@ -23,7 +23,7 @@ beforeEach(async () => {
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
-  ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
+  ({ resolveProposalById } = await import("../application/proposals/resolveProposal.js"));
 });
 
 afterEach(async () => {

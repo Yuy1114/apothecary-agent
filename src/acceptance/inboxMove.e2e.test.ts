@@ -36,7 +36,7 @@ const postApplyRefresh = (vaultPath: string, paths: string[]) =>
   syncSemanticsForPaths({ vaultPath, paths }, { summarize: stubSummarize });
 
 let vault: string;
-let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;
+let resolveProposalById: typeof import("../application/proposals/resolveProposal.js").resolveProposalById;
 const abs = (rel: string) => path.join(vault, rel);
 
 beforeEach(async () => {
@@ -50,7 +50,7 @@ beforeEach(async () => {
   removeFromIndex.mockClear();
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
-  ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
+  ({ resolveProposalById } = await import("../application/proposals/resolveProposal.js"));
 });
 
 afterEach(async () => {

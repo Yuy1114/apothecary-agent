@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
+import { setSearchIndex, nullSearchIndex } from "../ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,7 +10,7 @@ const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
 setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 let vault: string;
-let mergeNotesCore: typeof import("./merge-notes-core.js").mergeNotesCore;
+let mergeNotesCore: typeof import("./mergeNotes.js").mergeNotesCore;
 
 const abs = (rel: string) => path.join(vault, rel);
 const read = (rel: string) => readFile(abs(rel), "utf8");
@@ -23,7 +23,7 @@ const exists = async (rel: string) =>
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-merge-test-"));
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
-  ({ mergeNotesCore } = await import("./merge-notes-core.js"));
+  ({ mergeNotesCore } = await import("./mergeNotes.js"));
 });
 
 afterAll(async () => {

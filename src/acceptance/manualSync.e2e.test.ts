@@ -24,7 +24,7 @@ const summarize = (async (input: { path: string; title: string; contentHash: str
 })) as unknown as typeof import("../application/semantic/generateFileSummary.js").generateFileSummary;
 
 let vault: string;
-let manualSync: typeof import("../mastra/tools/manual-sync-core.js").manualSync;
+let manualSync: typeof import("../application/sync/manualSync.js").manualSync;
 const abs = (rel: string) => path.join(vault, rel);
 const refreshSemantics = (input: { vaultPath: string }) =>
   syncSemanticsFromChanges(input, { listPendingChanges, summarize });
@@ -34,7 +34,7 @@ beforeEach(async () => {
   await mkdir(abs("notes"), { recursive: true });
   await initChangeLog(`file:${path.join(vault, "changes.db")}`);
   vi.stubEnv("APOTHECARY_HOME", vault);
-  ({ manualSync } = await import("../mastra/tools/manual-sync-core.js"));
+  ({ manualSync } = await import("../application/sync/manualSync.js"));
 });
 
 afterEach(async () => {

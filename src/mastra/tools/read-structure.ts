@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { loadStructure } from "./vault-structure.js";
+import { loadStructure } from "../../vault/structureStore.js";
 
 export const readStructureTool = createTool({
   id: "readStructure",

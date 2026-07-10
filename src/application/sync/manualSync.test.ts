@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
+import { setSearchIndex, nullSearchIndex } from "../ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,14 +16,14 @@ const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
 setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 // Import after the mocks exist (the factory runs on first import of rag.js).
-let manualSync: typeof import("./manual-sync-core.js").manualSync;
+let manualSync: typeof import("./manualSync.js").manualSync;
 
 let vault: string;
 const refreshSemantics = vi.fn(async () => ({}));
 const abs = (rel: string) => path.join(vault, rel);
 
 beforeAll(async () => {
-  ({ manualSync } = await import("./manual-sync-core.js"));
+  ({ manualSync } = await import("./manualSync.js"));
 });
 
 beforeEach(async () => {

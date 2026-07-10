@@ -1,8 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { moveVaultFileCore } from "./move-vault-file-core.js";
-import { archiveVaultFileCore } from "./archive-vault-file-core.js";
-import { searchIndex } from "../../application/ports/searchIndex.js";
+import { moveVaultFileCore } from "../notes/moveVaultFile.js";
+import { archiveVaultFileCore } from "../notes/archiveVaultFile.js";
+import { searchIndex } from "../ports/searchIndex.js";
 import { addFrontmatterTags } from "../../vault/frontmatter.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";

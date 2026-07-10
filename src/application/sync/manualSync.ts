@@ -1,6 +1,6 @@
 import { scanVault } from "../../vault/scanner.js";
 import { VAULT_IGNORE_GLOBS } from "../../domain/vaultPolicy.js";
-import { searchIndex } from "../../application/ports/searchIndex.js";
+import { searchIndex } from "../ports/searchIndex.js";
 import { enqueueChange } from "../../vault/changeLog.js";
 import {
   loadSnapshot,
@@ -8,7 +8,7 @@ import {
   diffSnapshot,
   type SnapshotFiles,
 } from "../../vault/syncSnapshot.js";
-import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { syncSemanticsFromChanges } from "../semantic/syncSemanticsFromChanges.js";
 import { nowIso } from "../../utils/time.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 

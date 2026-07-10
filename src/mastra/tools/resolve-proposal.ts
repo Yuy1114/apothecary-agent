@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { requiresHumanApproval } from "./permissions.js";
-import { resolveProposalById } from "./resolve-proposal-core.js";
+import { resolveProposalById } from "../../application/proposals/resolveProposal.js";
 
 export const resolveProposalTool = createTool({
   id: "resolveProposal",

@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { readVaultText } from "./read-vault-text.js";
+import { readVaultText } from "../../vault/readText.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 const EXCERPT_LIMIT = 4000;

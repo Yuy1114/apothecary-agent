@@ -10,7 +10,7 @@ const reindexFile = vi.fn(async () => ({ added: 1 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 1 }));
 
 let vault: string;
-let executeIntake: typeof import("./execute-intake-core.js").executeIntake;
+let executeIntake: typeof import("./executeIntake.js").executeIntake;
 const abs = (rel: string) => path.join(vault, rel);
 const exists = (rel: string) => access(abs(rel)).then(() => true, () => false);
 
@@ -27,9 +27,9 @@ beforeEach(async () => {
   vi.resetModules();
   // resetModules also discards the port registry, so install into the fresh
   // instance the re-imported core will resolve — not the one this file imported.
-  const ports = await import("../../application/ports/searchIndex.js");
+  const ports = await import("../ports/searchIndex.js");
   ports.setSearchIndex({ ...ports.nullSearchIndex, reindexFile, removeFromIndex });
-  ({ executeIntake } = await import("./execute-intake-core.js"));
+  ({ executeIntake } = await import("./executeIntake.js"));
 });
 
 afterEach(async () => {

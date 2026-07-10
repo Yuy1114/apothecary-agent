@@ -1,11 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { searchIndex } from "../../application/ports/searchIndex.js";
-import { moveVaultFileCore } from "./move-vault-file-core.js";
-import { archiveVaultFileCore } from "./archive-vault-file-core.js";
-import { mergeNotesCore } from "./merge-notes-core.js";
-import { writeVaultNote } from "./ingest-core.js";
-import { updateDirectoryKeywords } from "./vault-structure.js";
+import { searchIndex } from "../ports/searchIndex.js";
+import { moveVaultFileCore } from "../notes/moveVaultFile.js";
+import { archiveVaultFileCore } from "../notes/archiveVaultFile.js";
+import { mergeNotesCore } from "../notes/mergeNotes.js";
+import { writeVaultNote } from "../intake/ingestNote.js";
+import { updateDirectoryKeywords } from "../../vault/structureStore.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
@@ -17,9 +17,9 @@ import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { resolveProposalRecord, type Proposal } from "../../domain/proposal.js";
 import { nowIso } from "../../utils/time.js";
-import { syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
-import { updateReadmeForCreatedNote } from "./readme-index-core.js";
-import { enqueueSemanticRecovery } from "../../application/semantic/semanticRecovery.js";
+import { syncSemanticsForPaths } from "../semantic/syncSemanticsFromChanges.js";
+import { updateReadmeForCreatedNote } from "../notes/updateReadmes.js";
+import { enqueueSemanticRecovery } from "../semantic/semanticRecovery.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
 

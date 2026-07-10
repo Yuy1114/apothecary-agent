@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { executeIntake } from "./execute-intake-core.js";
+import { executeIntake } from "../../application/intake/executeIntake.js";
 
 export const executeIntakeTool = createTool({
   id: "executeIntake",

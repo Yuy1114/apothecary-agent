@@ -1,9 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parse, parseDocument } from "yaml";
-import { recordOperation } from "../../vault/operationLedger.js";
-import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
-import type { VaultStructure } from "../../domain/vaultStructure.js";
+import { recordOperation } from "./operationLedger.js";
+import { getAgentArtifacts } from "../artifacts/agentArtifacts.js";
+import type { VaultStructure } from "../domain/vaultStructure.js";
 
 // Legacy directory-classification config. The skeleton redesign supersedes this
 // with charter-config routing; kept resilient (returns empty when absent) and

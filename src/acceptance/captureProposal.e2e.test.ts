@@ -40,7 +40,7 @@ const stubSummarize = (async (input: { path: string; title: string; contentHash:
 })) as unknown as typeof import("../application/semantic/generateFileSummary.js").generateFileSummary;
 
 let vault: string;
-let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;
+let resolveProposalById: typeof import("../application/proposals/resolveProposal.js").resolveProposalById;
 
 // Run the real semantic pipeline for the changed files, LLM stubbed.
 const postApplyRefresh = (vaultPath: string, paths: string[]) =>
@@ -56,7 +56,7 @@ beforeAll(async () => {
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
-  ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
+  ({ resolveProposalById } = await import("../application/proposals/resolveProposal.js"));
 });
 
 afterAll(async () => {

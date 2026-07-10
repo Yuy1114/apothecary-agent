@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { applyKeywordEdit } from "./vault-structure.js";
+import { applyKeywordEdit } from "./structureStore.js";
 
 const sample = `# vault structure
 directories:

@@ -1,9 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { searchIndex } from "../../application/ports/searchIndex.js";
+import { searchIndex } from "../ports/searchIndex.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
-import { updateReadmesForMove } from "./readme-index-core.js";
+import { updateReadmesForMove } from "./updateReadmes.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { logger } from "../../observability/logger.js";
 

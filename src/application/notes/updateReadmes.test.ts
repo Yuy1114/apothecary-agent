@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 let vault: string;
-let updateReadmesForMove: typeof import("./readme-index-core.js").updateReadmesForMove;
+let updateReadmesForMove: typeof import("./updateReadmes.js").updateReadmesForMove;
 
 const abs = (rel: string) => path.join(vault, rel);
 const read = (rel: string) => readFile(abs(rel), "utf8");
@@ -17,7 +17,7 @@ const exists = (rel: string) =>
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-readme-test-"));
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
-  ({ updateReadmesForMove } = await import("./readme-index-core.js"));
+  ({ updateReadmesForMove } = await import("./updateReadmes.js"));
 });
 
 afterAll(async () => {

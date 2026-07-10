@@ -2,14 +2,14 @@ import type { Mastra } from "@mastra/core/mastra";
 import { promises as fs } from "node:fs";
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
-import { enqueueChange } from "./../../vault/changeLog.js";
+import { enqueueChange } from "../../vault/changeLog.js";
 import { isSelfWrite } from "../../vault/selfWriteGuard.js";
 import { isArchivedPath } from "../../vault/archive.js";
 import { hashFile } from "../../vault/hash.js";
 import { loadSnapshot, commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { syncSemanticsFromChanges, syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
-import { executeIntake } from "../tools/execute-intake-core.js";
+import { executeIntake } from "../../application/intake/executeIntake.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
 

@@ -1,7 +1,7 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
-import { manualSync } from "../tools/manual-sync-core.js";
+import { manualSync } from "../../application/sync/manualSync.js";
 
 const OutputSchema = z.object({
   created: z.number(),

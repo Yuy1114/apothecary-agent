@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { searchIndex } from "../../application/ports/searchIndex.js";
-import { loadStructure, classifyWithStructure } from "./vault-structure.js";
+import { searchIndex } from "../ports/searchIndex.js";
+import { loadStructure, classifyWithStructure } from "../../vault/structureStore.js";
 import type { VaultStructure } from "../../domain/vaultStructure.js";
 import { addReadmeEntry } from "../../vault/readmeIndex.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";

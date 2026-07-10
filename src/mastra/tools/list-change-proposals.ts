@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { ProposalTypeSchema, ProposalStatusSchema } from "../../domain/proposal.js";
-import { listProposalRecords } from "./resolve-proposal-core.js";
+import { listProposalRecords } from "../../application/proposals/resolveProposal.js";
 
 export const listChangeProposalsTool = createTool({
   id: "listChangeProposals",

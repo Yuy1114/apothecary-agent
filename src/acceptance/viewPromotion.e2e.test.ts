@@ -10,7 +10,7 @@ const reindexFile = vi.fn(async () => ({ added: 1 }));
 setSearchIndex({ ...nullSearchIndex, reindexFile });
 
 let vault: string;
-let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;
+let resolveProposalById: typeof import("../application/proposals/resolveProposal.js").resolveProposalById;
 const abs = (rel: string) => path.join(vault, rel);
 
 beforeEach(async () => {
@@ -20,7 +20,7 @@ beforeEach(async () => {
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
-  ({ resolveProposalById } = await import("../mastra/tools/resolve-proposal-core.js"));
+  ({ resolveProposalById } = await import("../application/proposals/resolveProposal.js"));
 });
 
 afterEach(async () => {

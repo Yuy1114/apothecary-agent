@@ -20,7 +20,7 @@ import {
   fileDeletedWorkflow,
 } from "./workflows/sync-workflow.js";
 import { startVaultWatcher } from "./workflows/sync-watcher.js";
-import { manualSync } from "./tools/manual-sync-core.js";
+import { manualSync } from "../application/sync/manualSync.js";
 import { initChangeLog } from "../vault/changeLog.js";
 import { initOperationLedger } from "../vault/operationLedger.js";
 import { initWorkflow } from "./workflows/init.js";

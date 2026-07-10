@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
+import { setSearchIndex, nullSearchIndex } from "../ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,7 +10,7 @@ const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
 setSearchIndex({ ...nullSearchIndex, removeFromIndex });
 
 let vault: string;
-let archiveVaultFileCore: typeof import("./archive-vault-file-core.js").archiveVaultFileCore;
+let archiveVaultFileCore: typeof import("./archiveVaultFile.js").archiveVaultFileCore;
 
 const abs = (rel: string) => path.join(vault, rel);
 const exists = async (rel: string) =>
@@ -22,7 +22,7 @@ const exists = async (rel: string) =>
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-archive-test-"));
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
-  ({ archiveVaultFileCore } = await import("./archive-vault-file-core.js"));
+  ({ archiveVaultFileCore } = await import("./archiveVaultFile.js"));
 });
 
 afterAll(async () => {
