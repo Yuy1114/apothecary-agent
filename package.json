@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "mastra dev",
     "build": "tsc && vite build --config vite.desktop.config.ts",
-    "check": "tsc --noEmit && tsc --project tsconfig.renderer.json",
+    "check": "tsc --noEmit && tsc --project tsconfig.renderer.json && pnpm run check:layers",
+    "check:layers": "depcruise src --config .dependency-cruiser.cjs",
     "test": "vitest",
     "ci": "pnpm run check && pnpm run build && pnpm vitest run",
     "desktop:dev": "node scripts/desktop-dev.mjs",
@@ -59,6 +60,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "dependency-cruiser": "^18.0.0",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
     "tailwindcss": "^4.3.2",
