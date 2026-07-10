@@ -1,6 +1,6 @@
 import { scanVault } from "../../vault/scanner.js";
 import { VAULT_IGNORE_GLOBS } from "../../domain/vaultPolicy.js";
-import { reindexFile, removeFromIndex } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { enqueueChange } from "../../vault/changeLog.js";
 import {
   loadSnapshot,
@@ -52,8 +52,8 @@ export async function manualSync(
   const diff = diffSnapshot(previous.files, current);
 
   // Keep the vector index fresh (the watcher normally does this eagerly).
-  for (const p of [...diff.created, ...diff.modified]) await reindexFile(p);
-  for (const p of diff.deleted) await removeFromIndex(p);
+  for (const p of [...diff.created, ...diff.modified]) await searchIndex().reindexFile(p);
+  for (const p of diff.deleted) await searchIndex().removeFromIndex(p);
 
   // Record the recovered changes as pending agent-work, correctly typed.
   for (const p of diff.created) await enqueueChange({ path: p, changeType: "created", source: "manual" });

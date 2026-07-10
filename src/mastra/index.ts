@@ -12,6 +12,8 @@ import {
 
 import { apothecaryAgent } from "./agents/apothecary-agent.js";
 import { setVectorStore } from "./tools/rag.js";
+import { ragSearchIndex } from "./adapters/ragSearchIndex.js";
+import { setSearchIndex } from "../application/ports/searchIndex.js";
 import {
   fullReindexWorkflow,
   fileChangedWorkflow,
@@ -67,6 +69,7 @@ const vaultVector = new LibSQLVector({
   url: VECTOR_DB_PATH,
 });
 setVectorStore(vaultVector);
+setSearchIndex(ragSearchIndex);
 
 const applicationStorage = new LibSQLStore({
   id: "apothecary-storage",

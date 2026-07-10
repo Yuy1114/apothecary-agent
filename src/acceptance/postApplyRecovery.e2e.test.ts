@@ -5,6 +5,7 @@
  * without re-running the file mutation.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,7 +19,7 @@ import { retrySemanticRecovery } from "../application/semantic/semanticRecovery.
 
 const reindexFile = vi.fn(async () => ({ added: 1 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
-vi.mock("../mastra/tools/rag.js", () => ({ reindexFile, removeFromIndex }));
+setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 let vault: string;
 let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;

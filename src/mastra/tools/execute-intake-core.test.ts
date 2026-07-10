@@ -8,7 +8,6 @@ import type { IntakeDecision } from "../../domain/intakePlan.js";
 
 const reindexFile = vi.fn(async () => ({ added: 1 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 1 }));
-vi.mock("./rag.js", () => ({ reindexFile, removeFromIndex }));
 
 let vault: string;
 let executeIntake: typeof import("./execute-intake-core.js").executeIntake;
@@ -26,6 +25,10 @@ beforeEach(async () => {
   // The core (and the move/archive cores it uses) read VAULT_PATH at module load,
   // so re-evaluate the graph per test to pick up this test's fresh vault.
   vi.resetModules();
+  // resetModules also discards the port registry, so install into the fresh
+  // instance the re-imported core will resolve — not the one this file imported.
+  const ports = await import("../../application/ports/searchIndex.js");
+  ports.setSearchIndex({ ...ports.nullSearchIndex, reindexFile, removeFromIndex });
   ({ executeIntake } = await import("./execute-intake-core.js"));
 });
 

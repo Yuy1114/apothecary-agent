@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,10 +7,7 @@ import { createProposal, loadProposal } from "../vault/proposalStore.js";
 import { initOperationLedger, listOperations, setOperationLedgerClient } from "../vault/operationLedger.js";
 
 const reindexFile = vi.fn(async () => ({ added: 1 }));
-vi.mock("../mastra/tools/rag.js", () => ({
-  reindexFile,
-  removeFromIndex: vi.fn(async () => ({ removed: 0 })),
-}));
+setSearchIndex({ ...nullSearchIndex, reindexFile });
 
 let vault: string;
 let resolveProposalById: typeof import("../mastra/tools/resolve-proposal-core.js").resolveProposalById;

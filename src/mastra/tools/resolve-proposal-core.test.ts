@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,11 +7,8 @@ import matter from "gray-matter";
 import { createProposal, loadProposal } from "../../vault/proposalStore.js";
 import type { ProposalType } from "../../domain/proposal.js";
 
-// Vector index is out of scope; stub every rag entry the action cores touch.
-vi.mock("./rag.js", () => ({
-  reindexFile: vi.fn(async () => ({ added: 0 })),
-  removeFromIndex: vi.fn(async () => ({ removed: 0 })),
-}));
+// Vector index is out of scope; install a no-op one.
+setSearchIndex(nullSearchIndex);
 
 let vault: string;
 let resolveProposalById: typeof import("./resolve-proposal-core.js").resolveProposalById;

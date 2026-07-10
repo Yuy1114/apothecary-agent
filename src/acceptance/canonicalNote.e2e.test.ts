@@ -5,6 +5,7 @@
  * the maintenance-findings worklist (canonicalize → mark superseded → archive).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,7 +22,7 @@ import { syncSemanticsForPaths } from "../application/semantic/syncSemanticsFrom
 
 const reindexFile = vi.fn(async () => ({ added: 1 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
-vi.mock("../mastra/tools/rag.js", () => ({ reindexFile, removeFromIndex }));
+setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 const stubSummarize = (async (input: { path: string; title: string; contentHash: string }) => ({
   path: input.path,

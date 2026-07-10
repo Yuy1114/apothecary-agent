@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { removeFromIndex } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import {
@@ -89,7 +89,7 @@ export async function archiveVaultFileCore(
   // NOT index the archived copy (the archive subtree is excluded everywhere).
   let reindexed = false;
   if (from.endsWith(".md")) {
-    await removeFromIndex(from);
+    await searchIndex().removeFromIndex(from);
     reindexed = true;
   }
 

@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { reindexFile, removeFromIndex } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { isArchivedPath } from "../../vault/archive.js";
 import { moveToArchive } from "./archive-vault-file-core.js";
@@ -77,8 +77,8 @@ export async function mergeNotesCore(input: {
   }
 
   // 3. Keep the index consistent: canonical content changed, source is gone.
-  if (canonicalPath.endsWith(".md")) await reindexFile(canonicalPath);
-  if (sourcePath.endsWith(".md")) await removeFromIndex(sourcePath);
+  if (canonicalPath.endsWith(".md")) await searchIndex().reindexFile(canonicalPath);
+  if (sourcePath.endsWith(".md")) await searchIndex().removeFromIndex(sourcePath);
 
   // 4. One audit record linking source, canonical and the archived copy.
   await recordOperation({

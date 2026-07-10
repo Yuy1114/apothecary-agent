@@ -8,6 +8,7 @@
  * reindex (mocked, asserted called) and the summarizer (deterministic stub).
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { mkdtemp, rm, mkdir, writeFile, readFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,7 +25,7 @@ import { syncSemanticsForPaths } from "../application/semantic/syncSemanticsFrom
 // Vector index is external — assert it is kept in sync, don't run it.
 const reindexFile = vi.fn(async () => ({ added: 1 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
-vi.mock("../mastra/tools/rag.js", () => ({ reindexFile, removeFromIndex }));
+setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 // Deterministic stand-in for the LLM summarizer used by the post-apply refresh.
 const stubSummarize = (async (input: { path: string; title: string; contentHash: string }) => ({

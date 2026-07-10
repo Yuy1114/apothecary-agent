@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { reindexFile, removeFromIndex } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import { updateReadmesForMove } from "./readme-index-core.js";
@@ -51,11 +51,11 @@ export async function moveVaultFileCore(from: string, to: string): Promise<MoveV
   let reindexed = false;
   try {
     if (from.endsWith(".md")) {
-      await removeFromIndex(from);
+      await searchIndex().removeFromIndex(from);
       reindexed = true;
     }
     if (to.endsWith(".md")) {
-      await reindexFile(to);
+      await searchIndex().reindexFile(to);
       reindexed = true;
     }
   } catch (error) {

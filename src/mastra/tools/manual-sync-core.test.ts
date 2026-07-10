@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 // Vector index out of scope; stub it. The change ledger is real (temp libsql).
 const reindexFile = vi.fn(async () => ({ added: 0 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
-vi.mock("./rag.js", () => ({ reindexFile, removeFromIndex }));
+setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 // Import after the mocks exist (the factory runs on first import of rag.js).
 let manualSync: typeof import("./manual-sync-core.js").manualSync;

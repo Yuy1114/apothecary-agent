@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { reindexFile } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { moveVaultFileCore } from "./move-vault-file-core.js";
 import { archiveVaultFileCore } from "./archive-vault-file-core.js";
 import { mergeNotesCore } from "./merge-notes-core.js";
@@ -57,7 +57,7 @@ async function executeProposal(
       const existed = await fs.access(abs).then(() => true, () => false);
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, suggestedContent, "utf8");
-      if (filePath.endsWith(".md")) await reindexFile(filePath);
+      if (filePath.endsWith(".md")) await searchIndex().reindexFile(filePath);
       if (!existed) await updateReadmeForCreatedNote(VAULT_PATH, filePath);
       await recordOperation({
         type: "edit",
@@ -135,7 +135,7 @@ async function executeProposal(
       }
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, content, "utf8");
-      if (targetPath.endsWith(".md")) await reindexFile(targetPath);
+      if (targetPath.endsWith(".md")) await searchIndex().reindexFile(targetPath);
       await updateReadmeForCreatedNote(VAULT_PATH, targetPath);
       await recordOperation({
         type: "promote",
@@ -161,7 +161,7 @@ async function executeProposal(
       const canonicalExisted = await fs.access(canonicalAbs).then(() => true, () => false);
       await fs.mkdir(path.dirname(canonicalAbs), { recursive: true });
       await fs.writeFile(canonicalAbs, content, "utf8");
-      if (canonicalPath.endsWith(".md")) await reindexFile(canonicalPath);
+      if (canonicalPath.endsWith(".md")) await searchIndex().reindexFile(canonicalPath);
       if (!canonicalExisted) await updateReadmeForCreatedNote(VAULT_PATH, canonicalPath);
 
       // Stamp a directed `superseded_by` link into each source that still exists
@@ -178,7 +178,7 @@ async function executeProposal(
           continue;
         }
         await fs.writeFile(sourceAbs, setFrontmatterKey(sourceContent, "superseded_by", canonicalPath), "utf8");
-        if (source.endsWith(".md")) await reindexFile(source);
+        if (source.endsWith(".md")) await searchIndex().reindexFile(source);
         stamped.push(source);
       }
 

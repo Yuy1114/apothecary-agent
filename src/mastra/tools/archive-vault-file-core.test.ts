@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import path from "node:path";
 // The vector index is out of scope here; stub it so the core can run without a
 // configured embedding store. recordOperation is a safe no-op before ledger init.
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
-vi.mock("./rag.js", () => ({ removeFromIndex }));
+setSearchIndex({ ...nullSearchIndex, removeFromIndex });
 
 let vault: string;
 let archiveVaultFileCore: typeof import("./archive-vault-file-core.js").archiveVaultFileCore;

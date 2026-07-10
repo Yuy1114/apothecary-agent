@@ -5,6 +5,8 @@ import { PinoLogger } from "@mastra/loggers";
 import { apothecaryAgent } from "../mastra/agents/apothecary-agent.js";
 import { organizer } from "../mastra/agents/organizer.js";
 import { setVectorStore } from "../mastra/tools/rag.js";
+import { ragSearchIndex } from "../mastra/adapters/ragSearchIndex.js";
+import { setSearchIndex } from "../application/ports/searchIndex.js";
 import { fileChangedWorkflow, fileDeletedWorkflow } from "../mastra/workflows/sync-workflow.js";
 import { startVaultWatcher } from "../mastra/workflows/sync-watcher.js";
 import { workspace } from "../mastra/workspaces.js";
@@ -22,6 +24,7 @@ export function createDesktopRuntime(projectRoot: string) {
     url: apothecaryDb.vectors(),
   });
   setVectorStore(vectorStore);
+  setSearchIndex(ragSearchIndex);
 
   const runtime = new Mastra({
     // The organizer is registered top-level (not only as apothecary's subagent)

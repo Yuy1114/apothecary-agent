@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { setSearchIndex, nullSearchIndex } from "../../application/ports/searchIndex.js";
 import { mkdtemp, rm, writeFile, mkdir, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import path from "node:path";
 // Vector index is out of scope; stub it. recordOperation is a no-op before init.
 const reindexFile = vi.fn(async () => ({ added: 0 }));
 const removeFromIndex = vi.fn(async () => ({ removed: 0 }));
-vi.mock("./rag.js", () => ({ reindexFile, removeFromIndex }));
+setSearchIndex({ ...nullSearchIndex, reindexFile, removeFromIndex });
 
 let vault: string;
 let mergeNotesCore: typeof import("./merge-notes-core.js").mergeNotesCore;

@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { moveVaultFileCore } from "./move-vault-file-core.js";
 import { archiveVaultFileCore } from "./archive-vault-file-core.js";
-import { reindexFile } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { addFrontmatterTags } from "../../vault/frontmatter.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
@@ -50,7 +50,7 @@ async function applyTags(target: string, tags: string[]): Promise<void> {
     const next = addFrontmatterTags(content, tags);
     if (next !== content) {
       await fs.writeFile(abs, next, "utf8");
-      await reindexFile(target);
+      await searchIndex().reindexFile(target);
     }
   } catch {
     // Tagging is a nice-to-have; never fail a completed move over it.
@@ -105,7 +105,7 @@ async function moveDirectoryInto(
         await fs.rename(abs, target);
         // Best-effort index sync: a slow/unreachable embedding endpoint must not
         // hang or fail the completed move (see moveVaultFileCore).
-        if (relTarget.endsWith(".md")) await reindexFile(relTarget).catch(() => undefined);
+        if (relTarget.endsWith(".md")) await searchIndex().reindexFile(relTarget).catch(() => undefined);
       }
     }
   };

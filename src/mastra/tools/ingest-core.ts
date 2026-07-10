@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { reindexFile } from "./rag.js";
+import { searchIndex } from "../../application/ports/searchIndex.js";
 import { loadStructure, classifyWithStructure } from "./vault-structure.js";
 import type { VaultStructure } from "../../domain/vaultStructure.js";
 import { addReadmeEntry } from "../../vault/readmeIndex.js";
@@ -98,7 +98,7 @@ export async function writeVaultNote(params: {
     await fs.writeFile(readmePath, nextReadme, "utf8");
   }
 
-  await reindexFile(relativePath);
+  await searchIndex().reindexFile(relativePath);
   // Fold both writes into the sync baseline (and release the marks) so neither
   // the watcher nor a later manual sync surfaces this note/README as external.
   await commitSelfWrite(VAULT_PATH, readmeUpdated ? [relativePath, relativeReadme] : [relativePath]);
