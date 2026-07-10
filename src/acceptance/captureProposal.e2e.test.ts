@@ -8,6 +8,7 @@
  * reindex (mocked, asserted called) and the summarizer (deterministic stub).
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { SummarizeFile } from "../application/ports/fileSummarizer.js";
 import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { mkdtemp, rm, mkdir, writeFile, readFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -37,7 +38,7 @@ const stubSummarize = (async (input: { path: string; title: string; contentHash:
   topics: ["Redis"],
   concepts: ["复盘"],
   summary: "s",
-})) as unknown as typeof import("../application/semantic/generateFileSummary.js").generateFileSummary;
+})) as unknown as SummarizeFile;
 
 let vault: string;
 let resolveProposalById: typeof import("../application/proposals/resolveProposal.js").resolveProposalById;

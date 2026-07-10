@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { generateKnowledgeView } from "../../application/views/generateKnowledgeView.js";
+import { mastraKnowledgeViewWriter } from "../adapters/mastraKnowledgeViewWriter.js";
 import { renderKnowledgeViewMarkdown } from "../../reports/renderKnowledgeViewMarkdown.js";
 
 function slugify(text: string): string {
@@ -33,7 +34,7 @@ export const generateKnowledgeViewTool = createTool({
     sourceFiles: z.array(z.string()),
   }),
   execute: async ({ topic }) => {
-    const view = await generateKnowledgeView(topic);
+    const view = await generateKnowledgeView(topic, mastraKnowledgeViewWriter);
     const artifacts = await ensureAgentArtifacts();
     const viewPath = path.join(artifacts.viewsDir, `${slugify(topic)}.md`);
     await fs.writeFile(viewPath, renderKnowledgeViewMarkdown(view), "utf8");

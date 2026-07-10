@@ -1,14 +1,10 @@
-import { semanticSummarizer } from "../../mastra/agents/transformers/semantic-summarizer.js";
+import { semanticSummarizer } from "../agents/transformers/semantic-summarizer.js";
 import { FileSummaryDraftSchema, type FileSummary } from "../../domain/semantic.js";
+import type { SummarizeFile } from "../../application/ports/fileSummarizer.js";
 
 const MAX_CONTENT_CHARS = 6000;
 
-export async function generateFileSummary(input: {
-  path: string;
-  title: string;
-  content: string;
-  contentHash: string;
-}): Promise<FileSummary> {
+export const generateFileSummary: SummarizeFile = async (input) => {
   const prompt = [
     `File: ${input.path}`,
     input.title ? `Title: ${input.title}` : "",
@@ -44,4 +40,4 @@ export async function generateFileSummary(input: {
     concepts: draft.concepts,
     summary: draft.summary,
   };
-}
+};

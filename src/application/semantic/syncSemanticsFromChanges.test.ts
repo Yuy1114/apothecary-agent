@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SummarizeFile } from "../ports/fileSummarizer.js";
 import { mkdtemp, rm, writeFile, mkdir, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -35,7 +36,7 @@ function pending(overrides: Partial<PendingChange> & { path: string }): PendingC
 }
 
 /** Deterministic stub standing in for the LLM summarizer. */
-function stubSummarize(): typeof import("./generateFileSummary.js").generateFileSummary {
+function stubSummarize(): SummarizeFile {
   return vi.fn(async (input) => ({
     path: input.path,
     contentHash: input.contentHash,
@@ -45,7 +46,7 @@ function stubSummarize(): typeof import("./generateFileSummary.js").generateFile
     topics: ["topic-a"],
     concepts: ["concept-a"],
     summary: `summary:${input.path}`,
-  })) as unknown as typeof import("./generateFileSummary.js").generateFileSummary;
+  })) as unknown as SummarizeFile;
 }
 
 describe("syncSemanticsFromChanges", () => {
@@ -149,7 +150,7 @@ describe("syncSemanticsFromChanges", () => {
         concepts: [],
         summary: "s",
       } satisfies FileSummary;
-    }) as unknown as typeof import("./generateFileSummary.js").generateFileSummary;
+    }) as unknown as SummarizeFile;
 
     const report = await syncSemanticsFromChanges(
       { vaultPath: vault },

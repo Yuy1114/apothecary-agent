@@ -9,8 +9,8 @@ import {
   KnowledgeTopicCategorySchema,
   TopicFileSchema,
 } from "../../domain/knowledgeMap.js";
-import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from "./reviewerModel.js";
-import { reviewModel } from "../../mastra/agents/transformers/review-model.js";
+import type { KnowledgeMapInput, MaintenanceReviewInput, ReviewerModel } from "../../application/review/reviewerModel.js";
+import { reviewModel } from "../agents/transformers/review-model.js";
 import { createId } from "../../utils/ids.js";
 
 const MAP_SYSTEM = [

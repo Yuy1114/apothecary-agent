@@ -5,7 +5,7 @@ import path from "node:path";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { loadSummaries, loadGraph, loadDuplicateReport } from "../../vault/semanticStore.js";
-import { generateKnowledgeProfile } from "../../application/profile/generateKnowledgeProfile.js";
+import { generateKnowledgeProfile } from "../adapters/mastraKnowledgeProfileWriter.js";
 import { renderKnowledgeProfileMarkdown } from "../../reports/renderKnowledgeProfileMarkdown.js";
 import { clearProfileDirty } from "../../vault/profileState.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";

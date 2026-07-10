@@ -11,7 +11,7 @@ import {
 } from "../../vault/semanticStore.js";
 import { buildSemanticGraph } from "../../domain/semanticGraph.js";
 import { refreshRelations } from "./refreshRelations.js";
-import { generateFileSummary } from "./generateFileSummary.js";
+import { fileSummarizer, type SummarizeFile } from "../ports/fileSummarizer.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
 import { planSemanticSync, type ChangedFileState } from "./planSemanticSync.js";
 import type { FileSummary } from "../../domain/semantic.js";
@@ -48,8 +48,11 @@ const EMPTY_REPORT: SemanticSyncReport = {
 /** Injection seam so the impure summary generator can be stubbed in tests. */
 type Deps = {
   listPendingChanges: () => Promise<PendingChange[]>;
-  summarize: typeof generateFileSummary;
+  summarize: SummarizeFile;
 };
+
+/** Resolved per call so the composition root can install the summarizer late. */
+const installedSummarizer: SummarizeFile = (input) => fileSummarizer()(input);
 
 function isMarkdownPath(p: string): boolean {
   return /\.(md|markdown)$/i.test(p);
@@ -93,7 +96,7 @@ async function gatherFile(
  */
 export async function syncSemanticsFromChanges(
   input: { vaultPath: string },
-  deps: Deps = { listPendingChanges, summarize: generateFileSummary },
+  deps: Deps = { listPendingChanges, summarize: installedSummarizer },
 ): Promise<SemanticSyncReport> {
   const changes = await deps.listPendingChanges();
   if (changes.length === 0) return EMPTY_REPORT;
@@ -111,7 +114,7 @@ export async function syncSemanticsFromChanges(
  */
 export async function syncSemanticsForPaths(
   input: { vaultPath: string; paths: string[] },
-  deps: { summarize: typeof generateFileSummary } = { summarize: generateFileSummary },
+  deps: { summarize: SummarizeFile } = { summarize: installedSummarizer },
 ): Promise<SemanticSyncReport> {
   // Dedupe (the ledger already dedupes, but direct callers may not).
   const paths = [...new Set(input.paths)];

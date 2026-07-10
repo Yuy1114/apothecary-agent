@@ -1,4 +1,4 @@
-import { duplicateClassifier } from "../../mastra/agents/transformers/duplicate-classifier.js";
+import { duplicateClassifier } from "../agents/transformers/duplicate-classifier.js";
 import { ClassificationDraftSchema, type ClassificationDraft } from "../../domain/duplicateDetection.js";
 import type { FileSummaries } from "../../domain/semantic.js";
 

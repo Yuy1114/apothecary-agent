@@ -8,7 +8,7 @@ import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { scanVault } from "../../vault/scanner.js";
 import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { buildKnowledgeMapContext } from "../../application/review/buildReviewerContext.js";
-import { createReviewerModel } from "../../application/review/createReviewerModel.js";
+import { createReviewerModel } from "../adapters/mastraReviewerModel.js";
 import { renderKnowledgeMapMarkdown } from "../../reports/renderKnowledgeMapMarkdown.js";
 
 // ── Steps ──

@@ -15,7 +15,7 @@ import {
 } from "../../vault/semanticStore.js";
 import { buildSemanticGraph } from "../../domain/semanticGraph.js";
 import { refreshRelations } from "../../application/semantic/refreshRelations.js";
-import { generateFileSummary } from "../../application/semantic/generateFileSummary.js";
+import { generateFileSummary } from "../adapters/mastraFileSummarizer.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 

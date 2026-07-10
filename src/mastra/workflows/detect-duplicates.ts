@@ -10,7 +10,7 @@ import {
   type DuplicateCluster,
   type DuplicateReport,
 } from "../../domain/duplicateDetection.js";
-import { classifyDuplicate } from "../../application/duplicates/classifyDuplicate.js";
+import { classifyDuplicate } from "../adapters/mastraDuplicateClassifier.js";
 import { refreshRelations } from "../../application/semantic/refreshRelations.js";
 import { renderDuplicateReportMarkdown } from "../../reports/renderDuplicateReportMarkdown.js";
 import { mapWithConcurrency, withTimeout } from "../../utils/concurrency.js";

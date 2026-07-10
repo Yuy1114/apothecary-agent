@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SummarizeFile } from "../application/ports/fileSummarizer.js";
 import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,7 +22,7 @@ const summarize = (async (input: { path: string; title: string; contentHash: str
   topics: ["sync"],
   concepts: ["change-awareness"],
   summary: "s",
-})) as unknown as typeof import("../application/semantic/generateFileSummary.js").generateFileSummary;
+})) as unknown as SummarizeFile;
 
 let vault: string;
 let manualSync: typeof import("../application/sync/manualSync.js").manualSync;

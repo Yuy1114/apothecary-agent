@@ -8,7 +8,7 @@ import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { scanVault } from "../../vault/scanner.js";
 import { ensureAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { buildMaintenanceReviewContext } from "../../application/review/buildReviewerContext.js";
-import { createReviewerModel } from "../../application/review/createReviewerModel.js";
+import { createReviewerModel } from "../adapters/mastraReviewerModel.js";
 import { normalizeMaintenanceReview } from "../../application/review/normalizeMaintenanceReview.js";
 import { renderMaintenanceReviewMarkdown } from "../../reports/renderMaintenanceReviewMarkdown.js";
 import { timestampForFile } from "../../utils/time.js";

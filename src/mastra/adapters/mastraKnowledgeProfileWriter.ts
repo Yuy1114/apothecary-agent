@@ -1,4 +1,4 @@
-import { profileWriter } from "../../mastra/agents/transformers/profile-writer.js";
+import { profileWriter } from "../agents/transformers/profile-writer.js";
 import {
   ProfileNarrativeSchema,
   buildProfileStats,

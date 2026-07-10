@@ -7,6 +7,8 @@ import { organizer } from "../mastra/agents/organizer.js";
 import { setVectorStore } from "../mastra/tools/rag.js";
 import { ragSearchIndex } from "../mastra/adapters/ragSearchIndex.js";
 import { setSearchIndex } from "../application/ports/searchIndex.js";
+import { generateFileSummary } from "../mastra/adapters/mastraFileSummarizer.js";
+import { setFileSummarizer } from "../application/ports/fileSummarizer.js";
 import { fileChangedWorkflow, fileDeletedWorkflow } from "../mastra/workflows/sync-workflow.js";
 import { startVaultWatcher } from "../mastra/workflows/sync-watcher.js";
 import { workspace } from "../mastra/workspaces.js";
@@ -25,6 +27,7 @@ export function createDesktopRuntime(projectRoot: string) {
   });
   setVectorStore(vectorStore);
   setSearchIndex(ragSearchIndex);
+  setFileSummarizer(generateFileSummary);
 
   const runtime = new Mastra({
     // The organizer is registered top-level (not only as apothecary's subagent)

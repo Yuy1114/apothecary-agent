@@ -4,6 +4,7 @@
  * semantic layer and the operation ledger consistent.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SummarizeFile } from "../application/ports/fileSummarizer.js";
 import { setSearchIndex, nullSearchIndex } from "../application/ports/searchIndex.js";
 import { mkdtemp, rm, mkdir, writeFile, readFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -30,7 +31,7 @@ const stubSummarize = (async (input: { path: string; title: string; contentHash:
   topics: ["t"],
   concepts: ["c"],
   summary: "s",
-})) as unknown as typeof import("../application/semantic/generateFileSummary.js").generateFileSummary;
+})) as unknown as SummarizeFile;
 
 const postApplyRefresh = (vaultPath: string, paths: string[]) =>
   syncSemanticsForPaths({ vaultPath, paths }, { summarize: stubSummarize });
