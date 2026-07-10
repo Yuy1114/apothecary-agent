@@ -23,6 +23,31 @@ describe("desktop connection diagnostics", () => {
     expect(JSON.stringify(result)).not.toContain("secret");
   });
 
+  it("probes the embedding service via POST /embeddings, not the non-authenticating /models", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    await runConnectionDiagnostics(
+      {
+        DEEPSEEK_API_KEY: "a",
+        APOTHECARY_EMBEDDING_API_KEY: "b",
+        APOTHECARY_EMBEDDING_BASE_URL: "https://embed.example.com/v1",
+        APOTHECARY_EMBEDDING_MODEL: "text-embedding-test",
+      },
+      fetchImpl as typeof fetch,
+    );
+
+    const embeddingCall = fetchImpl.mock.calls.find(([url]) => String(url).includes("embed.example.com"));
+    expect(embeddingCall).toBeDefined();
+    const [url, init] = embeddingCall as [string, RequestInit];
+    expect(url).toBe("https://embed.example.com/v1/embeddings");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(String(init.body));
+    expect(body.model).toBe("text-embedding-test");
+    expect(String(body.input).length).toBeLessThanOrEqual(8);
+
+    const modelCall = fetchImpl.mock.calls.find(([u]) => String(u).includes("api.deepseek.com"));
+    expect(String((modelCall as [string, RequestInit])[0])).toBe("https://api.deepseek.com/models");
+  });
+
   it("distinguishes authentication failures from service failures", async () => {
     const fetchImpl = vi
       .fn()

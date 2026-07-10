@@ -16,8 +16,24 @@ export type ServiceDiagnostic = {
 
 type FetchLike = typeof fetch;
 
-function modelsUrl(baseURL: string): string {
-  return `${baseURL.replace(/\/$/, "")}/models`;
+type ProbeRequest = { url: string; method: "GET" | "POST"; body?: string };
+
+function joinPath(baseURL: string, path: string): string {
+  return `${baseURL.replace(/\/$/, "")}${path}`;
+}
+
+function modelsProbe(baseURL: string): ProbeRequest {
+  return { url: joinPath(baseURL, "/models"), method: "GET" };
+}
+
+// aihubmix 的 GET /models 对任意 key 都返回 200，只有 /embeddings 真正鉴权，
+// 所以 embedding 检测必须花一次单 token 的真实调用。
+function embeddingsProbe(baseURL: string, model: string): ProbeRequest {
+  return {
+    url: joinPath(baseURL, "/embeddings"),
+    method: "POST",
+    body: JSON.stringify({ model, input: "ping" }),
+  };
 }
 
 function safeHost(baseURL: string): string {
@@ -33,6 +49,7 @@ async function diagnoseService(input: {
   model: string;
   baseURL: string;
   apiKey?: string;
+  probe: ProbeRequest;
   fetchImpl: FetchLike;
 }): Promise<ServiceDiagnostic> {
   const base = {
@@ -46,9 +63,13 @@ async function diagnoseService(input: {
   }
 
   try {
-    const response = await input.fetchImpl(modelsUrl(input.baseURL), {
-      method: "GET",
-      headers: { Authorization: `Bearer ${input.apiKey}` },
+    const response = await input.fetchImpl(input.probe.url, {
+      method: input.probe.method,
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        ...(input.probe.body ? { "content-type": "application/json" } : {}),
+      },
+      body: input.probe.body,
       signal: AbortSignal.timeout(6_000),
     });
     if (response.ok) return { ...base, status: "connected", detail: "连接和鉴权正常" };
@@ -66,19 +87,24 @@ export async function runConnectionDiagnostics(
   env: NodeJS.ProcessEnv = process.env,
   fetchImpl: FetchLike = fetch,
 ): Promise<{ checkedAt: string; model: ServiceDiagnostic; embedding: ServiceDiagnostic }> {
+  const modelBaseURL = env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
+  const embeddingBaseURL = env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1";
+  const embeddingModel = env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small";
   const [model, embedding] = await Promise.all([
     diagnoseService({
       name: "DeepSeek",
       model: "deepseek-v4-flash",
-      baseURL: env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+      baseURL: modelBaseURL,
       apiKey: env.DEEPSEEK_API_KEY,
+      probe: modelsProbe(modelBaseURL),
       fetchImpl,
     }),
     diagnoseService({
       name: "Embedding",
-      model: env.APOTHECARY_EMBEDDING_MODEL ?? "text-embedding-3-small",
-      baseURL: env.APOTHECARY_EMBEDDING_BASE_URL ?? "https://api.aihubmix.com/v1",
+      model: embeddingModel,
+      baseURL: embeddingBaseURL,
       apiKey: env.APOTHECARY_EMBEDDING_API_KEY ?? env.OPENAI_API_KEY,
+      probe: embeddingsProbe(embeddingBaseURL, embeddingModel),
       fetchImpl,
     }),
   ]);
