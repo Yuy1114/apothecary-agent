@@ -1,4 +1,4 @@
-import type { VaultStructure } from "../mastra/tools/vault-structure.js";
+import type { VaultStructure } from "./vaultStructure.js";
 
 export type ReorgMove = { from: string; to: string };
 

@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { scanVault } from "../../vault/scanner.js";
-import { VAULT_IGNORE_GLOBS } from "../../vault/ignore.js";
+import { VAULT_IGNORE_GLOBS } from "../../domain/vaultPolicy.js";
 import { VaultScanSchema } from "../../domain/vault.js";
 
 export const scanVaultTool = createTool({

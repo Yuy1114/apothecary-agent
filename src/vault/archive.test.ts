@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { ARCHIVE_DIR } from "../domain/vaultPolicy.js";
 import {
-  ARCHIVE_DIR,
   isArchivedPath,
   archiveTargetPath,
   withCollisionSuffix,

@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { reindexFile } from "./rag.js";
-import { loadStructure, classifyWithStructure, type VaultStructure } from "./vault-structure.js";
+import { loadStructure, classifyWithStructure } from "./vault-structure.js";
+import type { VaultStructure } from "../../domain/vaultStructure.js";
 import { addReadmeEntry } from "../../vault/readmeIndex.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { recordOperation, type OperationType } from "../../vault/operationLedger.js";

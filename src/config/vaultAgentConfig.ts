@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { parse, stringify } from "yaml";
 import { ApothecaryConfigSchema, type ApothecaryConfig } from "../domain/config.js";
-import { VAULT_IGNORE_GLOBS } from "../vault/ignore.js";
+import { VAULT_IGNORE_GLOBS } from "../domain/vaultPolicy.js";
 import type { AgentArtifacts } from "../artifacts/agentArtifacts.types.js";
 
 export const defaultVaultAgentConfig: ApothecaryConfig = {

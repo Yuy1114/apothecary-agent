@@ -3,6 +3,7 @@ import path from "node:path";
 import { parse, parseDocument } from "yaml";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
+import type { VaultStructure } from "../../domain/vaultStructure.js";
 
 // Legacy directory-classification config. The skeleton redesign supersedes this
 // with charter-config routing; kept resilient (returns empty when absent) and
@@ -10,18 +11,6 @@ import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 function structureYamlPath(): string {
   return path.join(getAgentArtifacts().rootPath, "structure.yaml");
 }
-
-export type DirectoryDef = {
-  description: string;
-  keywords?: string[];
-};
-
-export type VaultStructure = {
-  directories: Record<string, DirectoryDef>;
-  // Source-prefix → canonical-prefix. Used to canonicalize alias directories
-  // (e.g. "notes/programming/dsa/" → "notes/programming/Data Structures & Algorithms/").
-  aliases: Record<string, string>;
-};
 
 let cache: VaultStructure | null = null;
 

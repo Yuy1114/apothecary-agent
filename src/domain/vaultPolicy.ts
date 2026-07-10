@@ -1,4 +1,11 @@
-import { ARCHIVE_DIR } from "./archive.js";
+/**
+ * Vault-relative directory that holds archived notes. Archiving is a
+ * non-destructive alternative to deletion: the file still exists on disk (users
+ * can browse it) but it leaves the active knowledge picture — excluded from
+ * scans/semantic passes (see VAULT_IGNORE_GLOBS) and removed from the search
+ * index. Distinct from `.trash/`, which implies eventual deletion.
+ */
+export const ARCHIVE_DIR = "archive";
 
 /**
  * Vault subtrees that are never part of the active knowledge picture and should

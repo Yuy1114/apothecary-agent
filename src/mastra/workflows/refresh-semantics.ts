@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 import { VaultScanSchema } from "../../domain/vault.js";
 import { resolveExistingDirectory } from "../../safety/pathSafety.js";
 import { scanVault } from "../../vault/scanner.js";
-import { VAULT_IGNORE_GLOBS } from "../../vault/ignore.js";
+import { VAULT_IGNORE_GLOBS } from "../../domain/vaultPolicy.js";
 import {
   loadSummaries,
   saveSummaries,

@@ -1,5 +1,5 @@
 import { scanVault } from "../../vault/scanner.js";
-import { VAULT_IGNORE_GLOBS } from "../../vault/ignore.js";
+import { VAULT_IGNORE_GLOBS } from "../../domain/vaultPolicy.js";
 import { reindexFile, removeFromIndex } from "./rag.js";
 import { enqueueChange } from "../../vault/changeLog.js";
 import {

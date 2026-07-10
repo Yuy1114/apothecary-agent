@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveIngestDir } from "./ingest-core.js";
-import type { VaultStructure } from "./vault-structure.js";
+import type { VaultStructure } from "../../domain/vaultStructure.js";
 
 const structure: VaultStructure = {
   directories: {

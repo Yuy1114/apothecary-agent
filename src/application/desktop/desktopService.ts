@@ -6,7 +6,7 @@ import { listProposals, loadProposal } from "../../vault/proposalStore.js";
 import { resolveProposalById } from "../../mastra/tools/resolve-proposal-core.js";
 import { manualSync } from "../../mastra/tools/manual-sync-core.js";
 import { scanVault } from "../../vault/scanner.js";
-import { VAULT_IGNORE_GLOBS } from "../../vault/ignore.js";
+import { VAULT_IGNORE_GLOBS } from "../../domain/vaultPolicy.js";
 import { readVaultText } from "../../mastra/tools/read-vault-text.js";
 import { getAgentArtifacts } from "../../artifacts/agentArtifacts.js";
 import { KnowledgeProfileSchema } from "../../domain/knowledgeProfile.js";

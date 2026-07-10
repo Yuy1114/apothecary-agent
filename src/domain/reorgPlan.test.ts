@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planReorg } from "./reorgPlan.js";
-import type { VaultStructure } from "../mastra/tools/vault-structure.js";
+import type { VaultStructure } from "./vaultStructure.js";
 
 const structure: VaultStructure = {
   directories: {

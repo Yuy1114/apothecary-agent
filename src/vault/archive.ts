@@ -1,13 +1,5 @@
 import path from "node:path";
-
-/**
- * Vault-relative directory that holds archived notes. Archiving is a
- * non-destructive alternative to deletion: the file still exists on disk (users
- * can browse it) but it leaves the active knowledge picture — excluded from
- * scans/semantic passes (see VAULT_IGNORE_GLOBS) and removed from the search
- * index. Distinct from `.trash/`, which implies eventual deletion.
- */
-export const ARCHIVE_DIR = "archive";
+import { ARCHIVE_DIR } from "../domain/vaultPolicy.js";
 
 /** Whether a vault-relative path already lives under the archive directory. */
 export function isArchivedPath(relPath: string): boolean {
