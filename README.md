@@ -56,15 +56,33 @@ Scattered concepts are surfaced as **canonical candidates**; a `canonical_note` 
 
 ## Layout
 
+Dependencies point down, and nothing points back up. `pnpm run check` fails if they do.
+
 ```
 src/
   domain/        pure logic + schemas (proposals, relations, candidates, diff, …)
-  application/   orchestration without agent/tool coupling (semantic, profile, maintenance, …)
+                   imports nothing but zod
+  utils/ safety/ observability/ protocol/
+                 leaf helpers (ids, concurrency, path-safety guard, logger)
+  config/        vault paths, .agent/config.yaml, db locations
   vault/         filesystem + stores (scanner, semanticStore, proposalStore, ledgers, snapshot, …)
+  artifacts/ reports/
+                 .agent/ artifact paths; markdown renderers
+  application/   use cases (intake, notes, sync, proposals, semantic, views, …)
+                   knows nothing about Mastra, LLMs or Electron
+    ports/         interfaces the infrastructure must implement
   mastra/        agents, tools, workflows, processors
-  safety/        path-safety guard
+    adapters/      the implementations of application/ports/
+  desktop/       Electron shell; one of the two composition roots
   acceptance/    end-to-end acceptance tests
 ```
+
+A use case that needs an LLM or the vector index declares a port in
+`application/ports/`; `mastra/adapters/` implements it; the composition roots
+(`mastra/index.ts` for Studio, `desktop/runtime.ts` for the app) wire them
+together. See [`docs/architecture.md`](docs/architecture.md) for the layer
+contract, when to inject a port explicitly versus through the registry, and how
+the boundaries are enforced.
 
 The agent's understanding lives under `<vault>/.agent/` (`semantic/`, `profile/`, `views/`, `proposals/`, `sync/`); it never leaks into your notes.
 
@@ -116,9 +134,10 @@ pnpm run dev     # Mastra Studio (agents, tools, workflows)
 ## Verifying
 
 ```bash
-pnpm run check   # tsc --noEmit
-pnpm run test    # vitest (watch)
-pnpm run ci      # check + build + vitest run
+pnpm run check        # tsc --noEmit, the renderer tsconfig, and the layer guard
+pnpm run check:layers # dependency-cruiser only
+pnpm run test         # vitest (watch)
+pnpm run ci           # check + build + vitest run
 ```
 
-Domain logic and stores are covered by unit tests; `src/acceptance/` holds an end-to-end test that drives a proposal from approval through the physical layer, README index, vector index, semantic layer and operation ledger, asserting they stay consistent. LLM boundaries (embeddings, summarizer) are stubbed so the suite is deterministic and runs without API keys.
+Domain logic and stores are covered by unit tests; `src/acceptance/` holds an end-to-end test that drives a proposal from approval through the physical layer, README index, vector index, semantic layer and operation ledger, asserting they stay consistent. LLM boundaries (embeddings, summarizer) and the vector index are reached through `application/ports/`, so tests install a fake with `setSearchIndex(...)` / `setFileSummarizer(...)` rather than mocking modules — the suite is deterministic and runs without API keys.

@@ -3,6 +3,44 @@
 延后处理的重构点。每条记录：现象/根因、目标设计、复用与丢弃、当前状态。
 新点子往上加，注明日期。
 
+> **分层已完成并有守卫（2026-07-10）**：`application ⇄ mastra`、`domain → mastra`、`config → vault` 三处循环/反向依赖已消除，`.dependency-cruiser.cjs` 在 `pnpm check` 里守着。契约见 [`architecture.md`](./architecture.md)。下面的条目不要再重新讨论分层本身。
+
+---
+
+## 6. `App.tsx` 上帝组件拆分
+
+**记录于 2026-07-10｜状态：延后（已开独立任务）**
+
+`src/desktop/ui/src/App.tsx` 有 1305 行，是全仓最大的文件（第二名 `src/mastra/tools/rag.ts` 460 行）。五个视图（Workspace / Vault / Runs / Knowledge / Settings）的渲染、状态、IPC 调用全挤在一个组件里。
+
+分层重构时**故意没碰**：它和后端的耦合问题一条都不共享，混进那个 diff 会让 review 不可能。`.dependency-cruiser.cjs` 目前把 `^src/desktop/ui` 整个排除在规则之外。
+
+方向：每个视图一个文件放 `views/`，IPC 调用收进一个 hook 或小 client 模块，共享展示组件进 `components/`。保持 `styles.css` 的设计 token 和 `src/desktop/contracts.ts` 的 IPC 契约不变——这是拆解，不是重设计。一次一个视图，逐个提交。
+
+---
+
+## 7. `ReviewerModel` 端口归位 + deterministic 实现的去留
+
+**记录于 2026-07-10｜状态：延后**
+
+两个瑕疵，同一处：
+
+- **端口放错了地方**：`ReviewerModel` 在 `src/application/review/reviewerModel.ts`，不在 `src/application/ports/`。它和 `reviewerContext.ts` 都只依赖 `domain/`，搬得动（搬完要同步 `ports-declare-nothing-concrete` 规则的白名单）。
+
+- **有个开关从没接上**：`DeterministicReviewerModel`（327 行，实现了 `ReviewerModel`）**除了自己的单测没有任何调用方**。`defaultVaultAgentConfig` 里有 `reviewer: { provider: "mastra", ... }`，看形状本该用来在「确定性 reviewer」和「LLM reviewer」之间切换，但 `createReviewerModel(_config?: unknown)` 直接忽略了这个参数（现在这个工厂在 `src/mastra/adapters/mastraReviewerModel.ts`）。
+
+要么把 `provider` 真正接上（让无 API key 时能跑确定性 review），要么承认它是死代码删掉。**先决定语义，再动代码**——327 行的确定性实现如果本意是离线兜底，那它是个特性而不是垃圾。
+
+---
+
+## 8. `moveVaultFile` 缺单元测试
+
+**记录于 2026-07-10｜状态：延后（已开独立任务）**
+
+`src/application/notes/moveVaultFile.ts` 是 application 层唯一没有测试的行为文件（其余没测的都是纯接口/类型文件）。它本来就没有；分层重构后变得很好测——索引访问已经走 `searchIndex()` 端口，不再需要 `vi.mock("rag.js")`。
+
+照 `archiveVaultFile.test.ts` / `mergeNotes.test.ts` 的写法：临时 vault + `setSearchIndex({ ...nullSearchIndex, reindexFile: vi.fn(), removeFromIndex: vi.fn() })`。至少覆盖：文件真的移动了、`removeFromIndex(from)` 与 `reindexFile(to)` 都以正确的 vault 相对路径被调用、README 经 `updateReadmesForMove` 重新指向、越界目标被路径守卫拒绝。
+
 ---
 
 ## 1. intake 分类：从「子 agent 逐文件工具循环」→「workflow + structuredOutput 批量分类」
@@ -68,7 +106,9 @@ intakeWorkflow:
 
 **记录于 2026-07-05｜状态：延后**
 
-骨架 realign 后，旧的 `.agent/structure.yaml` 关键词→目录路由已被「固定 PARA 骨架 + organizer 按内容分类」取代，`structure.yaml` 恒为空。但相关代码仍在：`vault-structure.ts`、`read-structure` 工具（已成孤儿）、`classifyWithStructure`、proposal 的 `structure` 类型、ingest 的 `resolveIngestDir`（capture 流仍在用 `loadStructure`，空则落 inbox）。应整体清一次，或把 capture 的分类也并入骨架逻辑。
+骨架 realign 后，旧的 `.agent/structure.yaml` 关键词→目录路由已被「固定 PARA 骨架 + organizer 按内容分类」取代，`structure.yaml` 恒为空。但相关代码仍在：`src/vault/structureStore.ts`（`loadStructure` / `classifyWithStructure` / `updateDirectoryKeywords`）、`src/mastra/tools/read-structure.ts`（已成孤儿）、proposal 的 `structure` 类型、`src/application/intake/ingestNote.ts` 的 `resolveIngestDir`（capture 流仍在用 `loadStructure`，空则落 inbox）。应整体清一次，或把 capture 的分类也并入骨架逻辑。
+
+> 路径更新于 2026-07-10：原 `src/mastra/tools/vault-structure.ts` 已迁至 `src/vault/structureStore.ts`（它没有任何 `@mastra` 依赖，是个 yaml store）。类型 `VaultStructure` / `DirectoryDef` 现在在 `src/domain/vaultStructure.ts`。
 
 ---
 
