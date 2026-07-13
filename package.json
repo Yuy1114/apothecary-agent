@@ -14,6 +14,7 @@
     "desktop:dev": "node scripts/desktop-dev.mjs",
     "desktop:dev:once": "pnpm run build && electron .",
     "desktop:pack": "pnpm run build && electron-builder --dir",
+    "desktop:install": "./scripts/desktop-install.sh",
     "desktop:dist": "pnpm run build && electron-builder"
   },
   "keywords": [
