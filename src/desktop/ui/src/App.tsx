@@ -991,62 +991,68 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
           {!selected ? (
             <Empty>选择一个文件查看内容</Empty>
           ) : (
-            <div className="preview-inner">
-              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <div className="doc-head">
-                  <div className="row"><span className="name">{selected.file.title || lastSegment(selected.file.path)}</span></div>
-                  <div className="meta">
-                    <span>{selected.data.mediaType}</span><span>·</span><span>{selected.data.lineCount} 行</span>
-                    {selected.file.path && <><span>·</span><span>{selected.file.path}</span></>}
+            <>
+              <div className="preview-toolbar">
+                <div className="preview-toolbar-inner">
+                  <div className="actions">
+                    <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>
+                    {/\.md$/i.test(selected.file.path ?? "") && (
+                      <button className="btn btn-secondary sm" onClick={() => setPolishOpen((open) => !open)}>润色笔记</button>
+                    )}
+                    {isChanges && (
+                      <>
+                        <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "processed")}>标记已处理</button>
+                        <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "dismissed")}>忽略</button>
+                      </>
+                    )}
                   </div>
-                </div>
-                {(() => {
-                  const isMd = /\.md$/i.test(selected.file.path ?? "") || selected.data.mediaType === "markdown";
-                  if (!isMd) return <div className="doc-body"><pre>{selected.data.content}</pre></div>;
-                  const { frontmatter, body } = splitFrontmatter(selected.data.content);
-                  return (
-                    <div className="doc-body">
-                      {frontmatter && <pre className="frontmatter">{frontmatter}</pre>}
-                      <Markdown text={body} />
+                  {polishOpen && /\.md$/i.test(selected.file.path ?? "") && (
+                    <div className="card" style={{ padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {POLISH_MODE_OPTIONS.map(({ key, label }) => (
+                        <button
+                          key={key}
+                          className={`btn sm ${polishModes.includes(key) ? "btn-primary" : "btn-ghost"}`}
+                          onClick={() => togglePolishMode(key)}
+                          disabled={polishing}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <span style={{ flex: 1 }} />
+                      <button
+                        className="btn btn-primary sm"
+                        disabled={polishing || polishModes.length === 0}
+                        onClick={() => void runPolish()}
+                      >
+                        {polishing ? "润色中…" : "生成润色提案"}
+                      </button>
                     </div>
-                  );
-                })()}
-              </div>
-              <div className="actions" style={{ marginTop: 14 }}>
-                <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>
-                {/\.md$/i.test(selected.file.path ?? "") && (
-                  <button className="btn btn-secondary sm" onClick={() => setPolishOpen((open) => !open)}>润色笔记</button>
-                )}
-                {isChanges && (
-                  <>
-                    <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "processed")}>标记已处理</button>
-                    <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "dismissed")}>忽略</button>
-                  </>
-                )}
-              </div>
-              {polishOpen && /\.md$/i.test(selected.file.path ?? "") && (
-                <div className="card" style={{ marginTop: 10, padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  {POLISH_MODE_OPTIONS.map(({ key, label }) => (
-                    <button
-                      key={key}
-                      className={`btn sm ${polishModes.includes(key) ? "btn-primary" : "btn-ghost"}`}
-                      onClick={() => togglePolishMode(key)}
-                      disabled={polishing}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                  <span style={{ flex: 1 }} />
-                  <button
-                    className="btn btn-primary sm"
-                    disabled={polishing || polishModes.length === 0}
-                    onClick={() => void runPolish()}
-                  >
-                    {polishing ? "润色中…" : "生成润色提案"}
-                  </button>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+              <div className="preview-inner">
+                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                  <div className="doc-head">
+                    <div className="row"><span className="name">{selected.file.title || lastSegment(selected.file.path)}</span></div>
+                    <div className="meta">
+                      <span>{selected.data.mediaType}</span><span>·</span><span>{selected.data.lineCount} 行</span>
+                      {selected.file.path && <><span>·</span><span>{selected.file.path}</span></>}
+                    </div>
+                  </div>
+                  {(() => {
+                    const isMd = /\.md$/i.test(selected.file.path ?? "") || selected.data.mediaType === "markdown";
+                    if (!isMd) return <div className="doc-body"><pre>{selected.data.content}</pre></div>;
+                    const { frontmatter, body } = splitFrontmatter(selected.data.content);
+                    return (
+                      <div className="doc-body">
+                        {frontmatter && <pre className="frontmatter">{frontmatter}</pre>}
+                        <Markdown text={body} />
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -1127,27 +1133,33 @@ function ReviewView({ refreshKey, onChat, notify }: { refreshKey: number; onChat
 
         <div className="preview-pane">
           {!selected ? <Empty>选择一条改动，查看 Agent 做了什么</Empty> : (
-            <div className="preview-inner">
-              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <div className="doc-head">
-                  <div className="row"><span className="badge success">{opLabel(selected.op)}</span><span className="name" style={{ fontSize: 14 }}>{opFromTo(selected.op) ? "文件移动 / 归档" : "文件改动"}</span></div>
-                  {opFromTo(selected.op) && (
-                    <div className="path-row">
-                      <span className="path-old">{opFromTo(selected.op)!.from}</span><span>→</span><span className="path-new">{opFromTo(selected.op)!.to}</span>
-                    </div>
-                  )}
-                  <div className="meta"><span>{selected.op.source}</span><span>·</span><span>{formatDate(selected.op.appliedAt)}</span>{selected.op.id && <><span>·</span><span>{selected.op.id.slice(0, 8)}</span></>}</div>
-                  {(selected.op.rationale || selected.op.detail) && <div className="hint" style={{ lineHeight: 1.6 }}>{selected.op.rationale || selected.op.detail}</div>}
+            <>
+              <div className="preview-toolbar">
+                <div className="preview-toolbar-inner">
+                  <div className="actions">
+                    <button className="btn btn-secondary sm" onClick={() => handToAgent(selected.op)}>{REVERSIBLE_OPS.has(selected.op.type) ? "让 Agent 撤销这次改动" : "让 Agent 复核"}</button>
+                    {opResultPath(selected.op) && <span className="hint mono">{opResultPath(selected.op)}</span>}
+                  </div>
                 </div>
-                {selected.content !== undefined
-                  ? <div className="doc-body"><pre>{selected.content}</pre></div>
-                  : <div className="doc-body"><p className="muted">目标不是文本文件（或文件已移动/删除），无法预览内容。</p></div>}
               </div>
-              <div className="actions" style={{ marginTop: 14 }}>
-                <button className="btn btn-secondary sm" onClick={() => handToAgent(selected.op)}>{REVERSIBLE_OPS.has(selected.op.type) ? "让 Agent 撤销这次改动" : "让 Agent 复核"}</button>
-                {opResultPath(selected.op) && <span className="hint mono">{opResultPath(selected.op)}</span>}
+              <div className="preview-inner">
+                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                  <div className="doc-head">
+                    <div className="row"><span className="badge success">{opLabel(selected.op)}</span><span className="name" style={{ fontSize: 14 }}>{opFromTo(selected.op) ? "文件移动 / 归档" : "文件改动"}</span></div>
+                    {opFromTo(selected.op) && (
+                      <div className="path-row">
+                        <span className="path-old">{opFromTo(selected.op)!.from}</span><span>→</span><span className="path-new">{opFromTo(selected.op)!.to}</span>
+                      </div>
+                    )}
+                    <div className="meta"><span>{selected.op.source}</span><span>·</span><span>{formatDate(selected.op.appliedAt)}</span>{selected.op.id && <><span>·</span><span>{selected.op.id.slice(0, 8)}</span></>}</div>
+                    {(selected.op.rationale || selected.op.detail) && <div className="hint" style={{ lineHeight: 1.6 }}>{selected.op.rationale || selected.op.detail}</div>}
+                  </div>
+                  {selected.content !== undefined
+                    ? <div className="doc-body"><pre>{selected.content}</pre></div>
+                    : <div className="doc-body"><p className="muted">目标不是文本文件（或文件已移动/删除），无法预览内容。</p></div>}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

@@ -356,6 +356,10 @@ a:hover { text-decoration: underline; }
 .file-group-head { padding: 10px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--fg-subtle); }
 .preview-pane { flex: 1; min-width: 0; overflow: auto; background: var(--bg-subtle); }
 .preview-inner { max-width: 720px; margin: 0 auto; padding: 28px 36px; }
+/* Per-file actions dock: pinned to the top of the scrolling preview so long
+   notes never require scrolling to reach the buttons. */
+.preview-toolbar { position: sticky; top: 0; z-index: 5; background: var(--bg-subtle); border-bottom: 1px solid var(--border); }
+.preview-toolbar-inner { max-width: 720px; margin: 0 auto; padding: 12px 36px; display: flex; flex-direction: column; gap: 10px; }
 .doc-head { padding: 18px 24px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .doc-head .row { display: flex; align-items: center; gap: 8px; }
 .doc-head .name { font-size: 16px; font-weight: 600; flex: 1; }
