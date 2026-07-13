@@ -23,7 +23,7 @@ const api = window.apothecary;
 
 const titles: Record<View, [string, string]> = {
   workspace: ["工作区 Workspace", "对话 · 提案 · 运行动态"],
-  vault: ["Vault 文件库", "Inbox 与变更 · 监听中"],
+  vault: ["Vault 文件库", "最近 · Inbox · 变更 · 监听中"],
   runs: ["审阅 Review", "检查并复核 Agent 对药柜的改动"],
   knowledge: ["知识体系 Knowledge", "主题域 · 关系 · 维护机会"],
   settings: ["设置 Settings", "本地配置 · 不会上传"],
@@ -286,6 +286,9 @@ function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: str
     <div className="side-panel">
       <div className="side-head"><span>Vault</span><span className="count mono">{tree ? `${tree.totalFiles} 篇` : "…"}</span></div>
       <div className="side-list">
+        <div className={`tree-row ${scope === "recent" ? "active" : ""}`} onClick={() => setScope("recent")}>
+          <Icon.runs /><span className="label">最近</span>
+        </div>
         <div className={`tree-row ${scope === "inbox" ? "active" : ""}`} onClick={() => setScope("inbox")}>
           <Icon.file /><span className="label">_inbox</span>
           {inboxCount != null && inboxCount > 0 && <span className="badge accent">{inboxCount} 待处理</span>}
@@ -824,20 +827,53 @@ function DiffModal({ proposal, onClose }: { proposal: any; onClose: () => void }
 }
 
 /* ═══ Vault ═══════════════════════════════════════════════════════════ */
-const scopeLabel = (scope: string) => (scope === "inbox" ? "_inbox" : scope === "changes" ? "变更" : scope);
+const scopeLabel = (scope: string) =>
+  scope === "inbox" ? "_inbox" : scope === "changes" ? "变更" : scope === "recent" ? "最近" : scope;
+
+/* ── 最近 (recent activity) helpers ──────────────────────────────────── */
+// Change-ledger kinds; operation kinds resolve through OP_LABELS at call time.
+const CHANGE_LABELS: Record<string, string> = { created: "新增", modified: "修改", deleted: "删除" };
+const activityKindLabel = (kind: string) => CHANGE_LABELS[kind] ?? OP_LABELS[kind] ?? kind;
+const activityBadgeClass = (item: RecentActivityItem) =>
+  item.kind === "created" ? "success" : item.kind === "modified" ? "warning" : item.kind === "deleted" ? "danger" : "accent";
+// Deleted files and directory-level ops have nothing to preview.
+const activityOpensFile = (item: RecentActivityItem) => item.kind !== "deleted" && item.kind !== "structure";
+
+const formatTime = (value: string) =>
+  new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+
+/** Bucket newest-first activity into local-calendar-day groups (今天/昨天/…). */
+const groupActivityByDay = (items: RecentActivityItem[]): Array<[string, RecentActivityItem[]]> => {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = startOfDay(new Date());
+  const groups: Array<[string, RecentActivityItem[]]> = [];
+  for (const item of items) {
+    const date = new Date(item.at);
+    const diffDays = Math.round((today - startOfDay(date)) / 86_400_000);
+    const label = diffDays === 0 ? "今天" : diffDays === 1 ? "昨天" :
+      date.toLocaleDateString("zh-CN", { month: "long", day: "numeric" });
+    const last = groups.at(-1);
+    if (last && last[0] === label) last[1].push(item);
+    else groups.push([label, [item]]);
+  }
+  return groups;
+};
 
 function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void; target?: { path: string; nonce: number } | null }) {
   const [files, setFiles] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
+  const [activity, setActivity] = useState<RecentActivityItem[]>([]);
   const [selected, setSelected] = useState<{ file: any; data: any } | null>(null);
   const isChanges = scope === "changes";
   const isInbox = scope === "inbox";
+  const isRecent = scope === "recent";
 
   const load = useCallback(() => {
     setSelected(null);
-    if (isChanges) { setFiles([]); void api.changes().then(setChanges).catch((e) => notify(e.message)); }
-    else { setChanges([]); const p = isInbox ? api.inbox() : api.vaultFolder(scope); void p.then(setFiles).catch((e) => notify(e.message)); }
-  }, [scope, isChanges, isInbox, notify]);
+    if (isRecent) { setFiles([]); setChanges([]); void api.recentActivity().then(setActivity).catch((e) => notify(e.message)); }
+    else if (isChanges) { setFiles([]); setActivity([]); void api.changes().then(setChanges).catch((e) => notify(e.message)); }
+    else { setChanges([]); setActivity([]); const p = isInbox ? api.inbox() : api.vaultFolder(scope); void p.then(setFiles).catch((e) => notify(e.message)); }
+  }, [scope, isChanges, isInbox, isRecent, notify]);
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const openFile = async (file: any, inboxScoped: boolean) => {
@@ -866,11 +902,38 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
             <span style={{ color: "var(--fg-subtle)" }}>Vault</span><span>/</span>
             <span style={{ color: "var(--fg)", fontWeight: 500 }}>{scopeLabel(scope)}</span>
             <span className="spacer" />
-            <span className="mono" style={{ fontSize: 11 }}>{isChanges ? `${changes.length} 项` : `${files.length} 项`}</span>
+            <span className="mono" style={{ fontSize: 11 }}>{isRecent ? `${activity.length} 项` : isChanges ? `${changes.length} 项` : `${files.length} 项`}</span>
             <button className="btn btn-ghost sm icon" title="手动同步" onClick={async () => { const r = await api.sync(); notify(`同步完成：+${r.created} ~${r.modified} -${r.deleted}`); load(); }}><Icon.refresh /></button>
           </div>
           <div className="file-list">
-            {isChanges ? (
+            {isRecent ? (
+              activity.length === 0 ? <Empty>近 7 天没有文件变动。</Empty> : groupActivityByDay(activity).map(([day, items]) => (
+                <div key={day}>
+                  <div className="file-group-head">{day}</div>
+                  {items.map((item) => {
+                    const clickable = activityOpensFile(item);
+                    return (
+                      <div
+                        key={item.id}
+                        className={`file-row ${selected?.file.path === item.path ? "active" : ""} ${clickable ? "" : "static"}`}
+                        onClick={() => clickable && openFile({ path: item.path }, item.path.replace(/\\/g, "/").startsWith("_inbox/"))}
+                      >
+                        <Icon.file />
+                        <div className="info">
+                          <div className="name">{lastSegment(item.path)}</div>
+                          <div className="sub">
+                            {item.actor === "agent" ? "Agent" : "手动"} · {formatTime(item.at)}
+                            {item.fromPath && ` · 从 ${item.fromPath}`}
+                            {item.detail && ` · ${item.detail}`}
+                          </div>
+                        </div>
+                        <span className={`badge ${activityBadgeClass(item)}`}>{activityKindLabel(item.kind)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            ) : isChanges ? (
               changes.length === 0 ? <Empty>没有待处理变更，药柜很安静。</Empty> : changes.map((change) => (
                 <div key={change.id} className={`file-row ${selected?.file.path === change.path ? "active" : ""}`} onClick={() => change.changeType !== "deleted" && openFile(change, false)}>
                   <Icon.file />

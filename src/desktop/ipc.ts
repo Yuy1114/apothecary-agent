@@ -12,6 +12,7 @@ import {
   VaultFolderInputSchema,
   ResolveProposalInputSchema,
   ProposalDiffInputSchema,
+  RecentActivityInputSchema,
   ResumeRunInputSchema,
   StartRunInputSchema,
   ThreadIdInputSchema,
@@ -98,6 +99,10 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   });
   ipcMain.handle(DesktopChannel.notes, () => service.notes());
   ipcMain.handle(DesktopChannel.operations, () => service.operations());
+  ipcMain.handle(DesktopChannel.recentActivity, (_event, input) => {
+    const { days } = RecentActivityInputSchema.parse(input ?? {});
+    return service.recentActivity(days);
+  });
   ipcMain.handle(DesktopChannel.knowledge, () => service.knowledge());
   ipcMain.handle(DesktopChannel.diagnostics, () => service.diagnostics());
   ipcMain.handle(DesktopChannel.threads, () => service.threads());

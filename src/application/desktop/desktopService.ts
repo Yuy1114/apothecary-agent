@@ -1,7 +1,8 @@
 import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
-import { initChangeLog, listPendingChanges, resolveChanges } from "../../vault/changeLog.js";
+import { initChangeLog, listPendingChanges, listRecentChanges, resolveChanges } from "../../vault/changeLog.js";
 import { initOperationLedger, listOperations } from "../../vault/operationLedger.js";
+import { buildRecentActivity, type RecentActivityItem } from "./recentActivity.js";
 import { listProposals, loadProposal } from "../../vault/proposalStore.js";
 import { resolveProposalById } from "../proposals/resolveProposal.js";
 import { manualSync } from "../sync/manualSync.js";
@@ -334,6 +335,20 @@ export class DesktopService {
 
   operations(limit = 50) {
     return listOperations({ limit });
+  }
+
+  /**
+   * The merged "what happened recently" timeline: manual vault edits (change
+   * ledger, all triage states) and the agent's own applied operations, newest
+   * first. Backs the Vault view's 最近 pseudo-folder.
+   */
+  async recentActivity(days = 7): Promise<RecentActivityItem[]> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const [changes, operations] = await Promise.all([
+      listRecentChanges({ since }),
+      listOperations({ since, limit: 200 }),
+    ]);
+    return buildRecentActivity(changes, operations);
   }
 
   async diagnostics() {

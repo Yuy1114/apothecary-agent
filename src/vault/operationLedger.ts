@@ -90,6 +90,7 @@ export async function recordOperation(op: {
 export async function listOperations(query: {
   filePath?: string;
   type?: OperationType;
+  since?: string;
   limit?: number;
 } = {}): Promise<OperationRecord[]> {
   if (!client) return [];
@@ -103,6 +104,10 @@ export async function listOperations(query: {
   if (query.filePath) {
     clauses.push("target_files LIKE ?");
     args.push(`%${query.filePath}%`);
+  }
+  if (query.since) {
+    clauses.push("applied_at >= ?");
+    args.push(query.since);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   args.push(query.limit ?? 50);

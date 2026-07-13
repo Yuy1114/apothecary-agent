@@ -43,6 +43,15 @@ describe("operationLedger", () => {
     expect(await listOperations({ filePath: "notes/x.md" })).toHaveLength(1);
   });
 
+  it("filters by since cutoff", async () => {
+    await freshLedger();
+    await recordOperation({ type: "edit", targetFiles: ["notes/a.md"], source: "applyEdit" });
+    const [op] = await listOperations();
+
+    expect(await listOperations({ since: op.appliedAt })).toHaveLength(1);
+    expect(await listOperations({ since: "9999-01-01T00:00:00.000Z" })).toEqual([]);
+  });
+
   it("is a safe no-op before initialization", async () => {
     setOperationLedgerClient(null);
     await expect(

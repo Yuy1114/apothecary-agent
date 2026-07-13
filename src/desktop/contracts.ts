@@ -57,6 +57,10 @@ export const ResolveProposalInputSchema = z.object({
 
 export const ProposalDiffInputSchema = z.object({ id: z.string().min(1) });
 
+export const RecentActivityInputSchema = z.object({
+  days: z.number().int().min(1).max(90).optional(),
+});
+
 // Settings/config edits carry secrets and OS-level actions (safeStorage, dialog,
 // relaunch), so they are handled in the main process, not through DesktopService.
 export const SaveSettingsInputSchema = z.object({
@@ -103,6 +107,7 @@ export const DesktopChannel = {
   resolveProposal: "apothecary:resolve-proposal",
   notes: "apothecary:notes",
   operations: "apothecary:operations",
+  recentActivity: "apothecary:recent-activity",
   knowledge: "apothecary:knowledge",
   diagnostics: "apothecary:diagnostics",
   threads: "apothecary:threads",

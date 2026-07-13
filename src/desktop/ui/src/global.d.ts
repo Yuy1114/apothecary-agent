@@ -16,6 +16,15 @@ type SaveSettingsPatch = Partial<Omit<DesktopSettingsView, "hasDeepseekKey" | "h
   embeddingApiKey?: string;
 };
 type ProposalDecisionState = { proposalId: string; title: string; type: string; targetFiles: string[] };
+type RecentActivityItem = {
+  id: string;
+  kind: string;
+  actor: "user" | "agent";
+  path: string;
+  fromPath?: string;
+  at: string;
+  detail?: string;
+};
 type AgentRunEvent =
   | { type: "status"; phase: "started" | "thinking"; label: string }
   | { type: "text_delta"; text: string }
@@ -55,6 +64,7 @@ type ApothecaryApi = {
   resolveProposal(id: string, decision: "approve" | "reject", note?: string): Promise<any>;
   notes(): Promise<Array<{ path: string; title: string }>>;
   operations(): Promise<any[]>;
+  recentActivity(days?: number): Promise<RecentActivityItem[]>;
   knowledge(): Promise<any>;
   diagnostics(): Promise<any>;
   getSettings(): Promise<DesktopSettingsView>;

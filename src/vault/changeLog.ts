@@ -14,6 +14,9 @@ export type PendingChange = {
   detectedAt: string;
 };
 
+/** A change row regardless of triage state, for history views. */
+export type ChangeRecord = PendingChange & { status: ChangeStatus };
+
 // ── Client singleton (set at startup, see index.ts) ──
 
 let client: Client | null = null;
@@ -91,6 +94,31 @@ export async function listPendingChanges(): Promise<PendingChange[]> {
     path: row.path as string,
     changeType: row.change_type as ChangeType,
     source: row.source as ChangeSource,
+    detectedAt: row.detected_at as string,
+  }));
+}
+
+/**
+ * List changes detected since a cutoff, regardless of triage status — the
+ * "what happened to my vault recently" view, as opposed to the pending queue.
+ */
+export async function listRecentChanges(options: {
+  since: string;
+  limit?: number;
+}): Promise<ChangeRecord[]> {
+  if (!client) return [];
+  const result = await client.execute({
+    sql: `SELECT id, path, change_type, source, status, detected_at
+          FROM vault_change_log WHERE detected_at >= ?
+          ORDER BY detected_at DESC LIMIT ?`,
+    args: [options.since, options.limit ?? 200],
+  });
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    path: row.path as string,
+    changeType: row.change_type as ChangeType,
+    source: row.source as ChangeSource,
+    status: row.status as ChangeStatus,
     detectedAt: row.detected_at as string,
   }));
 }
