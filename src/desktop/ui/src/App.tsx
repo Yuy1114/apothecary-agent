@@ -978,7 +978,8 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
                 <div key={file.path} className={`file-row ${selected?.file.path === file.path ? "active" : ""}`} onClick={() => openFile(file, isInbox)}>
                   <Icon.file />
                   <div className="info">
-                    <div className="name">{file.title || lastSegment(file.path)}</div>
+                    {/* Vault 是文件浏览器：始终显示文件名，不用内容推导出的标题。 */}
+                    <div className="name">{lastSegment(file.path)}</div>
                     <div className="sub">{file.mediaType} · {formatDate(file.updatedAt)}</div>
                   </div>
                 </div>
@@ -1033,7 +1034,7 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
               <div className="preview-inner">
                 <div className="card" style={{ padding: 0, overflow: "hidden" }}>
                   <div className="doc-head">
-                    <div className="row"><span className="name">{selected.file.title || lastSegment(selected.file.path)}</span></div>
+                    <div className="row"><span className="name">{lastSegment(selected.file.path)}</span></div>
                     <div className="meta">
                       <span>{selected.data.mediaType}</span><span>·</span><span>{selected.data.lineCount} 行</span>
                       {selected.file.path && <><span>·</span><span>{selected.file.path}</span></>}
