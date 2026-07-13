@@ -29,6 +29,7 @@ import { syncSemanticsWorkflow } from "./workflows/sync-semantics.js";
 import { manualSyncWorkflow } from "./workflows/manual-sync.js";
 import { detectDuplicatesWorkflow } from "./workflows/detect-duplicates.js";
 import { refreshProfileWorkflow } from "./workflows/refresh-profile.js";
+import { polishNoteWorkflow } from "./workflows/polish-note.js";
 import { workspace } from "./workspaces.js";
 import { apothecaryMemory } from "./memory.js";
 import { apothecaryDb } from "../config/apothecaryDb.js";
@@ -93,6 +94,7 @@ export const mastra = new Mastra({
     manualSyncWorkflow,
     detectDuplicatesWorkflow,
     refreshProfileWorkflow,
+    polishNoteWorkflow,
   },
   workspace,
   storage: new MastraCompositeStore({

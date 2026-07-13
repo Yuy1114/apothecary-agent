@@ -859,11 +859,21 @@ const groupActivityByDay = (items: RecentActivityItem[]): Array<[string, RecentA
   return groups;
 };
 
+type PolishModeKey = "expand" | "format" | "tags";
+const POLISH_MODE_OPTIONS: Array<{ key: PolishModeKey; label: string }> = [
+  { key: "expand", label: "续写补充" },
+  { key: "format", label: "优化格式" },
+  { key: "tags", label: "更新标签" },
+];
+
 function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void; target?: { path: string; nonce: number } | null }) {
   const [files, setFiles] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
   const [activity, setActivity] = useState<RecentActivityItem[]>([]);
   const [selected, setSelected] = useState<{ file: any; data: any } | null>(null);
+  const [polishOpen, setPolishOpen] = useState(false);
+  const [polishModes, setPolishModes] = useState<PolishModeKey[]>(["format"]);
+  const [polishing, setPolishing] = useState(false);
   const isChanges = scope === "changes";
   const isInbox = scope === "inbox";
   const isRecent = scope === "recent";
@@ -880,7 +890,26 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
     try {
       const data = inboxScoped ? await api.readInbox(file.path) : await api.readFile(file.path);
       setSelected({ file, data });
+      setPolishOpen(false);
     } catch (error) { notify((error as Error).message); }
+  };
+
+  const togglePolishMode = (mode: PolishModeKey) =>
+    setPolishModes((current) =>
+      current.includes(mode) ? current.filter((m) => m !== mode) : [...current, mode]);
+
+  const runPolish = async () => {
+    if (!selected || polishModes.length === 0) return;
+    setPolishing(true);
+    try {
+      const result = await api.polishNote(selected.file.path, polishModes);
+      notify(`已生成润色提案，请到工作区审批（${result.changeSummary}）`);
+      setPolishOpen(false);
+    } catch (error) {
+      notify(`润色失败：${(error as Error).message}`);
+    } finally {
+      setPolishing(false);
+    }
   };
 
   // A jump request (RAG source chip / in-answer link): open the exact note by
@@ -985,6 +1014,9 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
               </div>
               <div className="actions" style={{ marginTop: 14 }}>
                 <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>
+                {/\.md$/i.test(selected.file.path ?? "") && (
+                  <button className="btn btn-secondary sm" onClick={() => setPolishOpen((open) => !open)}>润色笔记</button>
+                )}
                 {isChanges && (
                   <>
                     <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "processed")}>标记已处理</button>
@@ -992,6 +1024,28 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
                   </>
                 )}
               </div>
+              {polishOpen && /\.md$/i.test(selected.file.path ?? "") && (
+                <div className="card" style={{ marginTop: 10, padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {POLISH_MODE_OPTIONS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      className={`btn sm ${polishModes.includes(key) ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => togglePolishMode(key)}
+                      disabled={polishing}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <span style={{ flex: 1 }} />
+                  <button
+                    className="btn btn-primary sm"
+                    disabled={polishing || polishModes.length === 0}
+                    onClick={() => void runPolish()}
+                  >
+                    {polishing ? "润色中…" : "生成润色提案"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

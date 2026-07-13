@@ -12,6 +12,7 @@ import {
   VaultFolderInputSchema,
   ResolveProposalInputSchema,
   ProposalDiffInputSchema,
+  PolishNoteInputSchema,
   RecentActivityInputSchema,
   ResumeRunInputSchema,
   StartRunInputSchema,
@@ -96,6 +97,10 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   ipcMain.handle(DesktopChannel.resolveProposal, (_event, input) => {
     const parsed = ResolveProposalInputSchema.parse(input);
     return service.resolveProposal(parsed.id, parsed.decision, parsed.note);
+  });
+  ipcMain.handle(DesktopChannel.polishNote, (_event, input) => {
+    const { filePath, modes } = PolishNoteInputSchema.parse(input);
+    return service.polishNote(filePath, modes);
   });
   ipcMain.handle(DesktopChannel.notes, () => service.notes());
   ipcMain.handle(DesktopChannel.operations, () => service.operations());

@@ -19,6 +19,7 @@ const channel = {
   proposals: "apothecary:proposals",
   proposalDiff: "apothecary:proposal-diff",
   resolveProposal: "apothecary:resolve-proposal",
+  polishNote: "apothecary:polish-note",
   notes: "apothecary:notes",
   operations: "apothecary:operations",
   recentActivity: "apothecary:recent-activity",
@@ -64,6 +65,8 @@ contextBridge.exposeInMainWorld("apothecary", {
   proposalDiff: (id: string) => ipcRenderer.invoke(channel.proposalDiff, { id }),
   resolveProposal: (id: string, decision: "approve" | "reject", note?: string) =>
     ipcRenderer.invoke(channel.resolveProposal, { id, decision, note }),
+  polishNote: (filePath: string, modes: string[]) =>
+    ipcRenderer.invoke(channel.polishNote, { filePath, modes }),
   notes: () => ipcRenderer.invoke(channel.notes),
   operations: () => ipcRenderer.invoke(channel.operations),
   recentActivity: (days?: number) => ipcRenderer.invoke(channel.recentActivity, { days }),

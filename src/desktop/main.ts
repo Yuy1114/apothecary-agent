@@ -26,6 +26,14 @@ import { logger } from "../observability/logger.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, "..", "..");
+
+// Test isolation: on macOS Electron resolves userData natively (Application
+// Support), so overriding $HOME does NOT redirect it — a driven test run would
+// merge-persist its temp vault path into the real desktop-settings.json. An
+// explicit override is the only reliable isolation.
+if (process.env.APOTHECARY_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.APOTHECARY_USER_DATA_DIR));
+}
 const legacyDefaultVaultPath = "/Users/yuy/apothecary-vault";
 let vaultPath = legacyDefaultVaultPath;
 
@@ -205,6 +213,11 @@ async function createService(): Promise<DesktopService> {
     import("../application/desktop/desktopService.js"),
     import("./runtime.js"),
   ]);
+  // Loaded sequentially after the runtime graph: these overlap with runtime.js's
+  // module graph, and importing an overlapping async ESM graph concurrently can
+  // deadlock module evaluation before the window ever opens.
+  const { polishNote } = await import("../application/notes/polishNote.js");
+  const { mastraNotePolisher } = await import("../mastra/adapters/mastraNotePolisher.js");
   const runtimeRoot = app.isPackaged ? app.getPath("userData") : projectRoot;
   await fs.mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
   const desktopRuntime = createDesktopRuntime(runtimeRoot);
@@ -292,6 +305,12 @@ async function createService(): Promise<DesktopService> {
         await pumpAgentStream(output, emit, runId);
       },
       cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),
+      polishNote: async (filePath, modes) => {
+        logger.info("polish", `▶ ${filePath} [${modes.join(",")}]`);
+        const result = await polishNote({ vaultPath, filePath, modes }, mastraNotePolisher);
+        logger.info("polish", `■ proposal ${result.proposalId}`);
+        return { proposalId: result.proposalId, changeSummary: result.changeSummary };
+      },
       listThreads: async () => {
         if (!boundMemory) return [];
         const memory = boundMemory;

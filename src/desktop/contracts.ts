@@ -57,6 +57,11 @@ export const ResolveProposalInputSchema = z.object({
 
 export const ProposalDiffInputSchema = z.object({ id: z.string().min(1) });
 
+export const PolishNoteInputSchema = z.object({
+  filePath: z.string().min(1),
+  modes: z.array(z.enum(["expand", "format", "tags"])).min(1),
+});
+
 export const RecentActivityInputSchema = z.object({
   days: z.number().int().min(1).max(90).optional(),
 });
@@ -105,6 +110,7 @@ export const DesktopChannel = {
   proposals: "apothecary:proposals",
   proposalDiff: "apothecary:proposal-diff",
   resolveProposal: "apothecary:resolve-proposal",
+  polishNote: "apothecary:polish-note",
   notes: "apothecary:notes",
   operations: "apothecary:operations",
   recentActivity: "apothecary:recent-activity",

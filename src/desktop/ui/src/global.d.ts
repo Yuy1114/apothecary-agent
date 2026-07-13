@@ -62,6 +62,10 @@ type ApothecaryApi = {
     before?: string; after?: string; note?: string;
   }>;
   resolveProposal(id: string, decision: "approve" | "reject", note?: string): Promise<any>;
+  polishNote(
+    filePath: string,
+    modes: Array<"expand" | "format" | "tags">,
+  ): Promise<{ proposalId: string; changeSummary: string }>;
   notes(): Promise<Array<{ path: string; title: string }>>;
   operations(): Promise<any[]>;
   recentActivity(days?: number): Promise<RecentActivityItem[]>;

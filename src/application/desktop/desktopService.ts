@@ -19,6 +19,7 @@ import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
 import type { AgentRunEvent } from "./runEvents.js";
+import type { PolishMode } from "../../domain/notePolish.js";
 
 // The frozen vault skeleton names the intake folder `_inbox` (see
 // classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
@@ -66,6 +67,12 @@ export type DesktopServiceDeps = {
     emit: (event: AgentRunEvent) => void,
   ) => Promise<void>;
   cancelRun?: (runId: string) => boolean;
+  // Note polishing needs the LLM adapter, so the composition root injects it
+  // (same reason as chat: this service must not import mastra).
+  polishNote?: (
+    filePath: string,
+    modes: PolishMode[],
+  ) => Promise<{ proposalId: string; changeSummary: string }>;
   // Conversation history, backed by Mastra memory threads.
   listThreads?: () => Promise<DesktopThread[]>;
   threadMessages?: (threadId: string) => Promise<DesktopChatMessage[]>;
@@ -282,6 +289,12 @@ export class DesktopService {
 
   resolveProposal(id: string, decision: "approve" | "reject", note?: string) {
     return resolveProposalById(id, decision, note);
+  }
+
+  /** Polish one note into an `edit` proposal; the note itself is never written here. */
+  polishNote(filePath: string, modes: PolishMode[]): Promise<{ proposalId: string; changeSummary: string }> {
+    if (!this.deps.polishNote) throw new Error("polish_not_available");
+    return this.deps.polishNote(filePath, modes);
   }
 
   /**
