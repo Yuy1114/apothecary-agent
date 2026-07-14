@@ -10,7 +10,7 @@ import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { loadIntakePlan, clearIntakePlan } from "../../vault/intakePlanStore.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
-import type { IntakeDecision } from "../../domain/intakePlan.js";
+import { fileTargetPath, type IntakePlan } from "../../domain/intakePlan.js";
 import { logger, startTimer } from "../../observability/logger.js";
 
 const VAULT_PATH = process.env.APOTHECARY_VAULT_PATH ?? "/Users/yuy/apothecary-vault";
@@ -28,13 +28,6 @@ export type ExecuteIntakeReport = {
   // sources are excluded: nothing about them changed on disk.
   affected: string[];
 };
-
-/** dest (a directory) + rename|basename → the vault-relative target path (files only). */
-function fileTargetPath(decision: IntakeDecision): string {
-  const base = decision.rename?.trim() || path.posix.basename(decision.source);
-  const dir = (decision.dest ?? "").replace(/\/+$/, "");
-  return dir ? path.posix.join(dir, base) : base;
-}
 
 async function pathExists(abs: string): Promise<boolean> {
   return fs.access(abs).then(() => true, () => false);
@@ -125,15 +118,19 @@ async function moveDirectoryInto(
  * Apply the reviewed intake plan: for each decision, move / archive / leave the
  * _inbox entry, tagging moved markdown. Directory entries merge their contents
  * into the target dir. Reuses the audited move & archive cores (RAG index +
- * operation ledger stay in sync; nothing is overwritten or deleted). The plan is
- * consumed on completion — the _inbox filesystem is the source of truth, so
- * re-running the organizer re-plans whatever remains.
+ * operation ledger stay in sync; nothing is overwritten or deleted). The durable
+ * plan is consumed on completion either way — the _inbox filesystem is the
+ * source of truth, so re-running the organizer re-plans whatever remains.
+ *
+ * `planOverride` applies a snapshot instead of the live store — the consent
+ * path: an approved `intake` proposal executes exactly the decisions the human
+ * reviewed, even if the organizer re-planned in the meantime.
  *
  * Does NOT rebuild the semantic layer (a separate, cost-bearing pass); run a
  * semantic refresh afterward to bring understanding up to date.
  */
-export async function executeIntake(): Promise<ExecuteIntakeReport> {
-  const plan = await loadIntakePlan();
+export async function executeIntake(planOverride?: IntakePlan): Promise<ExecuteIntakeReport> {
+  const plan = planOverride ?? (await loadIntakePlan());
   const report: ExecuteIntakeReport = {
     total: plan.decisions.length,
     moved: 0,

@@ -754,7 +754,8 @@ function DiffView({ diff, compact }: { diff: ProposalDiffData; compact?: boolean
           <span className="to">{diff.pathChange.to}</span>
         </div>
       )}
-      {diff.note && <div className="hint" style={{ lineHeight: 1.6 }}>{diff.note}</div>}
+      {/* pre-line: intake plans list one decision per line. */}
+      {diff.note && <div className="hint" style={{ lineHeight: 1.6, whiteSpace: "pre-line" }}>{diff.note}</div>}
       {shown.length > 0 && (
         <div className="diff">
           <div className="hunk">@@ {diff.path ?? diff.type} @@</div>
@@ -1439,7 +1440,7 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
         <div className="card settings-card">
           <div className="h">自动整理</div>
           <div className="row-between">
-            <div className="grow"><div className="rt">自动归位 _inbox</div><div className="rd">新文件落入 _inbox 后自动归档到 PARA 目录，无需逐批审批；低置信度的留在原处，所有移动可在「审阅」里撤销。改动模型/开关后需重启生效。</div></div>
+            <div className="grow"><div className="rt">自动整理 _inbox</div><div className="rd">新文件落入 _inbox 后，后台自动勘查并起草归位计划，生成提案待你在「工作区」采纳后才会移动文件；低置信度的留在原处。改动模型/开关后需重启生效。</div></div>
             <button className={`switch ${form.autoIntake ? "on" : ""}`} onClick={() => set("autoIntake", !form.autoIntake)}><i /></button>
           </div>
         </div>

@@ -103,4 +103,24 @@ describe("executeIntake", () => {
     expect(report.failed).toBe(1);
     expect(report.failures[0]).toMatchObject({ source: "_inbox/ghost.md", reason: "missing_source" });
   });
+
+  it("applies a plan snapshot override instead of the live store (approved-proposal path)", async () => {
+    await writeFile(abs("_inbox/snap.md"), "# Snap", "utf8");
+    await writeFile(abs("_inbox/later.md"), "# Later", "utf8");
+    // The live store re-planned after the snapshot was reviewed; it must not run.
+    await recordIntakeDecision(decision({ source: "_inbox/later.md", action: "archive" }), vault);
+
+    const report = await executeIntake({
+      generatedAt: "t",
+      updatedAt: "t",
+      decisions: [decision({ source: "_inbox/snap.md", action: "move", dest: "notes/" })],
+    });
+
+    expect(report).toMatchObject({ total: 1, moved: 1, failed: 0 });
+    expect(await exists("notes/snap.md")).toBe(true);
+    expect(await exists("_inbox/later.md")).toBe(true); // untouched
+    // The durable plan is still consumed: _inbox is the source of truth and the
+    // next organizer pass re-plans whatever remains.
+    expect((await loadIntakePlan(vault)).decisions).toHaveLength(0);
+  });
 });

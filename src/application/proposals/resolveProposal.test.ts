@@ -100,6 +100,44 @@ describe("resolveProposalById", () => {
     expect(await exists("archive/notes/old.md")).toBe(true);
   });
 
+  it("approving an intake proposal applies exactly the reviewed decisions", async () => {
+    await mkdir(abs("_inbox"), { recursive: true });
+    await writeFile(abs("_inbox/drop.md"), "# Drop", "utf8");
+    await writeFile(abs("_inbox/stale.md"), "# Stale", "utf8");
+    await writeFile(abs("_inbox/unsure.md"), "# Unsure", "utf8");
+    const base = { kind: "markdown", tags: [], confidence: 0.9, rationale: "r", decidedAt: "t" };
+    const p = await propose("intake", {
+      decisions: [
+        { ...base, source: "_inbox/drop.md", action: "move", dest: "notes/" },
+        { ...base, source: "_inbox/stale.md", action: "archive" },
+        { ...base, source: "_inbox/unsure.md", action: "leave", confidence: 0.3 },
+      ],
+    });
+
+    const result = await resolve(p.id, "approve");
+
+    expect(result).toMatchObject({ resolved: true, type: "intake", status: "applied" });
+    expect(await exists("notes/drop.md")).toBe(true);
+    expect(await exists("_inbox/drop.md")).toBe(false);
+    expect(await exists("archive/_inbox/stale.md")).toBe(true);
+    // Low-confidence entries stay in _inbox for the human.
+    expect(await exists("_inbox/unsure.md")).toBe(true);
+  });
+
+  it("leaves an intake proposal open when nothing could be applied", async () => {
+    const p = await propose("intake", {
+      decisions: [
+        { source: "_inbox/gone.md", kind: "markdown", action: "move", dest: "notes/", tags: [], confidence: 0.9, rationale: "r", decidedAt: "t" },
+      ],
+    });
+
+    const result = await resolve(p.id, "approve");
+
+    expect(result.resolved).toBe(false);
+    expect(result.reason).toMatch(/^intake_failed/);
+    expect((await loadProposal(vault, p.id))?.status).toBe("proposed");
+  });
+
   it("approving a merge proposal writes canonical and archives the source", async () => {
     await mkdir(abs("notes"), { recursive: true });
     await writeFile(abs("notes/keep.md"), "keep", "utf8");

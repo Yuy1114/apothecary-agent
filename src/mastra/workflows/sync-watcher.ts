@@ -8,8 +8,8 @@ import { isArchivedPath } from "../../vault/archive.js";
 import { hashFile } from "../../vault/hash.js";
 import { loadSnapshot, commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
-import { syncSemanticsFromChanges, syncSemanticsForPaths } from "../../application/semantic/syncSemanticsFromChanges.js";
-import { executeIntake } from "../../application/intake/executeIntake.js";
+import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { proposeIntakePlan } from "../../application/intake/proposeIntake.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
 
@@ -78,8 +78,9 @@ export function shouldScheduleAutoIntake(relativePath: string, enabled: boolean)
   return enabled && relativePath.startsWith(INBOX_PREFIX);
 }
 
-// Opt-in only (see settingsEnv → APOTHECARY_AUTO_INTAKE): auto-filing moves real
-// files without a per-batch approval, so it stays off unless explicitly enabled.
+// Opt-in (see settingsEnv → APOTHECARY_AUTO_INTAKE): the background pass costs
+// LLM calls, so it stays off unless enabled. It only PLANS — every move still
+// waits for the human to approve the resulting intake proposal.
 function autoIntakeEnabled(): boolean {
   return process.env.APOTHECARY_AUTO_INTAKE === "1";
 }
@@ -143,17 +144,19 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
   scheduleSemanticSync();
 
   // A new drop into `_inbox` (and only there) is a candidate for auto-filing: if
-  // the user opted in, plan+apply it in the background once the burst settles.
+  // the user opted in, plan it in the background once the burst settles and put
+  // the plan up for approval.
   if (shouldScheduleAutoIntake(relativePath, autoIntakeEnabled())) scheduleAutoIntake(mastra);
 }
 
 /**
- * Auto-intake pass: run the organizer subagent headlessly to (re)build the intake
- * plan for the current `_inbox`, then apply it via the audited executeIntake core
- * (moves/archives land in the operation ledger and are revertable from the desktop
- * Review view). Opt-in — the user has traded the per-batch approval gate for
- * automation, so nothing here prompts. Best-effort and fully isolated: a failure
- * logs and leaves `_inbox` untouched rather than crashing the watcher host.
+ * Auto-intake pass — planning only, never applying. Run the organizer subagent
+ * headlessly to (re)build the intake plan for the current `_inbox`, then surface
+ * it as a pending `intake` proposal. Nothing moves until the human approves it
+ * in the desktop (工作区 proposal card), which applies the reviewed snapshot via
+ * executeIntake and refreshes semantics for the touched paths (resolveProposal's
+ * post-apply hook). Best-effort and fully isolated: a failure logs and leaves
+ * `_inbox` untouched rather than crashing the watcher host.
  *
  * Single-flight with a trailing re-run: drops that arrive mid-pass schedule one
  * more pass when this one settles, so nothing is stranded in `_inbox`.
@@ -166,32 +169,19 @@ async function runAutoIntake(mastra: Mastra): Promise<void> {
   autoIntakeRunning = true;
   try {
     // Planning only — the organizer never moves files; it records one decision
-    // per entry into the durable intake plan that executeIntake then applies.
+    // per entry into the durable intake plan.
     await mastra
       .getAgent("organizer")
       .generate("勘查 _inbox 并为每个条目产出迁移决策（recordDecision）。低置信度的留在 _inbox。", {
         maxSteps: 20,
       });
-    const report = await executeIntake();
-    if (report.moved || report.archived || report.failed) {
+    // Consent gate: wrap the plan into an approvable proposal (superseding any
+    // still-pending one) instead of executing it.
+    const result = await proposeIntakePlan();
+    if (result.proposalId) {
       console.log(
-        `Vault watcher: auto-intake done (moved=${report.moved}, archived=${report.archived}, left=${report.left}, failed=${report.failed})`,
+        `Vault watcher: auto-intake plan proposed (actionable=${result.actionable}, superseded=${result.superseded}, proposal=${result.proposalId})`,
       );
-    }
-    // Close the loop inline: unlike the interactive path (user present to trigger
-    // a refresh), the unattended pass refreshes the semantic layer for exactly the
-    // paths it touched — moved notes re-summarized, vacated `_inbox` paths pruned,
-    // graph + relations rebuilt. executeIntake already cleared these from the
-    // pending queue, so we pass the paths explicitly rather than via the ledger.
-    if (report.affected.length > 0) {
-      try {
-        const sem = await syncSemanticsForPaths({ vaultPath: VAULT_PATH, paths: report.affected });
-        if (sem.refreshed || sem.pruned) {
-          console.log(`Vault watcher: auto-intake semantics synced (refreshed=${sem.refreshed}, pruned=${sem.pruned})`);
-        }
-      } catch (error) {
-        console.warn("Vault watcher: auto-intake semantic refresh failed:", error);
-      }
     }
   } catch (error) {
     console.warn("Vault watcher: auto-intake failed:", error);

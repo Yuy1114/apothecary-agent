@@ -41,6 +41,17 @@ export type IntakePlan = z.infer<typeof IntakePlanSchema>;
 
 export const EMPTY_INTAKE_PLAN: IntakePlan = { generatedAt: "", updatedAt: "", decisions: [] };
 
+/**
+ * dest (a directory) + rename|basename → the vault-relative target path for a
+ * FILE move decision (directory sources merge into `dest` itself). Pure; shared
+ * by execution and by proposal display/target derivation.
+ */
+export function fileTargetPath(decision: IntakeDecision): string {
+  const base = decision.rename?.trim() || decision.source.split("/").filter(Boolean).at(-1) || decision.source;
+  const dir = (decision.dest ?? "").replace(/\/+$/, "");
+  return dir ? `${dir}/${base}` : base;
+}
+
 /** Upsert a decision by `source` (last write wins) — pure. */
 export function upsertDecision(plan: IntakePlan, decision: IntakeDecision): IntakePlan {
   const decisions = plan.decisions.filter((d) => d.source !== decision.source);

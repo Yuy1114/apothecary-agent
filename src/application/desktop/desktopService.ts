@@ -20,6 +20,7 @@ import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
 import type { AgentRunEvent } from "./runEvents.js";
 import type { PolishMode } from "../../domain/notePolish.js";
+import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
 
 // The frozen vault skeleton names the intake folder `_inbox` (see
 // classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
@@ -332,6 +333,17 @@ export class DesktopService {
       case "structure": {
         const parts = [payload.add?.length ? `新增关键词：${payload.add.join("、")}` : "", payload.remove?.length ? `移除关键词：${payload.remove.join("、")}` : ""].filter(Boolean);
         return { type: "structure", path: payload.directory, note: parts.join("；") || "调整目录分类关键词" };
+      }
+      case "intake": {
+        // One line per decision; the renderer shows the note pre-line.
+        const lines = (payload.decisions as IntakeDecision[]).map((d) => {
+          if (d.action === "archive") return `归档 ${d.source}`;
+          if (d.action === "leave") return `保留 ${d.source}（${d.rationale}）`;
+          return d.kind === "directory"
+            ? `迁移 ${d.source}/* → ${d.dest ?? ""}`
+            : `迁移 ${d.source} → ${fileTargetPath(d)}`;
+        });
+        return { type: "intake", note: lines.join("\n") };
       }
       default:
         return { type: "unknown" };

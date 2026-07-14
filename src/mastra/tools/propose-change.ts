@@ -4,8 +4,13 @@ import { ProposalTypeSchema, type ProposalType } from "../../domain/proposal.js"
 import { createProposal } from "../../vault/proposalStore.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 
+// `intake` proposals are batch snapshots assembled from the durable intake plan
+// (proposeIntakePlan), not from flat tool fields — the agent files inbox work
+// through recordDecision instead, so this tool excludes the type.
+const ProposableTypeSchema = ProposalTypeSchema.exclude(["intake"]);
+
 /** Assemble the type-specific payload from the tool's flat input fields. */
-function buildPayload(type: ProposalType, input: Record<string, unknown>): unknown {
+function buildPayload(type: Exclude<ProposalType, "intake">, input: Record<string, unknown>): unknown {
   switch (type) {
     case "edit":
       return { filePath: input.filePath, suggestedContent: input.suggestedContent };
@@ -55,7 +60,7 @@ export const proposeChangeTool = createTool({
     "stamped with a superseded_by link)\n" +
     "Always give a clear title and rationale.",
   inputSchema: z.object({
-    type: ProposalTypeSchema,
+    type: ProposableTypeSchema,
     title: z.string().describe("Short title for the proposed change"),
     rationale: z.string().describe("Why this change is proposed"),
     filePath: z.string().optional().describe("edit: the file to write"),

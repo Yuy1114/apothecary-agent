@@ -5,6 +5,7 @@ import { moveVaultFileCore } from "../notes/moveVaultFile.js";
 import { archiveVaultFileCore } from "../notes/archiveVaultFile.js";
 import { mergeNotesCore } from "../notes/mergeNotes.js";
 import { writeVaultNote } from "../intake/ingestNote.js";
+import { executeIntake } from "../intake/executeIntake.js";
 import { updateDirectoryKeywords } from "../../vault/structureStore.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
@@ -192,6 +193,24 @@ async function executeProposal(
           : `canonical ${canonicalPath}`,
       });
       return { ok: true, affected: [canonicalPath, ...stamped] };
+    }
+    case "intake": {
+      // Apply the reviewed snapshot, not the live plan store: consent covers
+      // exactly these decisions. executeIntake self-audits (ledger, baseline,
+      // pending-change cleanup) per file.
+      const report = await executeIntake({
+        generatedAt: proposal.createdAt,
+        updatedAt: proposal.createdAt,
+        decisions: proposal.payload.decisions,
+      });
+      if (report.failed > 0 && report.moved + report.archived === 0) {
+        const detail = report.failures
+          .slice(0, 5)
+          .map((f) => `${f.source}: ${f.reason}`)
+          .join("; ");
+        return { ok: false, reason: `intake_failed: ${detail}` };
+      }
+      return { ok: true, affected: report.affected };
     }
   }
 }

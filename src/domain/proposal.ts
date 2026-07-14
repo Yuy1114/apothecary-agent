@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IntakeDecisionSchema, fileTargetPath } from "./intakePlan.js";
 
 /**
  * Unified proposal model. Every reviewable change to the human-readable layer —
@@ -8,7 +9,8 @@ import { z } from "zod";
  *
  * Covers every action that has an executor: the maintenance actions
  * (edit / move / archive / merge), the knowledge-entry actions
- * (capture / structure / view_promotion), and canonicalization (canonical_note).
+ * (capture / structure / view_promotion), canonicalization (canonical_note),
+ * and batch inbox filing (intake — the organizer's whole plan as one review).
  */
 export const ProposalTypeSchema = z.enum([
   "edit",
@@ -19,6 +21,7 @@ export const ProposalTypeSchema = z.enum([
   "structure",
   "view_promotion",
   "canonical_note",
+  "intake",
 ]);
 export type ProposalType = z.infer<typeof ProposalTypeSchema>;
 
@@ -68,6 +71,14 @@ export const CanonicalNotePayloadSchema = z.object({
   content: z.string().min(1),
   supersedes: z.array(z.string()).default([]),
 });
+/**
+ * A snapshot of the organizer's intake plan awaiting consent. Approval applies
+ * exactly these decisions (not whatever the live plan store holds by then), so
+ * what the human reviewed is what executes.
+ */
+export const IntakePayloadSchema = z.object({
+  decisions: z.array(IntakeDecisionSchema).min(1),
+});
 
 /** Per-type payload validators, used when assembling a proposal from raw input. */
 export const PAYLOAD_SCHEMAS = {
@@ -79,6 +90,7 @@ export const PAYLOAD_SCHEMAS = {
   structure: StructurePayloadSchema,
   view_promotion: ViewPromotionPayloadSchema,
   canonical_note: CanonicalNotePayloadSchema,
+  intake: IntakePayloadSchema,
 } as const satisfies Record<ProposalType, z.ZodTypeAny>;
 
 const baseFields = {
@@ -101,6 +113,7 @@ export const ProposalSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("structure"), payload: StructurePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("view_promotion"), payload: ViewPromotionPayloadSchema, ...baseFields }),
   z.object({ type: z.literal("canonical_note"), payload: CanonicalNotePayloadSchema, ...baseFields }),
+  z.object({ type: z.literal("intake"), payload: IntakePayloadSchema, ...baseFields }),
 ]);
 export type Proposal = z.infer<typeof ProposalSchema>;
 
@@ -134,6 +147,16 @@ export function deriveTargetFiles(input: ProposalAction): string[] {
       return [input.payload.sourceViewPath, input.payload.targetPath];
     case "canonical_note":
       return [input.payload.canonicalPath, ...input.payload.supersedes];
+    case "intake": {
+      const files = new Set<string>();
+      for (const decision of input.payload.decisions) {
+        files.add(decision.source);
+        if (decision.action !== "move") continue;
+        // File moves land at dest/basename; directory sources merge INTO dest.
+        files.add(decision.kind === "directory" ? (decision.dest ?? decision.source) : fileTargetPath(decision));
+      }
+      return [...files];
+    }
   }
 }
 
