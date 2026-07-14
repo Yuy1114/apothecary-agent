@@ -870,7 +870,9 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
   const [files, setFiles] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
   const [activity, setActivity] = useState<RecentActivityItem[]>([]);
-  const [selected, setSelected] = useState<{ file: any; data: any } | null>(null);
+  // `missing` marks an entry whose file is gone from disk (e.g. manually
+  // deleted after the change was logged): no content, but still resolvable.
+  const [selected, setSelected] = useState<{ file: any; data: any; missing?: boolean } | null>(null);
   const [polishOpen, setPolishOpen] = useState(false);
   const [polishModes, setPolishModes] = useState<PolishModeKey[]>(["format"]);
   const [polishing, setPolishing] = useState(false);
@@ -886,12 +888,18 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
   }, [scope, isChanges, isInbox, isRecent, notify]);
   useEffect(() => { load(); }, [load, refreshKey]);
 
-  const openFile = async (file: any, inboxScoped: boolean) => {
+  const openFile = async (file: any, inboxScoped: boolean, opts?: { allowMissing?: boolean }) => {
     try {
       const data = inboxScoped ? await api.readInbox(file.path) : await api.readFile(file.path);
       setSelected({ file, data });
       setPolishOpen(false);
-    } catch (error) { notify((error as Error).message); }
+    } catch (error) {
+      const message = (error as Error).message;
+      if (opts?.allowMissing && /file_not_found|ENOENT/i.test(message)) {
+        setSelected({ file, data: null, missing: true });
+        setPolishOpen(false);
+      } else notify(message);
+    }
   };
 
   const togglePolishMode = (mode: PolishModeKey) =>
@@ -963,8 +971,10 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
                 </div>
               ))
             ) : isChanges ? (
+              // Rows stay clickable even for deleted/vanished files — they open
+              // a resolvable "文件不存在" preview instead of being dead ends.
               changes.length === 0 ? <Empty>没有待处理变更，药柜很安静。</Empty> : changes.map((change) => (
-                <div key={change.id} className={`file-row ${selected?.file.path === change.path ? "active" : ""}`} onClick={() => change.changeType !== "deleted" && openFile(change, false)}>
+                <div key={change.id} className={`file-row ${selected?.file.path === change.path ? "active" : ""}`} onClick={() => void openFile(change, false, { allowMissing: true })}>
                   <Icon.file />
                   <div className="info">
                     <div className="name">{lastSegment(change.path)}</div>
@@ -996,9 +1006,13 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
               <div className="preview-toolbar">
                 <div className="preview-toolbar-inner">
                   <div className="actions">
-                    <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>
-                    {/\.md$/i.test(selected.file.path ?? "") && (
-                      <button className="btn btn-secondary sm" onClick={() => setPolishOpen((open) => !open)}>润色笔记</button>
+                    {!selected.missing && (
+                      <>
+                        <button className="btn btn-secondary sm" onClick={() => onChat(`请阅读并为这个文件生成合理的归位提案：${selected.file.path}\n\n内容：\n${selected.data.content.slice(0, 8000)}`)}>让 Agent 建议归位</button>
+                        {/\.md$/i.test(selected.file.path ?? "") && (
+                          <button className="btn btn-secondary sm" onClick={() => setPolishOpen((open) => !open)}>润色笔记</button>
+                        )}
+                      </>
                     )}
                     {isChanges && (
                       <>
@@ -1036,11 +1050,17 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
                   <div className="doc-head">
                     <div className="row"><span className="name">{lastSegment(selected.file.path)}</span></div>
                     <div className="meta">
-                      <span>{selected.data.mediaType}</span><span>·</span><span>{selected.data.lineCount} 行</span>
+                      {selected.missing
+                        ? <span className="badge danger">文件不存在</span>
+                        : <><span>{selected.data.mediaType}</span><span>·</span><span>{selected.data.lineCount} 行</span></>}
                       {selected.file.path && <><span>·</span><span>{selected.file.path}</span></>}
                     </div>
                   </div>
-                  {(() => {
+                  {selected.missing ? (
+                    <div className="doc-body">
+                      <div className="hint">这个文件已不在磁盘上，可能被手动删除或移动了。内容无法预览，你可以用上方按钮把这条变更「标记已处理」或「忽略」。</div>
+                    </div>
+                  ) : (() => {
                     const isMd = /\.md$/i.test(selected.file.path ?? "") || selected.data.mediaType === "markdown";
                     if (!isMd) return <div className="doc-body"><pre>{selected.data.content}</pre></div>;
                     const { frontmatter, body } = splitFrontmatter(selected.data.content);

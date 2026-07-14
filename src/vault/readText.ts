@@ -18,7 +18,13 @@ export async function readVaultText(vaultPath: string, filePath: string): Promis
   if (!absolutePath) throw new Error("unsafe_path");
   if (!SUPPORTED_EXTENSIONS.has(extension)) throw new Error("unsupported_text_type");
 
-  const content = await fs.readFile(absolutePath, "utf8");
+  let content: string;
+  try {
+    content = await fs.readFile(absolutePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error("file_not_found");
+    throw error;
+  }
   return {
     filePath,
     mediaType: extension === ".txt" ? "text" : "markdown",

@@ -30,4 +30,9 @@ describe("readVaultText", () => {
     await expect(readVaultText(root, "../outside.txt")).rejects.toThrow("unsafe_path");
     await expect(readVaultText(root, "image.png")).rejects.toThrow("unsupported_text_type");
   });
+
+  it("reports a missing file as file_not_found instead of a raw fs error", async () => {
+    const root = await vault();
+    await expect(readVaultText(root, "Untitled.md")).rejects.toThrow("file_not_found");
+  });
 });
