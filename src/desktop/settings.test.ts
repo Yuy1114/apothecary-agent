@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DesktopSettingsSchema,
   firstAvailableVaultPath,
   loadDesktopSettings,
   saveDesktopSettings,
@@ -89,10 +90,16 @@ describe("desktop settings", () => {
     expect(settingsEnv({ vaultPath: "/v", watch: true })).toEqual({});
   });
 
-  it("settingsEnv opts into auto-intake only on an explicit true", () => {
-    expect(settingsEnv({ vaultPath: "/v", autoIntake: true })).toEqual({ APOTHECARY_AUTO_INTAKE: "1" });
-    // Unset or false must stay manual — auto-filing moves files without approval.
+  it("settingsEnv opts into auto-intake planning only on an explicit true", () => {
+    expect(settingsEnv({ vaultPath: "/v", autoIntakePlanning: true })).toEqual({ APOTHECARY_AUTO_INTAKE: "1" });
+    // Unset or false stays fully manual.
     expect(settingsEnv({ vaultPath: "/v" })).toEqual({});
-    expect(settingsEnv({ vaultPath: "/v", autoIntake: false })).toEqual({});
+    expect(settingsEnv({ vaultPath: "/v", autoIntakePlanning: false })).toEqual({});
+  });
+
+  it("drops the legacy autoIntake key so its old default-on value cannot re-arm the feature", () => {
+    const parsed = DesktopSettingsSchema.parse({ vaultPath: "/v", autoIntake: true });
+    expect(parsed).toEqual({ vaultPath: "/v" });
+    expect(settingsEnv(parsed)).toEqual({});
   });
 });

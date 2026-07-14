@@ -10,7 +10,13 @@ export const DesktopSettingsSchema = z.object({
   embeddingModel: z.string().optional(),
   embeddingTimeoutMs: z.number().int().positive().optional(),
   watch: z.boolean().optional(),
-  autoIntake: z.boolean().optional(),
+  // Deliberately renamed from `autoIntake` when the feature changed from
+  // auto-APPLYING inbox moves to only drafting an approvable plan: any stored
+  // `autoIntake: true` consented to a behaviour that no longer exists (and for
+  // early users it was written by a default-on form bug, not a choice), so the
+  // old key is ignored — schema parse drops it on next save — and everyone
+  // lands back on the default: off until explicitly enabled.
+  autoIntakePlanning: z.boolean().optional(),
   // Secrets are stored as base64 ciphertext from Electron safeStorage — never
   // plaintext on disk, and never sent to the renderer (see sanitizeSettings).
   deepseekApiKeyEnc: z.string().optional(),
@@ -51,8 +57,9 @@ export function settingsEnv(
   if (settings.watch === false) env.APOTHECARY_DESKTOP_WATCH = "0";
   // Opt-in: auto-intake surveys `_inbox` drops in the background and drafts an
   // approvable intake proposal — it never moves files itself (consent stays with
-  // the human). The watcher reads this env; it takes effect on the next relaunch.
-  if (settings.autoIntake === true) env.APOTHECARY_AUTO_INTAKE = "1";
+  // the human). The watcher reads this env live on every event, so the toggle
+  // takes effect immediately (main.ts deletes the env var on disable).
+  if (settings.autoIntakePlanning === true) env.APOTHECARY_AUTO_INTAKE = "1";
   return env;
 }
 

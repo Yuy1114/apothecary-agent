@@ -76,7 +76,7 @@ export const SaveSettingsInputSchema = z.object({
   embeddingModel: z.string().max(200).optional(),
   embeddingTimeoutMs: z.number().int().positive().max(600_000).optional(),
   watch: z.boolean().optional(),
-  autoIntake: z.boolean().optional(),
+  autoIntakePlanning: z.boolean().optional(),
   // Plaintext keys from the form: a non-empty value sets/replaces, "" clears, and
   // an absent field leaves the stored (encrypted) key untouched.
   deepseekApiKey: z.string().max(500).optional(),

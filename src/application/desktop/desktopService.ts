@@ -200,6 +200,9 @@ export class DesktopService {
       pendingProposals: proposals.filter((proposal) => proposal.status === "proposed").length,
       recentOperations: operations,
       profileStale: profileState.dirty,
+      // Live env, same source the watcher checks — the sidebar shows a standing
+      // reminder whenever unattended inbox planning is armed.
+      autoIntakeActive: process.env.APOTHECARY_AUTO_INTAKE === "1",
     };
   }
 

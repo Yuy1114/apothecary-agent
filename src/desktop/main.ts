@@ -73,6 +73,10 @@ function applySettingsToEnv(settings: DesktopSettings): void {
     deepseekApiKey: decryptSecret(settings.deepseekApiKeyEnc),
     embeddingApiKey: decryptSecret(settings.embeddingApiKeyEnc),
   }));
+  // settingsEnv only emits set values, and Object.assign never unsets — but the
+  // auto-intake kill switch must take effect immediately, not on next relaunch
+  // (the watcher reads this env live on every _inbox event).
+  if (settings.autoIntakePlanning !== true) delete process.env.APOTHECARY_AUTO_INTAKE;
 }
 
 function registerSettingsIpc(): void {

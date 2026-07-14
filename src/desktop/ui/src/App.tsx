@@ -181,6 +181,13 @@ export function App() {
           <nav className="nav">
             <NavItem id="settings" icon={<Icon.settings />} label="设置 Settings" active={view} onClick={setView} />
           </nav>
+          {/* Standing reminder while unattended inbox planning is armed — the
+              user must always be able to see that background drafting is on. */}
+          {dashboard?.autoIntakeActive && (
+            <div className="sync-status" title="新落入 _inbox 的文件会在后台自动起草归位提案（不会直接移动，需你采纳）。可在设置中关闭。">
+              <span className="badge accent">自动整理:开</span>
+            </div>
+          )}
           <div className="sync-status">
             <span className={`dot ${dashboard ? "" : "off"}`} />
             <span className="t">{dashboard ? "监听中 · 已连接" : "连接中…"}</span>
@@ -1311,7 +1318,7 @@ function DiagBadge({ diagnostic }: { diagnostic: any }) {
   return <span className={`diag-status ${ok ? "ok" : err ? "err" : "warn"}`}><span className="dot" />{diagnostic.detail}</span>;
 }
 
-type SettingsForm = { chatModel: string; deepseekBaseUrl: string; embeddingBaseUrl: string; embeddingModel: string; embeddingTimeoutMs: string; watch: boolean; autoIntake: boolean };
+type SettingsForm = { chatModel: string; deepseekBaseUrl: string; embeddingBaseUrl: string; embeddingModel: string; embeddingTimeoutMs: string; watch: boolean; autoIntakePlanning: boolean };
 
 function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: string) => void }) {
   const [diag, setDiag] = useState<any>(null);
@@ -1327,7 +1334,7 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
     setForm({
       chatModel: s.chatModel ?? "", deepseekBaseUrl: s.deepseekBaseUrl ?? "", embeddingBaseUrl: s.embeddingBaseUrl ?? "",
       embeddingModel: s.embeddingModel ?? "", embeddingTimeoutMs: s.embeddingTimeoutMs ? String(s.embeddingTimeoutMs) : "",
-      watch: s.watch !== false, autoIntake: s.autoIntake === true,
+      watch: s.watch !== false, autoIntakePlanning: s.autoIntakePlanning === true,
     });
   }).catch((e) => notify(e.message)), [notify]);
   useEffect(() => { void loadDiag(); void loadSettings(); }, [loadDiag, loadSettings, refreshKey]);
@@ -1342,7 +1349,7 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
       embeddingBaseUrl: form.embeddingBaseUrl.trim() || undefined,
       embeddingModel: form.embeddingModel.trim() || undefined,
       embeddingTimeoutMs: form.embeddingTimeoutMs ? Number(form.embeddingTimeoutMs) : undefined,
-      watch: form.watch, autoIntake: form.autoIntake,
+      watch: form.watch, autoIntakePlanning: form.autoIntakePlanning,
     };
     if (dkKey) patch.deepseekApiKey = dkKey;
     if (emKey) patch.embeddingApiKey = emKey;
@@ -1440,8 +1447,8 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
         <div className="card settings-card">
           <div className="h">自动整理</div>
           <div className="row-between">
-            <div className="grow"><div className="rt">自动整理 _inbox</div><div className="rd">新文件落入 _inbox 后，后台自动勘查并起草归位计划，生成提案待你在「工作区」采纳后才会移动文件；低置信度的留在原处。改动模型/开关后需重启生效。</div></div>
-            <button className={`switch ${form.autoIntake ? "on" : ""}`} onClick={() => set("autoIntake", !form.autoIntake)}><i /></button>
+            <div className="grow"><div className="rt">自动整理 _inbox（默认关闭）</div><div className="rd">新文件落入 _inbox 后，后台自动勘查并起草归位计划，生成提案待你在「工作区」采纳后才会移动文件；低置信度的留在原处。保存后立即生效，开启期间侧边栏会常驻提示。</div></div>
+            <button className={`switch ${form.autoIntakePlanning ? "on" : ""}`} onClick={() => set("autoIntakePlanning", !form.autoIntakePlanning)}><i /></button>
           </div>
         </div>
 

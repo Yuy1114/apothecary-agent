@@ -7,7 +7,7 @@ type DesktopSettingsView = {
   embeddingModel?: string;
   embeddingTimeoutMs?: number;
   watch?: boolean;
-  autoIntake?: boolean;
+  autoIntakePlanning?: boolean;
   hasDeepseekKey: boolean;
   hasEmbeddingKey: boolean;
 };
