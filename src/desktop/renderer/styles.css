@@ -475,18 +475,24 @@ a:hover { text-decoration: underline; }
 
 /* ─── Quick ask 划词快问 ─────────────────────────────────────────────── */
 .qa-fab {
-  position: fixed; z-index: 50; border: none; cursor: pointer;
+  /* One above .qa-pop: the fab must stay clickable when a new selection lands
+     near the already-open floating window. */
+  position: fixed; z-index: 51; border: none; cursor: pointer;
   background: var(--accent-500); color: #fff; font-size: 12px; font-weight: 500;
   padding: 5px 12px; border-radius: var(--radius-full); box-shadow: var(--shadow-lg);
 }
 .qa-fab:hover { background: var(--primary-hover); }
 .qa-pop {
   position: fixed; z-index: 50; width: 380px; max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
   background: var(--surface); border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; overflow: hidden;
 }
-.qa-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.qa-head {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border);
+  cursor: move; user-select: none; touch-action: none;
+}
 .qa-title { font-size: 13px; font-weight: 600; }
 .qa-src { font-size: 10.5px; color: var(--fg-subtle); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
 .qa-close { background: none; border: none; cursor: pointer; color: var(--fg-muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); }
@@ -497,7 +503,7 @@ a:hover { text-decoration: underline; }
   font-size: 12px; color: var(--fg-muted);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.qa-body { max-height: 300px; overflow-y: auto; padding: 4px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.qa-body { max-height: 300px; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 12px 0; display: flex; flex-direction: column; gap: 10px; }
 .qa-turn { display: flex; flex-direction: column; gap: 6px; }
 .qa-q { align-self: flex-end; max-width: 85%; background: var(--accent-soft); color: var(--fg); padding: 6px 10px; border-radius: var(--radius-md); font-size: 12.5px; white-space: pre-wrap; }
 .qa-a { font-size: 12.5px; }

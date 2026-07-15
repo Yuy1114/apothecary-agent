@@ -1,4 +1,4 @@
-import { KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "./markdown.js";
 
 const api = window.apothecary;
@@ -30,10 +30,19 @@ const MARGIN = 8;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
 
+// First placement only — once open the popover is a free-floating window and
+// a ResizeObserver keeps it inside the viewport as it grows or moves.
+const initialPos = (rect: Snapshot["rect"]) => ({
+  left: clamp(rect.left, MARGIN, window.innerWidth - POP_WIDTH - MARGIN),
+  top: rect.bottom + MARGIN + POP_EST_HEIGHT > window.innerHeight
+    ? Math.max(MARGIN, rect.top - POP_EST_HEIGHT - MARGIN)
+    : rect.bottom + MARGIN,
+});
+
 /**
  * 划词快问: selecting text inside `containerRef` shows a floating 快问 button;
- * it opens an anchored popover whose Q&A streams over runEvent with its own
- * runIds. Deliberately thread-free — closing discards the whole transcript.
+ * it opens a draggable floating popover whose Q&A streams over runEvent with
+ * its own runIds. Deliberately thread-free — closing discards the transcript.
  */
 export function QuickAsk({ containerRef, resolveContext }: {
   containerRef: { current: HTMLElement | null };
@@ -41,20 +50,21 @@ export function QuickAsk({ containerRef, resolveContext }: {
 }) {
   const [fab, setFab] = useState<Snapshot | null>(null);
   const [open, setOpen] = useState<Snapshot | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const popRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const openRef = useRef(false);
   const unsubRef = useRef<(() => void) | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; baseLeft: number; baseTop: number } | null>(null);
   const busy = turns.some((turn) => turn.status === "streaming");
 
   // Selection detection: after any mouseup/keyup, offer the fab when a valid
   // selection sits inside the host container and the view can resolve context.
+  // Works with the popover open too — the fab then re-targets it.
   useEffect(() => {
     const onSelect = () => {
-      if (openRef.current) return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) { setFab(null); return; }
       const text = sel.toString().trim();
@@ -64,6 +74,9 @@ export function QuickAsk({ containerRef, resolveContext }: {
       const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
       const container = containerRef.current;
       if (!element || !container || !container.contains(element)) { setFab(null); return; }
+      // Copying text out of the popover itself must not offer a nested fab
+      // (in the Vault view the popover mounts inside the preview container).
+      if (popRef.current?.contains(element)) return;
       const context = resolveContext(range, text);
       if (!context) { setFab(null); return; }
       const rect = range.getBoundingClientRect();
@@ -78,9 +91,9 @@ export function QuickAsk({ containerRef, resolveContext }: {
   }, [containerRef, resolveContext]);
 
   // The fab is anchored to a viewport rect that goes stale on scroll/resize —
-  // just hide it (the open popover instead behaves as a transient dialog).
+  // just hide it (the open popover floats free and stays).
   useEffect(() => {
-    if (!fab || open) return;
+    if (!fab) return;
     const hide = () => setFab(null);
     document.addEventListener("scroll", hide, { capture: true, passive: true });
     window.addEventListener("resize", hide);
@@ -88,43 +101,88 @@ export function QuickAsk({ containerRef, resolveContext }: {
       document.removeEventListener("scroll", hide, { capture: true });
       window.removeEventListener("resize", hide);
     };
-  }, [fab, open]);
+  }, [fab]);
+
+  const dropStream = () => {
+    unsubRef.current?.();
+    unsubRef.current = null;
+  };
+
+  // Open (or re-target) the floating window onto a fresh selection snapshot.
+  const openAt = (snapshot: Snapshot) => {
+    dropStream();
+    setTurns([]);
+    setQuestion("");
+    setOpen(snapshot);
+    setPos(initialPos(snapshot.rect));
+    setFab(null);
+  };
 
   const close = useCallback(() => {
     setOpen(null);
+    setPos(null);
     setTurns([]);
     setQuestion("");
-    unsubRef.current?.();
-    unsubRef.current = null;
+    dropStream();
   }, []);
 
   // Unmount (view switch) must also drop the stream subscription.
   useEffect(() => () => { unsubRef.current?.(); }, []);
 
+  // Floating-window closing: only Esc or the × button (outside clicks are how
+  // the user keeps reading / selects the next fragment while it stays open).
   useEffect(() => {
-    if (!open) { openRef.current = false; return; }
-    openRef.current = true;
+    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.isComposing) close();
     };
-    const onMouseDown = (event: MouseEvent) => {
-      if (popRef.current && !popRef.current.contains(event.target as Node)) close();
-    };
-    // Re-render so the fixed position re-clamps to the new viewport.
-    const onResize = () => setOpen((current) => (current ? { ...current } : current));
     document.addEventListener("keydown", onKeyDown);
-    // Register outside-click a tick later: the mousedown that opened the popover
-    // is still dispatching, and must not immediately close it again.
-    const outsideTimer = window.setTimeout(() => document.addEventListener("mousedown", onMouseDown), 0);
-    window.addEventListener("resize", onResize);
-    return () => {
-      openRef.current = false;
-      document.removeEventListener("keydown", onKeyDown);
-      window.clearTimeout(outsideTimer);
-      document.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("resize", onResize);
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, close]);
+
+  // Keep the whole window inside the viewport, measured at its real size: on
+  // open, whenever streamed content grows it, and on viewport resize.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const element = popRef.current;
+    if (!element) return;
+    const clampIntoView = () => {
+      const rect = element.getBoundingClientRect();
+      setPos((current) => {
+        if (!current) return current;
+        const left = clamp(current.left, MARGIN, window.innerWidth - rect.width - MARGIN);
+        const top = clamp(current.top, MARGIN, window.innerHeight - rect.height - MARGIN);
+        return left === current.left && top === current.top ? current : { left, top };
+      });
+    };
+    clampIntoView();
+    const observer = new ResizeObserver(clampIntoView);
+    observer.observe(element);
+    window.addEventListener("resize", clampIntoView);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", clampIntoView);
+    };
+  }, [open]);
+
+  // Drag by the header. Pointer capture keeps fast drags from escaping.
+  const onHeadPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if ((event.target as Element).closest(".qa-close")) return;
+    if (!pos) return;
+    event.preventDefault();
+    dragRef.current = { startX: event.clientX, startY: event.clientY, baseLeft: pos.left, baseTop: pos.top };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onHeadPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const element = popRef.current;
+    if (!drag || !element) return;
+    setPos({
+      left: clamp(drag.baseLeft + event.clientX - drag.startX, MARGIN, window.innerWidth - element.offsetWidth - MARGIN),
+      top: clamp(drag.baseTop + event.clientY - drag.startY, MARGIN, window.innerHeight - element.offsetHeight - MARGIN),
+    });
+  };
+  const onHeadPointerUp = () => { dragRef.current = null; };
 
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => { bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight }); }, [turns]);
@@ -139,8 +197,7 @@ export function QuickAsk({ containerRef, resolveContext }: {
     setTurns((current) => [...current, { runId, question: asked, answer: "", status: "streaming" }]);
     const fail = (message: string) => {
       setTurns((current) => current.map((turn) => (turn.runId === runId ? { ...turn, status: "failed", error: message } : turn)));
-      unsubRef.current?.();
-      unsubRef.current = null;
+      dropStream();
     };
     const unsub = api.onRunEvent(({ runId: eventRunId, event }) => {
       if (eventRunId !== runId) return;
@@ -148,8 +205,7 @@ export function QuickAsk({ containerRef, resolveContext }: {
         setTurns((current) => current.map((turn) => (turn.runId === runId ? { ...turn, answer: turn.answer + event.text } : turn)));
       } else if (event.type === "completed") {
         setTurns((current) => current.map((turn) => (turn.runId === runId ? { ...turn, status: "done" } : turn)));
-        unsubRef.current?.();
-        unsubRef.current = null;
+        dropStream();
       } else if (event.type === "failed") {
         fail(event.message);
       }
@@ -185,25 +241,16 @@ export function QuickAsk({ containerRef, resolveContext }: {
     }
   };
 
-  const viewWidth = window.innerWidth;
   const fabStyle = fab
     ? {
-        left: clamp(fab.rect.right - 8, MARGIN, viewWidth - FAB_WIDTH - MARGIN),
+        left: clamp(fab.rect.right - 8, MARGIN, window.innerWidth - FAB_WIDTH - MARGIN),
         top: fab.rect.top - 34 >= MARGIN ? fab.rect.top - 34 : fab.rect.bottom + MARGIN,
-      }
-    : undefined;
-  const popStyle = open
-    ? {
-        left: clamp(open.rect.left, MARGIN, viewWidth - POP_WIDTH - MARGIN),
-        top: open.rect.bottom + MARGIN + POP_EST_HEIGHT > window.innerHeight
-          ? Math.max(MARGIN, open.rect.top - POP_EST_HEIGHT - MARGIN)
-          : open.rect.bottom + MARGIN,
       }
     : undefined;
 
   return (
     <>
-      {fab && !open && (
+      {fab && (
         <button
           className="qa-fab"
           style={fabStyle}
@@ -211,16 +258,20 @@ export function QuickAsk({ containerRef, resolveContext }: {
             // preventDefault keeps the browser from collapsing the selection
             // before the popover captures it.
             event.preventDefault();
-            setOpen(fab);
-            setFab(null);
+            openAt(fab);
           }}
         >
           快问
         </button>
       )}
-      {open && (
-        <div className="qa-pop" style={popStyle} ref={popRef}>
-          <div className="qa-head">
+      {open && pos && (
+        <div className="qa-pop" style={pos} ref={popRef}>
+          <div
+            className="qa-head"
+            onPointerDown={onHeadPointerDown}
+            onPointerMove={onHeadPointerMove}
+            onPointerUp={onHeadPointerUp}
+          >
             <span className="qa-title">快问</span>
             {open.context.source === "note" && open.context.sourcePath && (
               <span className="qa-src" title={open.context.sourcePath}>{open.context.sourcePath}</span>
