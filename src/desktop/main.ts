@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, shell } from "electron";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,10 @@ import {
 } from "./settings.js";
 import { SaveSettingsInputSchema, SettingsChannel } from "./contracts.js";
 import { initFileLogging } from "./logging.js";
+import { installScheduleTray } from "./tray.js";
+import { startScheduleTicker } from "./scheduler.js";
+import { toggleScheduleItem } from "../application/schedule/scheduleStore.js";
+import { formatLocalDate, type ScheduleItem } from "../domain/schedule.js";
 import { apothecaryHome } from "../config/apothecaryHome.js";
 import { logger } from "../observability/logger.js";
 
@@ -361,7 +365,10 @@ async function createService(): Promise<DesktopService> {
   return service;
 }
 
-async function createWindow(): Promise<void> {
+// The console window (menu-bar-first: opened on demand from tray/dock/notification).
+let mainWindow: BrowserWindow | null = null;
+
+async function createWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -391,6 +398,23 @@ async function createWindow(): Promise<void> {
     console.log(`Desktop smoke captured: ${smokePath}`);
     app.quit();
   }
+  mainWindow = window;
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null;
+  });
+  return window;
+}
+
+/** Show the console: focus the live window or recreate it (real close +
+ *  recreate — macOS already keeps the app running with no windows). */
+async function showConsole(): Promise<void> {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    return;
+  }
+  await createWindow();
 }
 
 app
@@ -408,10 +432,48 @@ app
     const service = await createService();
     registerDesktopIpc(ipcMain, service);
     registerSettingsIpc();
-    await createWindow();
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) void createWindow();
+
+    // Menu-bar-first surface: the tray + minute ticker keep working with the
+    // console window closed. Hooked up after the runtime (ports installed by
+    // createService) and before the window opens.
+    const testHooks = process.env.APOTHECARY_TEST_HOOKS === "1";
+    const notified: string[] = [];
+    const notify = (item: ScheduleItem): void => {
+      if (testHooks) {
+        notified.push(`${item.time ?? ""} ${item.title}`.trim());
+        return;
+      }
+      const notification = new Notification({
+        title: "Apothecary 日程",
+        body: `${item.time ?? ""} ${item.title}`.trim(),
+      });
+      notification.on("click", () => void showConsole());
+      notification.show();
+    };
+    const tray = installScheduleTray({
+      vaultPath,
+      showConsole,
+      iconPath: path.join(app.getAppPath(), "build", "tray", "apothecaryTemplate.png"),
     });
+    const ticker = startScheduleTicker({ vaultPath, notify, onScheduleChanged: tray.refreshTitle });
+    void ticker.tick();
+    app.on("before-quit", () => {
+      ticker.stop();
+      tray.destroy();
+    });
+    if (testHooks) {
+      (globalThis as Record<string, unknown>).__apothecaryTest = {
+        tick: ticker.tick,
+        showConsole,
+        buildTrayMenu: async () =>
+          (await tray.buildMenuTemplate()).map(({ label, type, checked, enabled }) => ({ label, type, checked, enabled })),
+        toggle: (line: number) => toggleScheduleItem(vaultPath, formatLocalDate(), line),
+        notified,
+      };
+    }
+
+    await createWindow();
+    app.on("activate", () => void showConsole());
   })
   .catch((error) => {
     console.error("Apothecary desktop failed to start:", error);

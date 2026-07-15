@@ -78,6 +78,7 @@
     },
     "files": [
       "dist/**/*",
+      "build/tray/**",
       "package.json"
     ],
     "extraResources": [
