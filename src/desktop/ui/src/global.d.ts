@@ -25,6 +25,15 @@ type RecentActivityItem = {
   at: string;
   detail?: string;
 };
+type QuickAskRequest = {
+  runId: string;
+  question: string;
+  selection: string;
+  contextText: string;
+  source: "chat" | "note";
+  sourcePath?: string;
+  priorTurns: Array<{ question: string; answer: string }>;
+};
 type AgentRunEvent =
   | { type: "status"; phase: "started" | "thinking"; label: string }
   | { type: "text_delta"; text: string }
@@ -39,6 +48,7 @@ type ApothecaryApi = {
   dashboard(): Promise<any>;
   chat(messages: ChatMessage[]): Promise<string>;
   startRun(runId: string, messages: ChatMessage[], threadId?: string): Promise<{ runId: string }>;
+  quickAsk(input: QuickAskRequest): Promise<{ runId: string }>;
   resumeRun(
     runId: string,
     proposalId: string,

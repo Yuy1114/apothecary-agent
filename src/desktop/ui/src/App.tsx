@@ -1,5 +1,7 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "./markdown.js";
+import { QuickAsk, type QuickAskContext } from "./quickAsk.js";
+import { sliceEnclosingSection } from "./quickAskSection.js";
 
 type View = "workspace" | "proposals" | "vault" | "runs" | "knowledge" | "settings";
 type Message = { role: "user" | "assistant"; content: string };
@@ -413,6 +415,21 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [timeline]);
 
+  // Quick-ask context: the containing assistant message, nothing else. The
+  // timeline lives in a ref so the resolver identity stays stable.
+  const timelineRef = useRef<TimelineItem[]>([]);
+  useEffect(() => { timelineRef.current = timeline; }, [timeline]);
+  const resolveChatContext = useCallback((range: Range): QuickAskContext | null => {
+    const node = range.commonAncestorContainer;
+    const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+    const host = element?.closest("[data-qa-id]");
+    if (!host) return null;
+    const id = host.getAttribute("data-qa-id");
+    const item = timelineRef.current.find((it) => it.kind === "run" && it.run.id === id);
+    if (!item || item.kind !== "run" || !item.run.text) return null;
+    return { contextText: item.run.text.slice(0, 8000), source: "chat" };
+  }, []);
+
   const conversationFrom = (items: TimelineItem[]): Message[] => items.reduce<Message[]>((messages, item) => {
     if (item.kind === "user") messages.push({ role: "user", content: item.content });
     else if (item.run.text) messages.push({ role: "assistant", content: item.run.text });
@@ -578,6 +595,7 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
           </div>
         </div>
       </form>
+      <QuickAsk containerRef={scrollRef} resolveContext={resolveChatContext} />
       {reasonDialog}
     </section>
   );
@@ -635,7 +653,9 @@ function AgentAnswer({ text, onOpenSource }: { text: string; onOpenSource?: (pat
 function AgentRunBubble({ run, onResolve, onApprove, onCancel, onOpenSource, onOpenDiff }: { run: AgentRun; onResolve: (proposal: RunProposal, decision: "approve" | "reject") => void; onApprove: (approval: RunApproval, decision: "approve" | "decline") => void; onCancel: () => void; onOpenSource?: (path: string) => void; onOpenDiff?: (p: any) => void }) {
   const [badgeCls, badgeText] = runBadge(run.status);
   return (
-    <div className="msg-agent">
+    // data-qa-id lets the quick-ask popover map a text selection back to the
+    // containing run, whose full text becomes the (only) context it sends.
+    <div className="msg-agent" data-qa-id={run.id}>
       <div className="agent-col">
         {(run.tools.length > 0 || run.status !== "completed") && (
           <div className="card run-card">
@@ -1003,6 +1023,20 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
   // `missing` marks an entry whose file is gone from disk (e.g. manually
   // deleted after the change was logged): no content, but still resolvable.
   const [selected, setSelected] = useState<{ file: any; data: any; missing?: boolean } | null>(null);
+  // Quick-ask context: the enclosing section of the open note. The note lives
+  // in a ref so the resolver identity stays stable across content loads.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<typeof selected>(null);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  const resolveNoteContext = useCallback((_range: Range, selectionText: string): QuickAskContext | null => {
+    const current = selectedRef.current;
+    if (!current || current.missing || !current.data?.content) return null;
+    return {
+      contextText: sliceEnclosingSection(current.data.content, selectionText),
+      source: "note",
+      sourcePath: typeof current.file?.path === "string" ? current.file.path : undefined,
+    };
+  }, []);
   const [polishOpen, setPolishOpen] = useState(false);
   const [polishModes, setPolishModes] = useState<PolishModeKey[]>(["format"]);
   const [polishing, setPolishing] = useState(false);
@@ -1128,7 +1162,7 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
           </div>
         </div>
 
-        <div className="preview-pane">
+        <div className="preview-pane" ref={previewRef}>
           {!selected ? (
             <Empty>选择一个文件查看内容</Empty>
           ) : (
@@ -1205,6 +1239,7 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
               </div>
             </>
           )}
+          <QuickAsk containerRef={previewRef} resolveContext={resolveNoteContext} />
         </div>
       </div>
     </section>

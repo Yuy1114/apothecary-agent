@@ -101,6 +101,63 @@ describe("DesktopService", () => {
     ]);
   });
 
+  it("forwards a quick ask as a built prompt, isolated from chat deps", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-quickask-"));
+    dirs.push(root);
+    const prompts: string[] = [];
+    const seenRunId: string[] = [];
+    const service = new DesktopService({
+      vaultPath: path.join(root, "vault"),
+      projectRoot: path.join(root, "project"),
+      deps: {
+        chat: async () => "fallback",
+        quickAsk: async (prompt, emit, runId) => {
+          prompts.push(prompt);
+          seenRunId.push(runId);
+          emit({ type: "text_delta", text: "SM-2 是间隔重复算法" });
+          emit({ type: "completed" });
+        },
+      },
+    });
+    await service.initialize();
+
+    const events: Array<{ type: string }> = [];
+    await service.quickAsk(
+      {
+        runId: "run-qa",
+        question: "SM-2 是什么？",
+        selection: "SM-2 调度",
+        contextText: "## 复习\n采用 SM-2 调度间隔。",
+        source: "note",
+        sourcePath: "projects/anki.md",
+        priorTurns: [{ question: "早先的问题", answer: "早先的回答" }],
+      },
+      (event) => events.push(event),
+    );
+
+    expect(seenRunId).toEqual(["run-qa"]);
+    const prompt = prompts[0];
+    expect(prompt).toContain("Source: vault note projects/anki.md");
+    expect(prompt).toContain("采用 SM-2 调度间隔");
+    expect(prompt).toContain("Selected text:");
+    expect(prompt).toContain("Q: 早先的问题");
+    expect(prompt).toContain("Question: SM-2 是什么？");
+    expect(events).toEqual([
+      { type: "text_delta", text: "SM-2 是间隔重复算法" },
+      { type: "completed" },
+    ]);
+  });
+
+  it("rejects a quick ask when the dep is not wired", async () => {
+    const { service } = await setup();
+    expect(() =>
+      service.quickAsk(
+        { runId: "run-qa", question: "q", selection: "s", contextText: "c", source: "chat", priorTurns: [] },
+        () => {},
+      ),
+    ).toThrow("quick_ask_not_available");
+  });
+
   it("resumes a run with the human decision and injects the outcome", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-resume-"));
     dirs.push(root);

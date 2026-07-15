@@ -14,6 +14,7 @@ import {
   ProposalDiffInputSchema,
   PolishNoteInputSchema,
   RecentActivityInputSchema,
+  QuickAskInputSchema,
   ResumeRunInputSchema,
   StartRunInputSchema,
   ThreadIdInputSchema,
@@ -43,6 +44,22 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
       }
     })();
     return { runId };
+  });
+  ipcMain.handle(DesktopChannel.quickAsk, (ipcEvent, input) => {
+    const parsed = QuickAskInputSchema.parse(input);
+    const send = (event: AgentRunEvent) => {
+      if (!ipcEvent.sender.isDestroyed()) ipcEvent.sender.send(DesktopChannel.runEvent, { runId: parsed.runId, event });
+    };
+    // Fire-and-forget like startRun. No `status started` event — the popover
+    // renders its own local pending state until the first text_delta.
+    void (async () => {
+      try {
+        await service.quickAsk(parsed, send);
+      } catch (error) {
+        send({ type: "failed", message: error instanceof Error ? error.message : "快问失败" });
+      }
+    })();
+    return { runId: parsed.runId };
   });
   ipcMain.handle(DesktopChannel.resumeRun, (ipcEvent, input) => {
     const { runId, proposalId, decision, note } = ResumeRunInputSchema.parse(input);

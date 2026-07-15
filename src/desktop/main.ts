@@ -229,6 +229,7 @@ async function createService(): Promise<DesktopService> {
   // deadlock module evaluation before the window ever opens.
   const { polishNote } = await import("../application/notes/polishNote.js");
   const { mastraNotePolisher } = await import("../mastra/adapters/mastraNotePolisher.js");
+  const { quickAsk: quickAskAgent } = await import("../mastra/agents/transformers/quick-ask.js");
   const runtimeRoot = app.isPackaged ? app.getPath("userData") : projectRoot;
   await fs.mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
   const desktopRuntime = createDesktopRuntime(runtimeRoot);
@@ -316,6 +317,13 @@ async function createService(): Promise<DesktopService> {
         await pumpAgentStream(output, emit, runId);
       },
       cancelRun: (runId) => apothecaryAgent.abortRunStream(runId),
+      quickAsk: async (prompt, emit, runId) => {
+        logger.info("run", `▶ quick-ask ${runId.slice(0, 8)}`);
+        // One-shot and tool-less by design; no `memory` option, so nothing is
+        // persisted to any conversation thread.
+        const output = await quickAskAgent.stream(prompt, { maxSteps: 1, toolChoice: "none" });
+        await pumpAgentStream(output, emit, runId);
+      },
       polishNote: async (filePath, modes) => {
         logger.info("polish", `▶ ${filePath} [${modes.join(",")}]`);
         const result = await polishNote({ vaultPath, filePath, modes }, mastraNotePolisher);

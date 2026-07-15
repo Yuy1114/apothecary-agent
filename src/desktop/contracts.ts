@@ -14,6 +14,23 @@ export const StartRunInputSchema = ChatInputSchema.extend({
   threadId: z.string().min(1).optional(),
 });
 
+// Quick-ask (划词快问): a one-shot side-channel question about selected text.
+// Deliberately carries its own bounded context instead of a threadId — the run
+// must stay isolated from conversation memory.
+export const QuickAskInputSchema = z.object({
+  runId: z.string().uuid(),
+  question: z.string().min(1).max(2_000),
+  selection: z.string().min(1).max(8_000),
+  contextText: z.string().min(1).max(8_000),
+  source: z.enum(["chat", "note"]),
+  sourcePath: z.string().max(500).optional(),
+  priorTurns: z
+    .array(z.object({ question: z.string().max(2_000), answer: z.string().max(8_000) }))
+    .max(2)
+    .default([]),
+});
+export type QuickAskInput = z.infer<typeof QuickAskInputSchema>;
+
 export const ThreadIdInputSchema = z.object({ threadId: z.string().min(1) });
 
 export const CreateThreadInputSchema = z.object({
@@ -95,6 +112,7 @@ export const DesktopChannel = {
   dashboard: "apothecary:dashboard",
   chat: "apothecary:chat",
   startRun: "apothecary:start-run",
+  quickAsk: "apothecary:quick-ask",
   resumeRun: "apothecary:resume-run",
   resolveApproval: "apothecary:resolve-approval",
   cancelRun: "apothecary:cancel-run",

@@ -19,6 +19,7 @@ import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
 import type { AgentRunEvent } from "./runEvents.js";
+import { buildQuickAskPrompt, type QuickAskTurn } from "./quickAskPrompt.js";
 import type { PolishMode } from "../../domain/notePolish.js";
 import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
 
@@ -37,6 +38,21 @@ export type DesktopChatMessage = { role: "user" | "assistant"; content: string }
 
 /** A persisted conversation, backed by one Mastra memory thread. */
 export type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: string; preview?: string };
+
+/**
+ * A quick-ask (划词快问): one side-channel question about selected text. Carries
+ * its own bounded context; deliberately has no threadId so it can never touch
+ * conversation memory.
+ */
+export type QuickAskRequest = {
+  runId: string;
+  question: string;
+  selection: string;
+  contextText: string;
+  source: "chat" | "note";
+  sourcePath?: string;
+  priorTurns: QuickAskTurn[];
+};
 
 /** Human decision injected back into a suspended `proposeChange` tool call. */
 export type ProposalResumeData = {
@@ -68,6 +84,9 @@ export type DesktopServiceDeps = {
     emit: (event: AgentRunEvent) => void,
   ) => Promise<void>;
   cancelRun?: (runId: string) => boolean;
+  // Isolation invariant: the implementation must be a one-shot, tool-less call
+  // with NO memory option — a quick ask never persists to any thread.
+  quickAsk?: (prompt: string, emit: (event: AgentRunEvent) => void, runId: string) => Promise<void>;
   // Note polishing needs the LLM adapter, so the composition root injects it
   // (same reason as chat: this service must not import mastra).
   polishNote?: (
@@ -120,6 +139,22 @@ export class DesktopService {
         });
     }
     return this.deps.streamChat(messages.slice(-20), emit, runId, threadId);
+  }
+
+  /** One-shot side-channel Q&A about selected text; isolated from all threads. */
+  quickAsk(request: QuickAskRequest, emit: (event: AgentRunEvent) => void): Promise<void> {
+    if (!this.deps.quickAsk) throw new Error("quick_ask_not_available");
+    const sourceLabel = request.source === "note"
+      ? `vault note ${request.sourcePath ?? "(unknown)"}`
+      : "a chat reply from the assistant";
+    const prompt = buildQuickAskPrompt({
+      question: request.question,
+      selection: request.selection,
+      contextText: request.contextText,
+      sourceLabel,
+      priorTurns: request.priorTurns,
+    });
+    return this.deps.quickAsk(prompt, emit, request.runId);
   }
 
   /** List persisted conversations (Mastra memory threads), newest first. */

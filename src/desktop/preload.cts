@@ -4,6 +4,7 @@ const channel = {
   dashboard: "apothecary:dashboard",
   chat: "apothecary:chat",
   startRun: "apothecary:start-run",
+  quickAsk: "apothecary:quick-ask",
   resumeRun: "apothecary:resume-run",
   resolveApproval: "apothecary:resolve-approval",
   cancelRun: "apothecary:cancel-run",
@@ -41,6 +42,15 @@ contextBridge.exposeInMainWorld("apothecary", {
     ipcRenderer.invoke(channel.chat, { messages }),
   startRun: (runId: string, messages: Array<{ role: "user" | "assistant"; content: string }>, threadId?: string) =>
     ipcRenderer.invoke(channel.startRun, { runId, messages, threadId }),
+  quickAsk: (input: {
+    runId: string;
+    question: string;
+    selection: string;
+    contextText: string;
+    source: "chat" | "note";
+    sourcePath?: string;
+    priorTurns: Array<{ question: string; answer: string }>;
+  }) => ipcRenderer.invoke(channel.quickAsk, input),
   resumeRun: (runId: string, proposalId: string, decision: "approve" | "reject", note?: string) =>
     ipcRenderer.invoke(channel.resumeRun, { runId, proposalId, decision, note }),
   resolveApproval: (runId: string, toolCallId: string, decision: "approve" | "decline") =>
