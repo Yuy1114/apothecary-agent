@@ -6,7 +6,7 @@ const api = window.apothecary;
 /** What a quick ask is about: bounded context resolved by the hosting view. */
 export type QuickAskContext = { contextText: string; source: "chat" | "note"; sourcePath?: string };
 
-// Everything the popover needs, snapshotted the moment the fab appears — the
+// Everything a window needs, snapshotted the moment the fab appears — the
 // browser collapses the selection on the next click, so nothing may be read
 // from the live selection after that.
 type Snapshot = {
@@ -30,8 +30,8 @@ const MARGIN = 8;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
 
-// First placement only — once open the popover is a free-floating window and
-// a ResizeObserver keeps it inside the viewport as it grows or moves.
+// First placement only — once open a window floats free and a ResizeObserver
+// keeps it inside the viewport as it grows or moves.
 const initialPos = (rect: Snapshot["rect"]) => ({
   left: clamp(rect.left, MARGIN, window.innerWidth - POP_WIDTH - MARGIN),
   top: rect.bottom + MARGIN + POP_EST_HEIGHT > window.innerHeight
@@ -41,28 +41,25 @@ const initialPos = (rect: Snapshot["rect"]) => ({
 
 /**
  * 划词快问: selecting text inside `containerRef` shows a floating 快问 button;
- * it opens a draggable floating popover whose Q&A streams over runEvent with
- * its own runIds. Deliberately thread-free — closing discards the transcript.
+ * each click opens an independent draggable floating window whose Q&A streams
+ * over runEvent with its own runIds. Clicking a window raises it; Esc closes
+ * the frontmost one. Deliberately thread-free — closing discards everything.
  */
 export function QuickAsk({ containerRef, resolveContext }: {
   containerRef: { current: HTMLElement | null };
   resolveContext: (range: Range, selectionText: string) => QuickAskContext | null;
 }) {
   const [fab, setFab] = useState<Snapshot | null>(null);
-  const [open, setOpen] = useState<Snapshot | null>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [question, setQuestion] = useState("");
-  const popRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const unsubRef = useRef<(() => void) | null>(null);
-  const dragRef = useRef<{ startX: number; startY: number; baseLeft: number; baseTop: number } | null>(null);
-  const busy = turns.some((turn) => turn.status === "streaming");
+  // `windows` keeps creation order (stable DOM order, so raising a window never
+  // moves its node and never blurs its input); `stack` holds the z-order, last
+  // id on top.
+  const [windows, setWindows] = useState<Array<{ id: string; snapshot: Snapshot; initial: { left: number; top: number } }>>([]);
+  const [stack, setStack] = useState<string[]>([]);
+  const stackRef = useRef(stack);
+  useEffect(() => { stackRef.current = stack; }, [stack]);
 
   // Selection detection: after any mouseup/keyup, offer the fab when a valid
   // selection sits inside the host container and the view can resolve context.
-  // Works with the popover open too — the fab then re-targets it.
   useEffect(() => {
     const onSelect = () => {
       const sel = window.getSelection();
@@ -74,9 +71,9 @@ export function QuickAsk({ containerRef, resolveContext }: {
       const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
       const container = containerRef.current;
       if (!element || !container || !container.contains(element)) { setFab(null); return; }
-      // Copying text out of the popover itself must not offer a nested fab
-      // (in the Vault view the popover mounts inside the preview container).
-      if (popRef.current?.contains(element)) return;
+      // Copying text out of a quick-ask window must not offer a nested fab
+      // (in the Vault view the windows mount inside the preview container).
+      if (element.closest(".qa-pop")) return;
       const context = resolveContext(range, text);
       if (!context) { setFab(null); return; }
       const rect = range.getBoundingClientRect();
@@ -91,7 +88,7 @@ export function QuickAsk({ containerRef, resolveContext }: {
   }, [containerRef, resolveContext]);
 
   // The fab is anchored to a viewport rect that goes stale on scroll/resize —
-  // just hide it (the open popover floats free and stays).
+  // just hide it (open windows float free and stay).
   useEffect(() => {
     if (!fab) return;
     const hide = () => setFab(null);
@@ -103,53 +100,118 @@ export function QuickAsk({ containerRef, resolveContext }: {
     };
   }, [fab]);
 
+  // Every fab click opens a fresh window on the snapshotted selection.
+  const openAt = (snapshot: Snapshot) => {
+    const id = crypto.randomUUID();
+    setWindows((current) => {
+      let pos = initialPos(snapshot.rect);
+      // Cascade away from windows spawned at the same anchor (e.g. asking
+      // about the same selection twice) so none hides another completely.
+      while (current.some((w) => Math.abs(w.initial.left - pos.left) < 16 && Math.abs(w.initial.top - pos.top) < 16)) {
+        pos = { left: pos.left + 28, top: pos.top + 28 };
+      }
+      return [...current, { id, snapshot, initial: pos }];
+    });
+    setStack((current) => [...current, id]);
+    setFab(null);
+    // The snapshot is taken — collapse the real selection so the mouseup that
+    // follows the fab click cannot re-offer a stale fab for it.
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const closeWindow = useCallback((id: string) => {
+    setWindows((current) => current.filter((w) => w.id !== id));
+    setStack((current) => current.filter((stackId) => stackId !== id));
+  }, []);
+
+  const focusWindow = useCallback((id: string) => {
+    setStack((current) => (current.at(-1) === id ? current : [...current.filter((stackId) => stackId !== id), id]));
+  }, []);
+
+  // Esc closes the frontmost window only.
+  const hasWindows = windows.length > 0;
+  useEffect(() => {
+    if (!hasWindows) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing) return;
+      const top = stackRef.current.at(-1);
+      if (top) closeWindow(top);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [hasWindows, closeWindow]);
+
+  const fabStyle = fab
+    ? {
+        left: clamp(fab.rect.right - 8, MARGIN, window.innerWidth - FAB_WIDTH - MARGIN),
+        top: fab.rect.top - 34 >= MARGIN ? fab.rect.top - 34 : fab.rect.bottom + MARGIN,
+      }
+    : undefined;
+
+  return (
+    <>
+      {fab && (
+        <button
+          className="qa-fab"
+          style={fabStyle}
+          onMouseDown={(event) => {
+            // preventDefault keeps the browser from collapsing the selection
+            // before the window captures it.
+            event.preventDefault();
+            openAt(fab);
+          }}
+        >
+          快问
+        </button>
+      )}
+      {windows.map((w) => (
+        <QuickAskWindow
+          key={w.id}
+          snapshot={w.snapshot}
+          initial={w.initial}
+          zIndex={50 + Math.max(0, stack.indexOf(w.id))}
+          onClose={() => closeWindow(w.id)}
+          onFocus={() => focusWindow(w.id)}
+        />
+      ))}
+    </>
+  );
+}
+
+/** One independent floating quick-ask window: own transcript, stream, drag. */
+function QuickAskWindow({ snapshot, initial, zIndex, onClose, onFocus }: {
+  snapshot: Snapshot;
+  initial: { left: number; top: number };
+  zIndex: number;
+  onClose: () => void;
+  onFocus: () => void;
+}) {
+  const [pos, setPos] = useState(initial);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [question, setQuestion] = useState("");
+  const popRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const unsubRef = useRef<(() => void) | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; baseLeft: number; baseTop: number } | null>(null);
+  const busy = turns.some((turn) => turn.status === "streaming");
+
   const dropStream = () => {
     unsubRef.current?.();
     unsubRef.current = null;
   };
 
-  // Open (or re-target) the floating window onto a fresh selection snapshot.
-  const openAt = (snapshot: Snapshot) => {
-    dropStream();
-    setTurns([]);
-    setQuestion("");
-    setOpen(snapshot);
-    setPos(initialPos(snapshot.rect));
-    setFab(null);
-  };
-
-  const close = useCallback(() => {
-    setOpen(null);
-    setPos(null);
-    setTurns([]);
-    setQuestion("");
-    dropStream();
-  }, []);
-
-  // Unmount (view switch) must also drop the stream subscription.
+  // Unmount (close / view switch) must drop the stream subscription.
   useEffect(() => () => { unsubRef.current?.(); }, []);
 
-  // Floating-window closing: only Esc or the × button (outside clicks are how
-  // the user keeps reading / selects the next fragment while it stays open).
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.isComposing) close();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, close]);
-
   // Keep the whole window inside the viewport, measured at its real size: on
-  // open, whenever streamed content grows it, and on viewport resize.
+  // mount, whenever streamed content grows it, and on viewport resize.
   useLayoutEffect(() => {
-    if (!open) return;
     const element = popRef.current;
     if (!element) return;
     const clampIntoView = () => {
       const rect = element.getBoundingClientRect();
       setPos((current) => {
-        if (!current) return current;
         const left = clamp(current.left, MARGIN, window.innerWidth - rect.width - MARGIN);
         const top = clamp(current.top, MARGIN, window.innerHeight - rect.height - MARGIN);
         return left === current.left && top === current.top ? current : { left, top };
@@ -163,12 +225,11 @@ export function QuickAsk({ containerRef, resolveContext }: {
       observer.disconnect();
       window.removeEventListener("resize", clampIntoView);
     };
-  }, [open]);
+  }, []);
 
   // Drag by the header. Pointer capture keeps fast drags from escaping.
   const onHeadPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as Element).closest(".qa-close")) return;
-    if (!pos) return;
     event.preventDefault();
     dragRef.current = { startX: event.clientX, startY: event.clientY, baseLeft: pos.left, baseTop: pos.top };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -184,11 +245,11 @@ export function QuickAsk({ containerRef, resolveContext }: {
   };
   const onHeadPointerUp = () => { dragRef.current = null; };
 
-  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight }); }, [turns]);
 
   const ask = (asked: string) => {
-    if (!open || busy) return;
+    if (busy) return;
     const runId = crypto.randomUUID();
     const priorTurns = turns
       .filter((turn) => turn.status === "done")
@@ -214,10 +275,10 @@ export function QuickAsk({ containerRef, resolveContext }: {
     void api.quickAsk({
       runId,
       question: asked,
-      selection: open.selection,
-      contextText: open.context.contextText,
-      source: open.context.source,
-      sourcePath: open.context.sourcePath,
+      selection: snapshot.selection,
+      contextText: snapshot.context.contextText,
+      source: snapshot.context.source,
+      sourcePath: snapshot.context.sourcePath,
       priorTurns,
     }).catch((error) => fail((error as Error).message));
   };
@@ -241,77 +302,52 @@ export function QuickAsk({ containerRef, resolveContext }: {
     }
   };
 
-  const fabStyle = fab
-    ? {
-        left: clamp(fab.rect.right - 8, MARGIN, window.innerWidth - FAB_WIDTH - MARGIN),
-        top: fab.rect.top - 34 >= MARGIN ? fab.rect.top - 34 : fab.rect.bottom + MARGIN,
-      }
-    : undefined;
-
   return (
-    <>
-      {fab && (
-        <button
-          className="qa-fab"
-          style={fabStyle}
-          onMouseDown={(event) => {
-            // preventDefault keeps the browser from collapsing the selection
-            // before the popover captures it.
-            event.preventDefault();
-            openAt(fab);
-          }}
-        >
-          快问
-        </button>
-      )}
-      {open && pos && (
-        <div className="qa-pop" style={pos} ref={popRef}>
-          <div
-            className="qa-head"
-            onPointerDown={onHeadPointerDown}
-            onPointerMove={onHeadPointerMove}
-            onPointerUp={onHeadPointerUp}
-          >
-            <span className="qa-title">快问</span>
-            {open.context.source === "note" && open.context.sourcePath && (
-              <span className="qa-src" title={open.context.sourcePath}>{open.context.sourcePath}</span>
-            )}
-            <span className="spacer" />
-            <button className="qa-close" onClick={close} title="关闭（Esc）">×</button>
-          </div>
-          <div className="qa-selection" title={open.selection}>{open.selection}</div>
-          {turns.length > 0 && (
-            <div className="qa-body" ref={bodyRef}>
-              {turns.map((turn) => (
-                <div key={turn.runId} className="qa-turn">
-                  <div className="qa-q">{turn.question}</div>
-                  {turn.status === "streaming" && !turn.answer && <div className="qa-pending">思考中…</div>}
-                  {turn.answer && <Markdown className="qa-a" text={turn.answer} />}
-                  {turn.status === "failed" && (
-                    <div className="qa-error">
-                      <span>{turn.error ?? "快问失败"}</span>
-                      <button className="btn btn-ghost sm" onClick={() => retry(turn)}>重试</button>
-                    </div>
-                  )}
+    <div className="qa-pop" style={{ ...pos, zIndex }} ref={popRef} onPointerDownCapture={onFocus}>
+      <div
+        className="qa-head"
+        onPointerDown={onHeadPointerDown}
+        onPointerMove={onHeadPointerMove}
+        onPointerUp={onHeadPointerUp}
+      >
+        <span className="qa-title">快问</span>
+        {snapshot.context.source === "note" && snapshot.context.sourcePath && (
+          <span className="qa-src" title={snapshot.context.sourcePath}>{snapshot.context.sourcePath}</span>
+        )}
+        <span className="spacer" />
+        <button className="qa-close" onClick={onClose} title="关闭（Esc 关闭最前面的窗口）">×</button>
+      </div>
+      <div className="qa-selection" title={snapshot.selection}>{snapshot.selection}</div>
+      {turns.length > 0 && (
+        <div className="qa-body" ref={bodyRef}>
+          {turns.map((turn) => (
+            <div key={turn.runId} className="qa-turn">
+              <div className="qa-q">{turn.question}</div>
+              {turn.status === "streaming" && !turn.answer && <div className="qa-pending">思考中…</div>}
+              {turn.answer && <Markdown className="qa-a" text={turn.answer} />}
+              {turn.status === "failed" && (
+                <div className="qa-error">
+                  <span>{turn.error ?? "快问失败"}</span>
+                  <button className="btn btn-ghost sm" onClick={() => retry(turn)}>重试</button>
                 </div>
-              ))}
+              )}
             </div>
-          )}
-          <div className="qa-input">
-            <input
-              ref={inputRef}
-              className="input"
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={onInputKeyDown}
-              placeholder="就选中内容提问…（Enter 发送）"
-              disabled={busy}
-            />
-            <button className="btn btn-primary sm" onClick={submit} disabled={busy || !question.trim()}>发送</button>
-          </div>
-          <div className="qa-hint">临时问答 · 不进入对话记忆，关闭即丢弃</div>
+          ))}
         </div>
       )}
-    </>
+      <div className="qa-input">
+        <input
+          ref={inputRef}
+          className="input"
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={onInputKeyDown}
+          placeholder="就选中内容提问…（Enter 发送）"
+          disabled={busy}
+        />
+        <button className="btn btn-primary sm" onClick={submit} disabled={busy || !question.trim()}>发送</button>
+      </div>
+      <div className="qa-hint">临时问答 · 不进入对话记忆，关闭即丢弃</div>
+    </div>
   );
 }

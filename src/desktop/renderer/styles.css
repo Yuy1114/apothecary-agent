@@ -475,9 +475,10 @@ a:hover { text-decoration: underline; }
 
 /* ─── Quick ask 划词快问 ─────────────────────────────────────────────── */
 .qa-fab {
-  /* One above .qa-pop: the fab must stay clickable when a new selection lands
-     near the already-open floating window. */
-  position: fixed; z-index: 51; border: none; cursor: pointer;
+  /* Above every stacked .qa-pop (50 + stack index, bounded by window count) but
+     below the toast (60): the fab must stay clickable when a new selection
+     lands near an open floating window. */
+  position: fixed; z-index: 58; border: none; cursor: pointer;
   background: var(--accent-500); color: #fff; font-size: 12px; font-weight: 500;
   padding: 5px 12px; border-radius: var(--radius-full); box-shadow: var(--shadow-lg);
 }
@@ -494,6 +495,7 @@ a:hover { text-decoration: underline; }
   cursor: move; user-select: none; touch-action: none;
 }
 .qa-title { font-size: 13px; font-weight: 600; }
+.qa-head .spacer { flex: 1; }
 .qa-src { font-size: 10.5px; color: var(--fg-subtle); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
 .qa-close { background: none; border: none; cursor: pointer; color: var(--fg-muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); }
 .qa-close:hover { background: var(--bg-muted); color: var(--fg); }
