@@ -55,6 +55,13 @@ type JournalPeriodNote = {
   reviewFilled: boolean;
   content: string | null;
 };
+type JournalPeriodView = JournalPeriodNote & {
+  title: string;
+  range: { start: string; end: string };
+  prevKey: string;
+  nextKey: string;
+  currentKey: string;
+};
 type JournalPlanTarget =
   | { kind: "period"; cadence: JournalCadence; key: string }
   | { kind: "template"; cadence: JournalCadence };
@@ -101,7 +108,7 @@ type ApothecaryApi = {
   saveSettings(patch: SaveSettingsPatch): Promise<DesktopSettingsView>;
   chooseVault(): Promise<string | null>;
   relaunchApp(): Promise<void>;
-  journalRead(cadence: JournalCadence, key?: string): Promise<JournalPeriodNote>;
+  journalRead(cadence: JournalCadence, key?: string): Promise<JournalPeriodView>;
   journalInstantiate(cadence: JournalCadence, key: string): Promise<{ created: boolean; note: JournalPeriodNote }>;
   journalToggle(cadence: JournalCadence, key: string, line: number, raw?: string): Promise<JournalPeriodNote>;
   journalAddPlan(

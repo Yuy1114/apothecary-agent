@@ -3,7 +3,7 @@ import { Markdown } from "./markdown.js";
 import { QuickAsk, type QuickAskContext } from "./quickAsk.js";
 import { sliceEnclosingSection } from "./quickAskSection.js";
 
-type View = "workspace" | "proposals" | "vault" | "runs" | "knowledge" | "settings";
+type View = "workspace" | "proposals" | "journal" | "vault" | "runs" | "knowledge" | "settings";
 type Message = { role: "user" | "assistant"; content: string };
 type ProposalStatus = "proposed" | "applied" | "rejected";
 type RunTool = { toolCallId: string; toolName: string; status: "running" | "completed" | "failed" };
@@ -26,6 +26,7 @@ const api = window.apothecary;
 const titles: Record<View, [string, string]> = {
   workspace: ["工作区 Workspace", "对话 · 运行动态"],
   proposals: ["提案 Proposals", "集中审批 · Agent 发起的所有变更"],
+  journal: ["日记 Journal", "计划 · 记录 · 复盘"],
   vault: ["Vault 文件库", "最近 · Inbox · 变更 · 监听中"],
   runs: ["审阅 Review", "检查并复核 Agent 对药柜的改动"],
   knowledge: ["知识体系 Knowledge", "主题域 · 关系 · 维护机会"],
@@ -50,6 +51,7 @@ const S = (d: string, size = 15) => (
 const Icon = {
   workspace: () => S("M14 10.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 2.5V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7z"),
   proposal: () => S("M2.5 8.5V12A1.5 1.5 0 0 0 4 13.5h8a1.5 1.5 0 0 0 1.5-1.5V8.5M2.5 8.5l1.9-5.1a1.5 1.5 0 0 1 1.4-.9h4.4a1.5 1.5 0 0 1 1.4.9l1.9 5.1M2.5 8.5h3l1 2h3l1-2h3"),
+  journal: () => S("M3.5 2h8A1.5 1.5 0 0 1 13 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1 1 0 0 1 3 13V3a1 1 0 0 1 .5-1zM5.5 2v12M8 5.5h3M8 8h3"),
   vault: () => S("M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 2h4.5A1.5 1.5 0 0 1 14 6.5v5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7z"),
   runs: () => (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
@@ -149,6 +151,21 @@ export function App() {
     setRunProposals(({ [proposalId]: _cleared, ...rest }) => rest);
   }, []);
 
+  // Deep links from the main process (notification / tray「打开日记」). A fresh
+  // window pulls the pending target once on mount — the push channel only
+  // reaches an already-mounted renderer.
+  const [journalTarget, setJournalTarget] = useState<{ cadence: JournalCadence; key: string; nonce: number } | null>(null);
+  const handleNavigate = useCallback((navTarget: NavigationTarget | null) => {
+    if (navTarget?.view !== "journal") return;
+    setJournalTarget({ cadence: navTarget.cadence, key: navTarget.key, nonce: Date.now() });
+    setView("journal");
+  }, []);
+  useEffect(() => {
+    const unsubscribe = api.onNavigate(handleNavigate);
+    void api.pendingNavigation().then(handleNavigate).catch(() => undefined);
+    return unsubscribe;
+  }, [handleNavigate]);
+
   const [threads, setThreads] = useState<DesktopThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadNonce, setThreadNonce] = useState(0);
@@ -186,6 +203,7 @@ export function App() {
         <nav className="nav" aria-label="主要导航">
           <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} />
           <NavItem id="proposals" icon={<Icon.proposal />} label="提案 Proposals" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
+          <NavItem id="journal" icon={<Icon.journal />} label="日记 Journal" active={view} onClick={setView} />
           <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
           <NavItem id="runs" icon={<Icon.runs />} label="审阅 Review" active={view} onClick={setView} />
           <NavItem id="knowledge" icon={<Icon.knowledge />} label="知识体系 Knowledge" active={view} onClick={setView} />
@@ -225,6 +243,7 @@ export function App() {
           activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} openInVault={openInVault} gotoProposals={() => setView("proposals")} />}
         {view === "proposals" && <ProposalsView refreshKey={refreshKey} pendingCount={dashboard?.pendingProposals ?? 0} notify={notify} refreshDashboard={refreshDashboard}
           runProposals={runProposals} clearRunProposal={clearRunProposal} />}
+        {view === "journal" && <JournalView refreshKey={refreshKey} notify={notify} target={journalTarget} />}
         {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} />}
         {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
@@ -972,6 +991,183 @@ function ProposalsView({ refreshKey, pendingCount, notify, refreshDashboard, run
         </div>
       </div>
       {reasonDialog}
+    </section>
+  );
+}
+
+/* ═══ Journal（日记 & 复盘） ════════════════════════════════════════════ */
+const CADENCE_TABS: Array<[JournalCadence, string]> = [["daily", "日"], ["weekly", "周"], ["monthly", "月"], ["yearly", "年"]];
+const CADENCE_NAMES: Record<JournalCadence, string> = { daily: "日记", weekly: "周复盘", monthly: "月复盘", yearly: "年复盘" };
+// The 添加计划 destination select: this period, or a cadence template (recurring).
+const PLAN_DEST_OPTIONS: Array<[string, string]> = [
+  ["period", "本期笔记"],
+  ["template:daily", "每天（模板）"],
+  ["template:weekly", "每周（模板）"],
+  ["template:monthly", "每月（模板）"],
+  ["template:yearly", "每年（模板）"],
+];
+
+function JournalView({ refreshKey, notify, target }: {
+  refreshKey: number; notify: (t: string) => void;
+  target: { cadence: JournalCadence; key: string; nonce: number } | null;
+}) {
+  const [cadence, setCadence] = useState<JournalCadence>(target?.cadence ?? "daily");
+  // null key = "current period" — resolved by the backend on read.
+  const [key, setKey] = useState<string | null>(target?.key ?? null);
+  const [note, setNote] = useState<JournalPeriodView | null>(null);
+  const [form, setForm] = useState({ title: "", time: "", endTime: "", dest: "period" });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!target) return;
+    setCadence(target.cadence);
+    setKey(target.key);
+  }, [target?.nonce]);
+
+  const reload = useCallback(
+    () => api.journalRead(cadence, key ?? undefined).then(setNote).catch(() => setNote(null)),
+    [cadence, key],
+  );
+  useEffect(() => { void reload(); }, [reload, refreshKey]);
+
+  const switchCadence = (next: JournalCadence) => { setCadence(next); setKey(null); };
+  const patchNote = (fresh: JournalPeriodNote) => setNote((prev) => (prev ? { ...prev, ...fresh } : prev));
+
+  const toggle = async (item: JournalPlanItem) => {
+    try {
+      patchNote(await api.journalToggle(cadence, note!.key, item.line, item.raw));
+    } catch (error) {
+      notify(`打卡失败：${(error as Error).message}`);
+    }
+  };
+
+  const instantiate = async () => {
+    setBusy(true);
+    try {
+      const { note: fresh } = await api.journalInstantiate(cadence, note!.key);
+      patchNote(fresh);
+      notify(`已生成 ${note!.title}`);
+    } catch (error) {
+      notify(`生成失败：${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addPlan = async (event: FormEvent) => {
+    event.preventDefault();
+    const title = form.title.trim();
+    if (!title || !note || busy) return;
+    const time = form.time || undefined;
+    const item = { title, time, endTime: time ? form.endTime || undefined : undefined };
+    const dest: JournalPlanTarget = form.dest === "period"
+      ? { kind: "period", cadence, key: note.key }
+      : { kind: "template", cadence: form.dest.split(":")[1] as JournalCadence };
+    setBusy(true);
+    try {
+      const result = await api.journalAddPlan(dest, item);
+      if (result.note) patchNote(result.note);
+      else {
+        notify(`已加入${PLAN_DEST_OPTIONS.find(([v]) => v === form.dest)?.[1] ?? "模板"}，之后每期生成时自动带上`);
+        await reload();
+      }
+      setForm({ title: "", time: "", endTime: "", dest: form.dest });
+    } catch (error) {
+      notify(`添加失败：${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const body = note?.content ? splitFrontmatter(note.content).body : "";
+  const isCurrent = note ? note.key === note.currentKey : true;
+
+  return (
+    <section className="view">
+      <div className="split">
+        <div className="file-pane">
+          <div className="pane-head" style={{ flexWrap: "wrap", gap: 6 }}>
+            {CADENCE_TABS.map(([value, label]) => (
+              <span key={value} className={`badge ${cadence === value ? "solid" : ""}`} style={{ cursor: "pointer" }}
+                onClick={() => switchCadence(value)}>{label}</span>
+            ))}
+            <span className="spacer" />
+            <button className="btn btn-ghost sm icon" title="上一期" onClick={() => note && setKey(note.prevKey)}>‹</button>
+            <span className="mono" style={{ fontSize: 12 }}>{note?.key ?? "…"}</span>
+            <button className="btn btn-ghost sm icon" title="下一期" onClick={() => note && setKey(note.nextKey)}>›</button>
+            {!isCurrent && <button className="btn btn-ghost sm" onClick={() => setKey(null)}>回本期</button>}
+          </div>
+
+          <div className="file-list">
+            <div className="pane-head" style={{ border: "none" }}><span className="hint">计划 · {note?.items.length ?? 0} 项</span></div>
+            {!note?.exists ? (
+              <Empty>本期笔记还没有生成。</Empty>
+            ) : note.items.length === 0 ? (
+              <Empty>没有计划项。用下方表单添加，或在笔记的「## 计划」区块手写。</Empty>
+            ) : (
+              note.items.map((item) => (
+                <div key={`${item.line}-${item.raw}`} className="file-row" onClick={() => void toggle(item)}>
+                  <input type="checkbox" checked={item.done} readOnly style={{ flex: "none", pointerEvents: "none" }} />
+                  <div className="info">
+                    <div className="name" style={item.done ? { textDecoration: "line-through", opacity: 0.55 } : undefined}>
+                      {item.time ? `${item.time}${item.endTime ? `–${item.endTime}` : ""} · ` : ""}{item.title}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <form onSubmit={(e) => void addPlan(e)} style={{ borderTop: "1px solid var(--border)", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            <input className="input" placeholder="添加计划…（如：面试复盘）" value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input className="input" type="time" title="开始时间（可选）" value={form.time} style={{ width: 110 }}
+                onChange={(e) => setForm({ ...form, time: e.target.value })} />
+              <span className="hint">–</span>
+              <input className="input" type="time" title="结束时间（可选）" value={form.endTime} style={{ width: 110 }} disabled={!form.time}
+                onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
+              <select className="input" value={form.dest} style={{ flex: 1, minWidth: 130 }} title="加到哪里：本期一次性，或模板（周期性重复）"
+                onChange={(e) => setForm({ ...form, dest: e.target.value })}>
+                {PLAN_DEST_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <button type="submit" className="btn btn-primary sm" disabled={busy || !form.title.trim()}>添加</button>
+            </div>
+          </form>
+        </div>
+
+        <div className="preview-pane">
+          {!note ? <Empty>加载中…</Empty> : !note.exists ? (
+            <Empty>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+                <span>{note.title} 还没有生成。</span>
+                <button className="btn btn-primary sm" disabled={busy} onClick={() => void instantiate()}>生成本期笔记</button>
+              </div>
+            </Empty>
+          ) : (
+            <>
+              <div className="preview-toolbar">
+                <div className="preview-toolbar-inner">
+                  <div className="actions">
+                    <span className={`badge ${note.reviewFilled ? "success" : "warning"}`}>{note.reviewFilled ? "已复盘" : "未复盘"}</span>
+                    <span className="hint">{note.range.start === note.range.end ? note.range.start : `${note.range.start} ~ ${note.range.end}`}</span>
+                    <span className="spacer" />
+                    <button className="btn btn-secondary sm" title="用系统默认编辑器（Obsidian）打开，书写日志与复盘"
+                      onClick={() => void api.journalOpenEditor(note.relPath).catch((error) => notify(`打开失败：${(error as Error).message}`))}>
+                      在编辑器打开
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="preview-inner">
+                <div className="card" style={{ padding: 16 }}>
+                  <Markdown className="agent-text" text={body} />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

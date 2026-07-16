@@ -23,7 +23,7 @@ import { buildQuickAskPrompt, type QuickAskTurn } from "./quickAskPrompt.js";
 import type { PolishMode } from "../../domain/notePolish.js";
 import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
 import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
-import type { Cadence } from "../../domain/journal.js";
+import { periodKeyFor, periodRange, periodTitle, shiftPeriod, type Cadence } from "../../domain/journal.js";
 
 // The frozen vault skeleton names the intake folder `_inbox` (see
 // classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
@@ -294,8 +294,18 @@ export class DesktopService {
 
   /* ── 日记 (journal): unified period notes with a 计划 section ─────── */
 
-  journalRead(cadence: Cadence, key?: string) {
-    return readPeriod(this.vaultPath, cadence, key);
+  /** Period note decorated with navigation metadata, so the renderer needs no
+   *  period math of its own (the ui tsconfig cannot reach src/domain). */
+  async journalRead(cadence: Cadence, key?: string) {
+    const note = await readPeriod(this.vaultPath, cadence, key);
+    return {
+      ...note,
+      title: periodTitle(cadence, note.key),
+      range: periodRange(cadence, note.key),
+      prevKey: shiftPeriod(cadence, note.key, -1),
+      nextKey: shiftPeriod(cadence, note.key, 1),
+      currentKey: periodKeyFor(cadence),
+    };
   }
 
   journalInstantiate(cadence: Cadence, key: string) {
