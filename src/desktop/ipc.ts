@@ -19,6 +19,10 @@ import {
   StartRunInputSchema,
   ThreadIdInputSchema,
   CreateThreadInputSchema,
+  JournalReadInputSchema,
+  JournalInstantiateInputSchema,
+  JournalToggleInputSchema,
+  JournalAddPlanInputSchema,
 } from "./contracts.js";
 
 export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): void {
@@ -139,5 +143,21 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   ipcMain.handle(DesktopChannel.deleteThread, (_event, input) => {
     const { threadId } = ThreadIdInputSchema.parse(input);
     return service.deleteThread(threadId);
+  });
+  ipcMain.handle(DesktopChannel.journalRead, (_event, input) => {
+    const { cadence, key } = JournalReadInputSchema.parse(input);
+    return service.journalRead(cadence, key);
+  });
+  ipcMain.handle(DesktopChannel.journalInstantiate, (_event, input) => {
+    const { cadence, key } = JournalInstantiateInputSchema.parse(input);
+    return service.journalInstantiate(cadence, key);
+  });
+  ipcMain.handle(DesktopChannel.journalToggle, (_event, input) => {
+    const { cadence, key, line, raw } = JournalToggleInputSchema.parse(input);
+    return service.journalToggle(cadence, key, line, raw);
+  });
+  ipcMain.handle(DesktopChannel.journalAddPlan, (_event, input) => {
+    const { target, item } = JournalAddPlanInputSchema.parse(input);
+    return service.journalAddPlan(target, item);
   });
 }

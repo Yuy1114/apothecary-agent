@@ -44,6 +44,22 @@ type AgentRunEvent =
   | { type: "completed" }
   | { type: "failed"; message: string };
 
+type JournalCadence = "daily" | "weekly" | "monthly" | "yearly";
+type JournalPlanItem = { line: number; time?: string; endTime?: string; title: string; done: boolean; raw: string };
+type JournalPeriodNote = {
+  cadence: JournalCadence;
+  key: string;
+  relPath: string;
+  exists: boolean;
+  items: JournalPlanItem[];
+  reviewFilled: boolean;
+  content: string | null;
+};
+type JournalPlanTarget =
+  | { kind: "period"; cadence: JournalCadence; key: string }
+  | { kind: "template"; cadence: JournalCadence };
+type NavigationTarget = { view: "journal"; cadence: JournalCadence; key: string };
+
 type ApothecaryApi = {
   dashboard(): Promise<any>;
   chat(messages: ChatMessage[]): Promise<string>;
@@ -85,6 +101,16 @@ type ApothecaryApi = {
   saveSettings(patch: SaveSettingsPatch): Promise<DesktopSettingsView>;
   chooseVault(): Promise<string | null>;
   relaunchApp(): Promise<void>;
+  journalRead(cadence: JournalCadence, key?: string): Promise<JournalPeriodNote>;
+  journalInstantiate(cadence: JournalCadence, key: string): Promise<{ created: boolean; note: JournalPeriodNote }>;
+  journalToggle(cadence: JournalCadence, key: string, line: number, raw?: string): Promise<JournalPeriodNote>;
+  journalAddPlan(
+    target: JournalPlanTarget,
+    item: { title: string; time?: string; endTime?: string },
+  ): Promise<{ relPath: string; note?: JournalPeriodNote }>;
+  journalOpenEditor(relPath: string): Promise<boolean>;
+  onNavigate(listener: (target: NavigationTarget) => void): () => void;
+  pendingNavigation(): Promise<NavigationTarget | null>;
   threads(): Promise<Array<{ id: string; title: string; createdAt: string; updatedAt: string; preview?: string }>>;
   threadMessages(threadId: string): Promise<ChatMessage[]>;
   createThread(threadId: string, title?: string): Promise<void>;

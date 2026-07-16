@@ -34,6 +34,13 @@ const channel = {
   threadMessages: "apothecary:thread-messages",
   createThread: "apothecary:create-thread",
   deleteThread: "apothecary:delete-thread",
+  journalRead: "apothecary:journal-read",
+  journalInstantiate: "apothecary:journal-instantiate",
+  journalToggle: "apothecary:journal-toggle",
+  journalAddPlan: "apothecary:journal-add-plan",
+  journalOpenEditor: "apothecary:journal-open-editor",
+  navigate: "apothecary:navigate",
+  pendingNavigation: "apothecary:pending-navigation",
 } as const;
 
 contextBridge.exposeInMainWorld("apothecary", {
@@ -90,4 +97,16 @@ contextBridge.exposeInMainWorld("apothecary", {
   threadMessages: (threadId: string) => ipcRenderer.invoke(channel.threadMessages, { threadId }),
   createThread: (threadId: string, title?: string) => ipcRenderer.invoke(channel.createThread, { threadId, title }),
   deleteThread: (threadId: string) => ipcRenderer.invoke(channel.deleteThread, { threadId }),
+  journalRead: (cadence: string, key?: string) => ipcRenderer.invoke(channel.journalRead, { cadence, key }),
+  journalInstantiate: (cadence: string, key: string) => ipcRenderer.invoke(channel.journalInstantiate, { cadence, key }),
+  journalToggle: (cadence: string, key: string, line: number, raw?: string) =>
+    ipcRenderer.invoke(channel.journalToggle, { cadence, key, line, raw }),
+  journalAddPlan: (target: unknown, item: unknown) => ipcRenderer.invoke(channel.journalAddPlan, { target, item }),
+  journalOpenEditor: (relPath: string) => ipcRenderer.invoke(channel.journalOpenEditor, { relPath }),
+  onNavigate: (listener: (target: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, target: unknown) => listener(target);
+    ipcRenderer.on(channel.navigate, handler);
+    return () => ipcRenderer.removeListener(channel.navigate, handler);
+  },
+  pendingNavigation: () => ipcRenderer.invoke(channel.pendingNavigation),
 });

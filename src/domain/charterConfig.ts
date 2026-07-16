@@ -17,6 +17,23 @@ export const ScheduleConfigSchema = z
   .passthrough();
 export type ScheduleConfig = z.infer<typeof ScheduleConfigSchema>;
 
+/**
+ * Review-reminder clocks for the 日记 ticker. Daily fires every day; weekly
+ * takes "<weekday> HH:MM" (en abbreviation, e.g. "sun 21:30"); monthly fires on
+ * the month's last day and yearly on 12-31, both at "HH:MM". Empty string
+ * disables that cadence. Values are validated at use-time (a hand-edit typo
+ * must not brick the whole charter), so these stay plain strings.
+ */
+export const JournalConfigSchema = z
+  .object({
+    daily_review: z.string().default("21:30"),
+    weekly_review: z.string().default("sun 21:30"),
+    monthly_review: z.string().default("21:00"),
+    yearly_review: z.string().default("21:00"),
+  })
+  .passthrough();
+export type JournalConfig = z.infer<typeof JournalConfigSchema>;
+
 export const RoutingRuleSchema = z
   .object({
     match: z.string().optional(),
@@ -48,6 +65,7 @@ export type ObsidianConfig = z.infer<typeof ObsidianConfigSchema>;
 export const CharterConfigSchema = z
   .object({
     schedule: ScheduleConfigSchema.default({}),
+    journal: JournalConfigSchema.default({}),
     confidence_threshold: z.number().min(0).max(1).default(0.75),
     routing: z.array(RoutingRuleSchema).default([]),
     protected: ProtectedConfigSchema.default({}),

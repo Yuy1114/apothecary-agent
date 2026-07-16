@@ -83,6 +83,52 @@ export const RecentActivityInputSchema = z.object({
   days: z.number().int().min(1).max(90).optional(),
 });
 
+// 日记 (journal): unified daily/weekly/monthly/yearly notes with a 计划 section.
+export const CadenceSchema = z.enum(["daily", "weekly", "monthly", "yearly"]);
+export type CadenceInput = z.infer<typeof CadenceSchema>;
+
+export const JournalReadInputSchema = z.object({
+  cadence: CadenceSchema,
+  key: z.string().min(4).max(10).optional(), // omitted = current period
+});
+
+export const JournalInstantiateInputSchema = z.object({
+  cadence: CadenceSchema,
+  key: z.string().min(4).max(10),
+});
+
+export const JournalToggleInputSchema = z.object({
+  cadence: CadenceSchema,
+  key: z.string().min(4).max(10),
+  line: z.number().int().positive(),
+  raw: z.string().max(1_000).optional(),
+});
+
+export const JournalAddPlanInputSchema = z.object({
+  // A period target lands in that note (instantiating it first); a template
+  // target edits journal/_templates/<cadence>.md — the recurrence mechanism.
+  target: z.union([
+    z.object({ kind: z.literal("period"), cadence: CadenceSchema, key: z.string().min(4).max(10) }),
+    z.object({ kind: z.literal("template"), cadence: CadenceSchema }),
+  ]),
+  item: z.object({
+    title: z.string().min(1).max(200),
+    time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  }),
+});
+
+// Opening a note in the OS default editor is a main-process action (shell).
+export const JournalOpenEditorInputSchema = z.object({ relPath: z.string().min(1).max(500) });
+
+// Main-process push: deep-link the renderer to a view (notification/tray click).
+export const NavigationTargetSchema = z.object({
+  view: z.literal("journal"),
+  cadence: CadenceSchema,
+  key: z.string().min(4).max(10),
+});
+export type NavigationTarget = z.infer<typeof NavigationTargetSchema>;
+
 // Settings/config edits carry secrets and OS-level actions (safeStorage, dialog,
 // relaunch), so they are handled in the main process, not through DesktopService.
 export const SaveSettingsInputSchema = z.object({
@@ -138,4 +184,11 @@ export const DesktopChannel = {
   threadMessages: "apothecary:thread-messages",
   createThread: "apothecary:create-thread",
   deleteThread: "apothecary:delete-thread",
+  journalRead: "apothecary:journal-read",
+  journalInstantiate: "apothecary:journal-instantiate",
+  journalToggle: "apothecary:journal-toggle",
+  journalAddPlan: "apothecary:journal-add-plan",
+  journalOpenEditor: "apothecary:journal-open-editor",
+  navigate: "apothecary:navigate",
+  pendingNavigation: "apothecary:pending-navigation",
 } as const;

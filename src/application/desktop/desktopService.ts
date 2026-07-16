@@ -22,6 +22,8 @@ import type { AgentRunEvent } from "./runEvents.js";
 import { buildQuickAskPrompt, type QuickAskTurn } from "./quickAskPrompt.js";
 import type { PolishMode } from "../../domain/notePolish.js";
 import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
+import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
+import type { Cadence } from "../../domain/journal.js";
 
 // The frozen vault skeleton names the intake folder `_inbox` (see
 // classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
@@ -288,6 +290,24 @@ export class DesktopService {
       totalFiles: scan.stats.totalFiles,
       markdownFiles: scan.stats.markdownFiles,
     };
+  }
+
+  /* ── 日记 (journal): unified period notes with a 计划 section ─────── */
+
+  journalRead(cadence: Cadence, key?: string) {
+    return readPeriod(this.vaultPath, cadence, key);
+  }
+
+  journalInstantiate(cadence: Cadence, key: string) {
+    return instantiatePeriod(this.vaultPath, cadence, key);
+  }
+
+  journalToggle(cadence: Cadence, key: string, line: number, raw?: string) {
+    return togglePlanItem(this.vaultPath, cadence, key, line, raw);
+  }
+
+  journalAddPlan(target: PlanTarget, item: { title: string; time?: string; endTime?: string }) {
+    return addPlanItem(this.vaultPath, target, item);
   }
 
   /** Markdown/txt files inside a folder scope, for the Vault file list. */

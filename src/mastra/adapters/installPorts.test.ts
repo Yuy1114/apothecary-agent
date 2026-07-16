@@ -23,5 +23,7 @@ describe("installPorts", () => {
     expect(index.searchIndex().removeFromIndex).toBeTypeOf("function");
     expect(index.searchIndex().queryVault).toBeTypeOf("function");
     expect(summarizer.fileSummarizer()).toBeTypeOf("function");
-  });
+    // Importing the adapter graph transforms most of src/ — under a parallel
+    // full-suite run that alone can exceed the default 5s.
+  }, 30_000);
 });

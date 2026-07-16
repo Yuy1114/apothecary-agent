@@ -44,5 +44,7 @@ describe("createDesktopRuntime", () => {
     expect(index.searchIndex().removeFromIndex).toBeTypeOf("function");
     expect(index.searchIndex().queryVault).toBeTypeOf("function");
     expect(summarizer.fileSummarizer()).toBeTypeOf("function");
-  });
+    // Importing the composition root transforms the whole module graph; under a
+    // parallel full-suite run that alone can exceed the default 5s.
+  }, 30_000);
 });

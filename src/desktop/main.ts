@@ -19,12 +19,19 @@ import {
   settingsEnv,
   type DesktopSettings,
 } from "./settings.js";
-import { SaveSettingsInputSchema, SettingsChannel } from "./contracts.js";
+import {
+  DesktopChannel,
+  JournalOpenEditorInputSchema,
+  SaveSettingsInputSchema,
+  SettingsChannel,
+  type NavigationTarget,
+} from "./contracts.js";
 import { initFileLogging } from "./logging.js";
 import { installScheduleTray } from "./tray.js";
-import { startScheduleTicker } from "./scheduler.js";
-import { toggleScheduleItem } from "../application/schedule/scheduleStore.js";
-import { formatLocalDate, type ScheduleItem } from "../domain/schedule.js";
+import { startScheduleTicker, type ReviewReminder } from "./scheduler.js";
+import { togglePlanItem } from "../application/journal/journalStore.js";
+import { formatLocalDate, type PlanItem } from "../domain/journal.js";
+import { safeVaultPath } from "../safety/pathSafety.js";
 import { apothecaryHome } from "../config/apothecaryHome.js";
 import { logger } from "../observability/logger.js";
 
@@ -444,12 +451,44 @@ app
     registerDesktopIpc(ipcMain, service);
     registerSettingsIpc();
 
+    // Deep-link navigation (notification / tray click → a renderer view). A
+    // fresh window mounts React after load, so a push sent during creation
+    // would vanish — the renderer pulls `pendingNavigation` once on boot instead.
+    let pendingNavigation: NavigationTarget | null = null;
+    const navigateTo = async (target: NavigationTarget): Promise<void> => {
+      const live = mainWindow !== null && !mainWindow.isDestroyed();
+      if (live) {
+        await showConsole();
+        mainWindow?.webContents.send(DesktopChannel.navigate, target);
+      } else {
+        pendingNavigation = target;
+        await showConsole();
+      }
+    };
+    ipcMain.handle(DesktopChannel.pendingNavigation, () => {
+      const target = pendingNavigation;
+      pendingNavigation = null;
+      return target;
+    });
+    // Opening a vault note in the OS default .md editor (usually Obsidian) is a
+    // shell action, so it lives here rather than in DesktopService.
+    ipcMain.handle(DesktopChannel.journalOpenEditor, async (_event, input) => {
+      const { relPath } = JournalOpenEditorInputSchema.parse(input);
+      const abs = safeVaultPath(vaultPath, relPath);
+      if (!abs) throw new Error(`unsafe_path: ${relPath}`);
+      const openError = await shell.openPath(abs);
+      if (openError) throw new Error(openError);
+      return true;
+    });
+
     // Menu-bar-first surface: the tray + minute ticker keep working with the
     // console window closed. Hooked up after the runtime (ports installed by
     // createService) and before the window opens.
     const testHooks = process.env.APOTHECARY_TEST_HOOKS === "1";
     const notified: string[] = [];
-    const notify = (item: ScheduleItem): void => {
+    const openJournalToday = (): void =>
+      void navigateTo({ view: "journal", cadence: "daily", key: formatLocalDate() });
+    const notifyPlan = (item: PlanItem): void => {
       if (testHooks) {
         notified.push(`${item.time ?? ""} ${item.title}`.trim());
         return;
@@ -458,15 +497,28 @@ app
         title: "Apothecary 日程",
         body: `${item.time ?? ""} ${item.title}`.trim(),
       });
-      notification.on("click", () => void showConsole());
+      notification.on("click", openJournalToday);
+      notification.show();
+    };
+    const notifyReview = (reminder: ReviewReminder): void => {
+      if (testHooks) {
+        notified.push(`复盘 ${reminder.label} ${reminder.key}`);
+        return;
+      }
+      const notification = new Notification({
+        title: "Apothecary 复盘",
+        body: `该写${reminder.label}了 · ${reminder.key}`,
+      });
+      notification.on("click", () => void navigateTo({ view: "journal", cadence: reminder.cadence, key: reminder.key }));
       notification.show();
     };
     const tray = installScheduleTray({
       vaultPath,
       showConsole,
+      openJournal: openJournalToday,
       iconPath: path.join(app.getAppPath(), "build", "tray", "apothecaryTemplate.png"),
     });
-    const ticker = startScheduleTicker({ vaultPath, notify, onScheduleChanged: tray.refreshTitle });
+    const ticker = startScheduleTicker({ vaultPath, notifyPlan, notifyReview, onScheduleChanged: tray.refreshTitle });
     void ticker.tick();
     app.on("before-quit", () => {
       ticker.stop();
@@ -478,7 +530,7 @@ app
         showConsole,
         buildTrayMenu: async () =>
           (await tray.buildMenuTemplate()).map(({ label, type, checked, enabled }) => ({ label, type, checked, enabled })),
-        toggle: (line: number) => toggleScheduleItem(vaultPath, formatLocalDate(), line),
+        toggle: (line: number) => togglePlanItem(vaultPath, "daily", formatLocalDate(), line),
         notified,
       };
     }
