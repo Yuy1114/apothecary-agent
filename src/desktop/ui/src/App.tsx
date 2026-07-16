@@ -1,7 +1,7 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "./markdown.js";
 
-type View = "workspace" | "vault" | "runs" | "knowledge" | "settings";
+type View = "workspace" | "proposals" | "vault" | "runs" | "knowledge" | "settings";
 type Message = { role: "user" | "assistant"; content: string };
 type ProposalStatus = "proposed" | "applied" | "rejected";
 type RunTool = { toolCallId: string; toolName: string; status: "running" | "completed" | "failed" };
@@ -22,7 +22,8 @@ type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: 
 const api = window.apothecary;
 
 const titles: Record<View, [string, string]> = {
-  workspace: ["工作区 Workspace", "对话 · 提案 · 运行动态"],
+  workspace: ["工作区 Workspace", "对话 · 运行动态"],
+  proposals: ["提案 Proposals", "集中审批 · Agent 发起的所有变更"],
   vault: ["Vault 文件库", "最近 · Inbox · 变更 · 监听中"],
   runs: ["审阅 Review", "检查并复核 Agent 对药柜的改动"],
   knowledge: ["知识体系 Knowledge", "主题域 · 关系 · 维护机会"],
@@ -46,6 +47,7 @@ const S = (d: string, size = 15) => (
 );
 const Icon = {
   workspace: () => S("M14 10.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 2.5V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7z"),
+  proposal: () => S("M2.5 8.5V12A1.5 1.5 0 0 0 4 13.5h8a1.5 1.5 0 0 0 1.5-1.5V8.5M2.5 8.5l1.9-5.1a1.5 1.5 0 0 1 1.4-.9h4.4a1.5 1.5 0 0 1 1.4.9l1.9 5.1M2.5 8.5h3l1 2h3l1-2h3"),
   vault: () => S("M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 2h4.5A1.5 1.5 0 0 1 14 6.5v5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7z"),
   runs: () => (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
@@ -133,6 +135,18 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [refreshDashboard]);
 
+  // proposalId → runId for proposals awaited by a live suspended run. Those must
+  // resolve through resumeRun (durable resolve, then the run continues) — plain
+  // resolveProposal would leave the run hanging in the snapshot store. Tracked
+  // app-level so the mapping survives view switches (WorkspaceView unmounts).
+  const [runProposals, setRunProposals] = useState<Record<string, string>>({});
+  useEffect(() => api.onRunEvent(({ runId, event }) => {
+    if (event.type === "awaiting_decision") setRunProposals((map) => ({ ...map, [event.proposal.proposalId]: runId }));
+  }), []);
+  const clearRunProposal = useCallback((proposalId: string) => {
+    setRunProposals(({ [proposalId]: _cleared, ...rest }) => rest);
+  }, []);
+
   const [threads, setThreads] = useState<DesktopThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadNonce, setThreadNonce] = useState(0);
@@ -168,7 +182,8 @@ export function App() {
       <aside className="sidebar">
         <div className="sidebar-top" />
         <nav className="nav" aria-label="主要导航">
-          <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
+          <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} />
+          <NavItem id="proposals" icon={<Icon.proposal />} label="提案 Proposals" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
           <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
           <NavItem id="runs" icon={<Icon.runs />} label="审阅 Review" active={view} onClick={setView} />
           <NavItem id="knowledge" icon={<Icon.knowledge />} label="知识体系 Knowledge" active={view} onClick={setView} />
@@ -205,7 +220,9 @@ export function App() {
         </header>
 
         {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal}
-          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} openInVault={openInVault} />}
+          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} openInVault={openInVault} gotoProposals={() => setView("proposals")} />}
+        {view === "proposals" && <ProposalsView refreshKey={refreshKey} pendingCount={dashboard?.pendingProposals ?? 0} notify={notify} refreshDashboard={refreshDashboard}
+          runProposals={runProposals} clearRunProposal={clearRunProposal} />}
         {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} />}
         {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
@@ -316,12 +333,11 @@ function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: str
 }
 
 /* ═══ Workspace ═══════════════════════════════════════════════════════ */
-function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads, openInVault }: {
+function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads, openInVault, gotoProposals }: {
   refreshKey: number; dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void; notify: (t: string) => void; openDiff: (p: any) => void;
-  activeThreadId: string | null; threadNonce: number; onThreadCreated: (id: string) => void; refreshThreads: () => void; openInVault: (path: string) => void;
+  activeThreadId: string | null; threadNonce: number; onThreadCreated: (id: string) => void; refreshThreads: () => void; openInVault: (path: string) => void; gotoProposals: () => void;
 }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
-  const [pending, setPending] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -377,19 +393,6 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [threadNonce]);
-
-  const loadPending = useCallback(() => api.proposals("proposed").then(setPending).catch(() => undefined), []);
-  useEffect(() => { void loadPending(); }, [loadPending, refreshKey, dashboard?.pendingProposals]);
-
-  // Proposals awaited inside a live run must be resolved via resumeRun (to unblock
-  // the suspended run), so exclude them from the standalone "agent event" list to
-  // avoid double display and stuck runs.
-  const liveProposalIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const item of timeline) if (item.kind === "run") for (const p of item.run.proposals) ids.add(p.proposalId);
-    return ids;
-  }, [timeline]);
-  const standalone = pending.filter((p) => !liveProposalIds.has(p.id));
 
   useEffect(() => api.onRunEvent(({ runId, event }) => {
     setTimeline((items) => items.map((item) => {
@@ -480,19 +483,6 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     await refreshDashboard();
   };
 
-  const resolveStandalone = async (proposal: any, decision: "approve" | "reject") => {
-    if (decision === "approve" && !window.confirm(`采纳提案「${proposal.title}」？`)) return;
-    let note: string | undefined;
-    if (decision === "reject") {
-      const reason = await reasonPrompt(`忽略提案「${proposal.title}」的原因（可选）`);
-      if (reason === null) return;
-      note = reason || undefined;
-    }
-    const result = await api.resolveProposal(proposal.id, decision, note);
-    notify(result.resolved === false ? `应用失败：${result.reason}` : decision === "approve" ? "提案已采纳" : "提案已忽略");
-    await loadPending(); await refreshDashboard();
-  };
-
   const onComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     // The @-mention popup owns the arrow/enter/tab/escape keys while it is open.
     if (mention && mentionMatches.length > 0) {
@@ -541,14 +531,17 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
             </div>
           )}
 
-          {standalone.map((proposal) => (
-            <div className="msg-agent" key={proposal.id}>
+          {(dashboard?.pendingProposals ?? 0) > 0 && (
+            <div className="msg-agent">
               <div className="agent-col">
-                <div className="agent-meta">{formatDate(proposal.createdAt)} · 文件监听 / 维护触发</div>
-                <ProposalCard proposal={proposal} onApprove={() => void resolveStandalone(proposal, "approve")} onReject={() => void resolveStandalone(proposal, "reject")} onDiff={() => openDiff(proposal)} />
+                <div className="chips">
+                  <div className="chip" onClick={gotoProposals} title="打开提案视图，集中审批">
+                    <Icon.proposal /><span>{dashboard.pendingProposals} 个提案待审 · 前往「提案」处理</span>
+                  </div>
+                </div>
               </div>
             </div>
-          ))}
+          )}
 
           {timeline.map((item) => item.kind === "user"
             ? <div className="msg-user" key={item.id}><div className="bubble">{item.content}</div></div>
@@ -784,30 +777,6 @@ function ProposalDiffBody({ proposalId, compact }: { proposalId: string; compact
   return <DiffView diff={diff} compact={compact} />;
 }
 
-function ProposalCard({ proposal, onApprove, onReject, onDiff }: { proposal: any; onApprove: () => void; onReject: () => void; onDiff: () => void }) {
-  return (
-    <div className="card prop-card">
-      <div className="prop-head">
-        <span className="badge accent">提案 Proposal</span>
-        <span className="t">{proposal.title}</span>
-        <span className="spacer" />
-        <span className="meta">{proposal.targetFiles?.length ?? 0} 处变更</span>
-      </div>
-      <div className="prop-body">
-        {proposal.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{proposal.rationale}</div>}
-        <ProposalDiffBody proposalId={proposal.id} compact />
-        <div className="actions">
-          <button className="btn btn-primary sm" onClick={onApprove}>采纳提案</button>
-          <button className="btn btn-secondary sm" onClick={onDiff}>查看完整 diff</button>
-          <button className="btn btn-ghost sm" onClick={onReject}>忽略</button>
-          <span className="spacer" />
-          <span className="hint">采纳后自动应用并更新索引</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function DiffModal({ proposal, onClose }: { proposal: any; onClose: () => void }) {
   return (
     <div className="overlay" onMouseDown={onClose}>
@@ -831,6 +800,159 @@ function DiffModal({ proposal, onClose }: { proposal: any; onClose: () => void }
         </div>
       </div>
     </div>
+  );
+}
+
+/* ═══ Proposals（提案收件箱） ═══════════════════════════════════════════ */
+const PROPOSAL_TYPE_LABELS: Record<string, string> = {
+  edit: "编辑", move: "归位", archive: "归档", merge: "合并", capture: "沉淀",
+  structure: "结构调整", view_promotion: "视图转正", canonical_note: "主笔记", intake: "Inbox 整理",
+};
+const proposalTypeLabel = (type: string) => PROPOSAL_TYPE_LABELS[type] ?? type;
+const PROPOSAL_STATUS_TABS: Array<[ProposalStatus, string]> = [["proposed", "待审"], ["applied", "已采纳"], ["rejected", "已拒绝"]];
+
+function ProposalsView({ refreshKey, pendingCount, notify, refreshDashboard, runProposals, clearRunProposal }: {
+  refreshKey: number; pendingCount: number; notify: (t: string) => void; refreshDashboard: () => Promise<void>;
+  runProposals: Record<string, string>; clearRunProposal: (id: string) => void;
+}) {
+  const [status, setStatus] = useState<ProposalStatus>("proposed");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [all, setAll] = useState<any[] | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const { prompt: reasonPrompt, dialog: reasonDialog } = useReasonPrompt();
+
+  const reload = useCallback(() => api.proposals().then(setAll).catch(() => setAll([])), []);
+  // pendingCount rides the 4s dashboard poll, so proposals drafted in the
+  // background (auto-intake) surface here without a manual refresh.
+  useEffect(() => { void reload(); }, [reload, refreshKey, pendingCount]);
+
+  const counts = useMemo(() => (all ?? []).reduce<Record<string, number>>((acc, p) => {
+    acc[p.status] = (acc[p.status] ?? 0) + 1;
+    return acc;
+  }, {}), [all]);
+  const inStatus = useMemo(() => (all ?? []).filter((p) => p.status === status), [all, status]);
+  const types = useMemo(() => Array.from(new Set(inStatus.map((p) => p.type))), [inStatus]);
+  const shown = inStatus.filter((p) => typeFilter === "all" || p.type === typeFilter);
+  const selected = shown.find((p) => p.id === selectedId) ?? shown[0] ?? null;
+
+  const resolve = async (proposal: any, decision: "approve" | "reject") => {
+    if (decision === "approve" && !window.confirm(`采纳提案「${proposal.title}」并应用？`)) return;
+    let note: string | undefined;
+    if (decision === "reject") {
+      const reason = await reasonPrompt(`拒绝提案「${proposal.title}」的原因（可选）`);
+      if (reason === null) return;
+      note = reason || undefined;
+    }
+    setResolving(true);
+    try {
+      // A proposal awaited by a live suspended run resolves through resumeRun so
+      // the paused conversation continues with the outcome; a standalone one
+      // (auto-intake, polish, maintenance) goes straight to the durable resolver.
+      const runId = runProposals[proposal.id];
+      const result = runId
+        ? await api.resumeRun(runId, proposal.id, decision, note)
+        : await api.resolveProposal(proposal.id, decision, note);
+      if (runId) clearRunProposal(proposal.id);
+      notify(result?.resolved === false ? `应用失败：${result.reason}` : decision === "approve" ? "提案已采纳并应用" : "提案已拒绝");
+    } catch (error) {
+      notify(`操作失败：${(error as Error).message}`);
+    } finally {
+      setResolving(false);
+      await reload();
+      await refreshDashboard();
+    }
+  };
+
+  return (
+    <section className="view">
+      <div className="split">
+        <div className="file-pane">
+          <div className="pane-head" style={{ flexWrap: "wrap", gap: 6 }}>
+            {PROPOSAL_STATUS_TABS.map(([key, label]) => (
+              <span key={key} className={`badge ${status === key ? "solid" : ""}`} style={{ cursor: "pointer" }}
+                onClick={() => { setStatus(key); setTypeFilter("all"); setSelectedId(null); }}>
+                {label} {counts[key] ?? 0}
+              </span>
+            ))}
+            <span className="spacer" />
+            <button className="btn btn-ghost sm icon" title="刷新" onClick={() => void reload()}><Icon.refresh /></button>
+          </div>
+          {types.length > 1 && (
+            <div className="pane-head" style={{ flexWrap: "wrap", gap: 6 }}>
+              <span className={`badge ${typeFilter === "all" ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setTypeFilter("all")}>全部类型</span>
+              {types.map((t) => (
+                <span key={t} className={`badge ${typeFilter === t ? "solid" : ""}`} style={{ cursor: "pointer" }} onClick={() => setTypeFilter(t)}>{proposalTypeLabel(t)}</span>
+              ))}
+            </div>
+          )}
+          <div className="file-list">
+            {all === null ? <Empty>加载中…</Empty> : shown.length === 0 ? (
+              <Empty>{status === "proposed" ? "没有待审的提案。Agent 起草的方案会先出现在这里，经你审批才会应用。" : "这里还没有记录。"}</Empty>
+            ) : shown.map((proposal) => (
+              <div key={proposal.id} className={`file-row ${selected?.id === proposal.id ? "active" : ""}`} onClick={() => setSelectedId(proposal.id)}>
+                <span className={`badge ${status === "proposed" ? "accent" : status === "applied" ? "success" : ""}`} style={{ flex: "none" }}>{proposalTypeLabel(proposal.type)}</span>
+                <div className="info">
+                  <div className="name">{proposal.title}</div>
+                  <div className="sub">
+                    {proposal.targetFiles?.length ?? 0} 个目标文件 · {formatDate(proposal.createdAt)}
+                    {runProposals[proposal.id] && proposal.status === "proposed" ? " · 来自进行中的对话" : ""}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="preview-pane">
+          {!selected ? <Empty>选择一个提案，查看 Agent 想做什么</Empty> : (
+            <>
+              <div className="preview-toolbar">
+                <div className="preview-toolbar-inner">
+                  <div className="actions">
+                    {selected.status === "proposed" ? (
+                      <>
+                        <button className="btn btn-primary sm" disabled={resolving} onClick={() => void resolve(selected, "approve")}>{resolving ? "正在处理…" : "采纳提案"}</button>
+                        <button className="btn btn-ghost sm" disabled={resolving} onClick={() => void resolve(selected, "reject")}>拒绝</button>
+                        {runProposals[selected.id] && <span className="hint">来自进行中的对话，处理后对话会继续</span>}
+                      </>
+                    ) : (
+                      <span className="hint">
+                        {selected.status === "applied" ? "已采纳并应用" : "已拒绝"} · {formatDate(selected.resolvedAt)}
+                        {selected.resolutionNote ? ` · 理由：${selected.resolutionNote}` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="preview-inner">
+                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                  <div className="doc-head">
+                    <div className="row">
+                      <span className="badge accent">{proposalTypeLabel(selected.type)}</span>
+                      <span className="name" style={{ fontSize: 14 }}>{selected.title}</span>
+                    </div>
+                    <div className="meta"><span>{formatDate(selected.createdAt)}</span><span>·</span><span>{selected.id.slice(0, 24)}…</span></div>
+                    {selected.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{selected.rationale}</div>}
+                    {(selected.targetFiles?.length ?? 0) > 0 && (
+                      <div className="chips">
+                        {selected.targetFiles.map((file: string) => (
+                          <div className="chip" key={file} title={file}><Icon.file /><span>{lastSegment(file)}</span></div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="doc-body" style={{ padding: 16 }}>
+                    <ProposalDiffBody key={selected.id} proposalId={selected.id} />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      {reasonDialog}
+    </section>
   );
 }
 
