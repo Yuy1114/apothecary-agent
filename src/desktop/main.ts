@@ -159,6 +159,9 @@ function installApplicationMenu(): void {
           },
         },
         { type: "separator" },
+        // Cmd+W closes the console window only — menu-bar-first, the app stays
+        // alive in the tray (window-all-closed does not quit on macOS).
+        { role: "close", label: "关闭窗口" },
         { role: "quit" },
       ],
     },
