@@ -38,6 +38,8 @@ const channel = {
   journalInstantiate: "apothecary:journal-instantiate",
   journalToggle: "apothecary:journal-toggle",
   journalAddPlan: "apothecary:journal-add-plan",
+  journalDigestGenerate: "apothecary:journal-digest-generate",
+  journalPolishReview: "apothecary:journal-polish-review",
   journalOpenEditor: "apothecary:journal-open-editor",
   navigate: "apothecary:navigate",
   pendingNavigation: "apothecary:pending-navigation",
@@ -102,6 +104,10 @@ contextBridge.exposeInMainWorld("apothecary", {
   journalToggle: (cadence: string, key: string, line: number, raw?: string) =>
     ipcRenderer.invoke(channel.journalToggle, { cadence, key, line, raw }),
   journalAddPlan: (target: unknown, item: unknown) => ipcRenderer.invoke(channel.journalAddPlan, { target, item }),
+  journalDigestGenerate: (cadence: string, key: string) =>
+    ipcRenderer.invoke(channel.journalDigestGenerate, { cadence, key }),
+  journalPolishReview: (cadence: string, key: string, mode: string) =>
+    ipcRenderer.invoke(channel.journalPolishReview, { cadence, key, mode }),
   journalOpenEditor: (relPath: string) => ipcRenderer.invoke(channel.journalOpenEditor, { relPath }),
   onNavigate: (listener: (target: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, target: unknown) => listener(target);

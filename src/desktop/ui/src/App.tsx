@@ -1054,6 +1054,32 @@ function JournalView({ refreshKey, notify, target }: {
     }
   };
 
+  const generateDigest = async () => {
+    setBusy(true);
+    try {
+      const result = await api.journalDigestGenerate(cadence, note!.key);
+      notify(result.degraded ? "摘要已生成（叙述部分暂不可用，明细完整）" : "活动摘要已生成");
+      await reload();
+    } catch (error) {
+      notify(`摘要生成失败：${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const polishReview = async (mode: "expand" | "condense") => {
+    setBusy(true);
+    try {
+      await api.journalPolishReview(cadence, note!.key, mode);
+      notify("润色提案已创建，去「提案」审批");
+    } catch (error) {
+      const message = (error as Error).message;
+      notify(message.includes("review_empty") ? "复盘还是空的，先写两行再让 Agent 润色" : `润色失败：${message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const addPlan = async (event: FormEvent) => {
     event.preventDefault();
     const title = form.title.trim();
@@ -1079,7 +1105,11 @@ function JournalView({ refreshKey, notify, target }: {
     }
   };
 
-  const body = note?.content ? splitFrontmatter(note.content).body : "";
+  // Obsidian-only embed lines (![[...]]) mean nothing to our renderer, and the
+  // digest they embed is shown as its own card right below — hide them here.
+  const body = note?.content
+    ? splitFrontmatter(note.content).body.replace(/^!\[\[[^\]]*\]\][ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n")
+    : "";
   const isCurrent = note ? note.key === note.currentKey : true;
 
   return (
@@ -1152,6 +1182,12 @@ function JournalView({ refreshKey, notify, target }: {
                     <span className={`badge ${note.reviewFilled ? "success" : "warning"}`}>{note.reviewFilled ? "已复盘" : "未复盘"}</span>
                     <span className="hint">{note.range.start === note.range.end ? note.range.start : `${note.range.start} ~ ${note.range.end}`}</span>
                     <span className="spacer" />
+                    <button className="btn btn-ghost sm" disabled={busy || !note.reviewFilled}
+                      title={note.reviewFilled ? "复盘写得太短？让 Agent 参考当期活动摘要扩写（出提案，需审批）" : "先在「## 复盘」写两行，再让 Agent 润色"}
+                      onClick={() => void polishReview("expand")}>扩写复盘</button>
+                    <button className="btn btn-ghost sm" disabled={busy || !note.reviewFilled}
+                      title={note.reviewFilled ? "粘贴的内容太杂？让 Agent 精炼成干净的复盘（出提案，需审批）" : "先在「## 复盘」写两行，再让 Agent 润色"}
+                      onClick={() => void polishReview("condense")}>精炼复盘</button>
                     <button className="btn btn-secondary sm" title="用系统默认编辑器（Obsidian）打开，书写日志与复盘"
                       onClick={() => void api.journalOpenEditor(note.relPath).catch((error) => notify(`打开失败：${(error as Error).message}`))}>
                       在编辑器打开
@@ -1162,6 +1198,23 @@ function JournalView({ refreshKey, notify, target }: {
               <div className="preview-inner">
                 <div className="card" style={{ padding: 16 }}>
                   <Markdown className="agent-text" text={body} />
+                </div>
+                {/* Machine-owned digest (journal/digests/): apothecary regenerates
+                    it freely, the human reads but does not edit. */}
+                <div className="card" style={{ padding: 16, marginTop: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span className="badge accent">活动摘要</span>
+                    <span className="hint">机器生成 · 供你与所有 agent 阅读</span>
+                    <span className="spacer" />
+                    <button className="btn btn-secondary sm" disabled={busy} onClick={() => void generateDigest()}>
+                      {note.digest.exists ? "重新生成" : "生成摘要"}
+                    </button>
+                  </div>
+                  {note.digest.exists && note.digest.content ? (
+                    <Markdown className="agent-text" text={splitFrontmatter(note.digest.content).body} />
+                  ) : (
+                    <div className="hint">本期还没有活动摘要。到点复盘提醒时会自动生成，也可以现在手动生成。</div>
+                  )}
                 </div>
               </div>
             </>

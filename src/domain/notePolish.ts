@@ -6,7 +6,7 @@ import { z } from "zod";
  * (frontmatter + body) is assembled deterministically by the use case, and the
  * result always lands as an `edit` proposal, never a direct write.
  */
-export const PolishModeSchema = z.enum(["expand", "format", "tags"]);
+export const PolishModeSchema = z.enum(["expand", "format", "tags", "condense"]);
 export type PolishMode = z.infer<typeof PolishModeSchema>;
 
 /** Lean draft schema fed to structuredOutput: only the model-generated fields. */
@@ -44,8 +44,12 @@ export function validatePolishDraft(
 ): PolishDraftValidation {
   const polished = draft.body.trim();
   if (!polished) return { ok: false, reason: "empty_body" };
+  // Expand grows on purpose; condense shrinks on purpose (its guard is the
+  // human reviewing the proposal diff). Only a mode that promised to preserve
+  // content is held to the ratio.
   if (
     !modes.includes("expand") &&
+    !modes.includes("condense") &&
     polished.length < originalBody.trim().length * MIN_BODY_RATIO
   ) {
     return { ok: false, reason: "body_shrunk" };

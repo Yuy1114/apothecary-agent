@@ -46,3 +46,16 @@ describe("validatePolishDraft", () => {
     expect(result.ok && result.draft.addTags).toEqual(["redis", "缓存"]);
   });
 });
+
+describe("condense mode", () => {
+  it("exempts the shrink guard — condensing is the point", () => {
+    const original = "很".repeat(400);
+    const result = validatePolishDraft(original, draft({ body: "浓缩后的两句话。" }), ["condense"]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("still rejects an empty condense result", () => {
+    const result = validatePolishDraft("原文", draft({ body: "   " }), ["condense"]);
+    expect(result).toEqual({ ok: false, reason: "empty_body" });
+  });
+});

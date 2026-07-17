@@ -236,6 +236,9 @@ async function createService(): Promise<DesktopService> {
   // deadlock module evaluation before the window ever opens.
   const { polishNote } = await import("../application/notes/polishNote.js");
   const { mastraNotePolisher } = await import("../mastra/adapters/mastraNotePolisher.js");
+  const { generateDigest } = await import("../application/journal/activityDigest.js");
+  const { mastraDigestWriter } = await import("../mastra/adapters/mastraDigestWriter.js");
+  const { polishReview } = await import("../application/journal/polishReview.js");
   const { quickAsk: quickAskAgent } = await import("../mastra/agents/transformers/quick-ask.js");
   const runtimeRoot = app.isPackaged ? app.getPath("userData") : projectRoot;
   await fs.mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
@@ -336,6 +339,18 @@ async function createService(): Promise<DesktopService> {
         const result = await polishNote({ vaultPath, filePath, modes }, mastraNotePolisher);
         logger.info("polish", `■ proposal ${result.proposalId}`);
         return { proposalId: result.proposalId, changeSummary: result.changeSummary };
+      },
+      generateDigest: async (cadence, key) => {
+        logger.info("digest", `▶ ${cadence}/${key}`);
+        const result = await generateDigest({ vaultPath, cadence, key }, mastraDigestWriter);
+        logger.info("digest", `■ ${result.relPath}${result.degraded ? " (degraded)" : ""}`);
+        return result;
+      },
+      polishReview: async (cadence, key, mode) => {
+        logger.info("polish", `▶ 复盘 ${cadence}/${key} [${mode}]`);
+        const result = await polishReview({ vaultPath, cadence, key, mode }, mastraNotePolisher);
+        logger.info("polish", `■ proposal ${result.proposalId}`);
+        return result;
       },
       listThreads: async () => {
         if (!boundMemory) return [];
@@ -518,7 +533,21 @@ app
       openJournal: openJournalToday,
       iconPath: path.join(app.getAppPath(), "build", "tray", "apothecaryTemplate.png"),
     });
-    const ticker = startScheduleTicker({ vaultPath, notifyPlan, notifyReview, onScheduleChanged: tray.refreshTitle });
+    // Digest generation shares the module cache with createService's imports;
+    // loading here (sequentially, post-runtime) avoids the concurrent-ESM
+    // deadlock noted in createService.
+    const { generateDigest: runDigest, backfillDailyDigest } = await import("../application/journal/activityDigest.js");
+    const { mastraDigestWriter: digestWriter } = await import("../mastra/adapters/mastraDigestWriter.js");
+    const ticker = startScheduleTicker({
+      vaultPath,
+      notifyPlan,
+      notifyReview,
+      onScheduleChanged: tray.refreshTitle,
+      digests: {
+        generate: (cadence, key) => runDigest({ vaultPath, cadence, key }, digestWriter),
+        backfillDaily: (key) => backfillDailyDigest({ vaultPath, key }, digestWriter),
+      },
+    });
     void ticker.tick();
     app.on("before-quit", () => {
       ticker.stop();

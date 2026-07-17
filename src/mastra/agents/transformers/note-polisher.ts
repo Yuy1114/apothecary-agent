@@ -21,7 +21,12 @@ export const notePolisher = new Agent({
     "existing formatting style.\n" +
     "- tags: suggest 3-5 short tags grounded in the content, excluding ones already present. Without " +
     "this mode, return an empty addTags array.\n" +
-    "Hard rules: never discard information the author wrote; without expand, do not add new sections. " +
+    "- condense: the text is too verbose — often raw output pasted from another AI session or a long " +
+    "unstructured braindump. Distill it into short, clean prose that keeps every decision, fact and " +
+    "open question, and drop repetition, boilerplate and tool chatter. Shrinking is the point, but " +
+    "losing a fact is not.\n" +
+    "Hard rules: never discard information the author wrote (condense compresses phrasing, not facts); " +
+    "without expand, do not add new sections. " +
     "Write the polished body in the SAME language as the source note (a Chinese note stays Chinese). " +
     "Return the body WITHOUT any frontmatter block. Write changeSummary in Chinese — it is shown to " +
     "the user when they review the change.",

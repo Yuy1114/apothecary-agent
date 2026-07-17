@@ -11,12 +11,24 @@ import {
   minutesBetween,
   periodKeyFor,
   planSummary,
+  shiftPeriod,
   type Cadence,
   type PlanItem,
 } from "../domain/journal.js";
 import { logger } from "../observability/logger.js";
 
 export type ReviewReminder = { cadence: Cadence; key: string; label: string };
+
+/**
+ * Activity-digest generation, injected so the composition root binds the LLM
+ * writer and tests observe the scheduling policy without touching ledgers.
+ */
+export type SchedulerDigests = {
+  /** (Re)generate one period's digest (fired at its review clock). */
+  generate: (cadence: Cadence, key: string) => Promise<unknown>;
+  /** Backfill a finished day's digest (fired when the day rolls over / app starts). */
+  backfillDaily: (key: string) => Promise<unknown>;
+};
 
 export type SchedulerDeps = {
   vaultPath: string;
@@ -26,6 +38,8 @@ export type SchedulerDeps = {
   notifyReview: (reminder: ReviewReminder) => void;
   /** Tray badge refresh, called once per tick with the day's plan summary. */
   onScheduleChanged: (summary: { total: number; remaining: number }) => void;
+  /** Activity digest generation (composition root binds the real writer). */
+  digests: SchedulerDigests;
   /** Config source (test seam); defaults to ~/.apothecary/config.yaml `journal:`. */
   config?: () => Promise<JournalConfig>;
   /** Test seam. */
@@ -116,6 +130,13 @@ export function startScheduleTicker(deps: SchedulerDeps): { tick: () => Promise<
       const firedKey = `review:${cadence}:${key}`;
       if (fired.has(firedKey)) continue;
       fired.add(firedKey);
+      // Refresh the period's digest at its review clock no matter what comes
+      // next — the user sits down to a ready summary, and external readers get
+      // fresh data even when the review is already written or the reminder is
+      // slept past. Failures only log: the reminder must still fire.
+      await deps.digests.generate(cadence, key).catch((error) => {
+        logger.warn("journal", `活动摘要生成失败 (${cadence}/${key}): ${(error as Error).message}`);
+      });
       if (minutesBetween(clock, minute) > NOTIFY_GRACE_MINUTES) continue; // slept past it
       // The review lives in the period's note — make sure it exists so the
       // notification lands the user on a ready page, then skip when already
@@ -134,6 +155,12 @@ export function startScheduleTicker(deps: SchedulerDeps): { tick: () => Promise<
         currentDay = day;
         lastMinute = null;
         fired.clear();
+        // A finished day deserves a digest even when the app was closed at the
+        // review clock: backfill yesterday's on rollover and on app start. The
+        // policy (skip when present / eventless) lives in backfillDailyDigest.
+        await deps.digests.backfillDaily(shiftPeriod("daily", day, -1)).catch((error) => {
+          logger.warn("journal", `补生成昨日摘要失败: ${(error as Error).message}`);
+        });
       }
       await instantiatePeriod(deps.vaultPath, "daily", day).catch((error) => {
         logger.warn("journal", `今日日记生成失败: ${(error as Error).message}`);

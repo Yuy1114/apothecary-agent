@@ -55,12 +55,14 @@ type JournalPeriodNote = {
   reviewFilled: boolean;
   content: string | null;
 };
+type JournalDigestView = { relPath: string; exists: boolean; content: string | null };
 type JournalPeriodView = JournalPeriodNote & {
   title: string;
   range: { start: string; end: string };
   prevKey: string;
   nextKey: string;
   currentKey: string;
+  digest: JournalDigestView;
 };
 type JournalPlanTarget =
   | { kind: "period"; cadence: JournalCadence; key: string }
@@ -97,7 +99,7 @@ type ApothecaryApi = {
   resolveProposal(id: string, decision: "approve" | "reject", note?: string): Promise<any>;
   polishNote(
     filePath: string,
-    modes: Array<"expand" | "format" | "tags">,
+    modes: Array<"expand" | "format" | "tags" | "condense">,
   ): Promise<{ proposalId: string; changeSummary: string }>;
   notes(): Promise<Array<{ path: string; title: string }>>;
   operations(): Promise<any[]>;
@@ -115,6 +117,15 @@ type ApothecaryApi = {
     target: JournalPlanTarget,
     item: { title: string; time?: string; endTime?: string },
   ): Promise<{ relPath: string; note?: JournalPeriodNote }>;
+  journalDigestGenerate(
+    cadence: JournalCadence,
+    key: string,
+  ): Promise<{ relPath: string; content: string; degraded: boolean }>;
+  journalPolishReview(
+    cadence: JournalCadence,
+    key: string,
+    mode: "expand" | "condense",
+  ): Promise<{ proposalId: string; changeSummary: string }>;
   journalOpenEditor(relPath: string): Promise<boolean>;
   onNavigate(listener: (target: NavigationTarget) => void): () => void;
   pendingNavigation(): Promise<NavigationTarget | null>;

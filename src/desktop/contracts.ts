@@ -118,6 +118,20 @@ export const JournalAddPlanInputSchema = z.object({
   }),
 });
 
+// (Re)generate one period's activity digest (journal/digests/ — machine-owned).
+export const JournalDigestInputSchema = z.object({
+  cadence: CadenceSchema,
+  key: z.string().min(4).max(10),
+});
+
+// Section-scoped polish of a period's 复盘: expand a too-short review, or
+// condense pasted-in verbosity. Always lands as an edit proposal.
+export const JournalPolishReviewInputSchema = z.object({
+  cadence: CadenceSchema,
+  key: z.string().min(4).max(10),
+  mode: z.enum(["expand", "condense"]),
+});
+
 // Opening a note in the OS default editor is a main-process action (shell).
 export const JournalOpenEditorInputSchema = z.object({ relPath: z.string().min(1).max(500) });
 
@@ -188,6 +202,8 @@ export const DesktopChannel = {
   journalInstantiate: "apothecary:journal-instantiate",
   journalToggle: "apothecary:journal-toggle",
   journalAddPlan: "apothecary:journal-add-plan",
+  journalDigestGenerate: "apothecary:journal-digest-generate",
+  journalPolishReview: "apothecary:journal-polish-review",
   journalOpenEditor: "apothecary:journal-open-editor",
   navigate: "apothecary:navigate",
   pendingNavigation: "apothecary:pending-navigation",

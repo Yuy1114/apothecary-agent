@@ -23,6 +23,8 @@ import {
   JournalInstantiateInputSchema,
   JournalToggleInputSchema,
   JournalAddPlanInputSchema,
+  JournalDigestInputSchema,
+  JournalPolishReviewInputSchema,
 } from "./contracts.js";
 
 export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): void {
@@ -159,5 +161,13 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   ipcMain.handle(DesktopChannel.journalAddPlan, (_event, input) => {
     const { target, item } = JournalAddPlanInputSchema.parse(input);
     return service.journalAddPlan(target, item);
+  });
+  ipcMain.handle(DesktopChannel.journalDigestGenerate, (_event, input) => {
+    const { cadence, key } = JournalDigestInputSchema.parse(input);
+    return service.journalDigestGenerate(cadence, key);
+  });
+  ipcMain.handle(DesktopChannel.journalPolishReview, (_event, input) => {
+    const { cadence, key, mode } = JournalPolishReviewInputSchema.parse(input);
+    return service.journalPolishReview(cadence, key, mode);
   });
 }

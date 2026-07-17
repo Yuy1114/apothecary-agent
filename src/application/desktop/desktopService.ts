@@ -23,7 +23,7 @@ import { buildQuickAskPrompt, type QuickAskTurn } from "./quickAskPrompt.js";
 import type { PolishMode } from "../../domain/notePolish.js";
 import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
 import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
-import { periodKeyFor, periodRange, periodTitle, shiftPeriod, type Cadence } from "../../domain/journal.js";
+import { digestRelPath, periodKeyFor, periodRange, periodTitle, shiftPeriod, type Cadence } from "../../domain/journal.js";
 
 // The frozen vault skeleton names the intake folder `_inbox` (see
 // classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
@@ -94,6 +94,17 @@ export type DesktopServiceDeps = {
   polishNote?: (
     filePath: string,
     modes: PolishMode[],
+  ) => Promise<{ proposalId: string; changeSummary: string }>;
+  // Activity digest generation and 复盘-scoped polish are LLM-backed too, so
+  // the composition root binds their writers the same way.
+  generateDigest?: (
+    cadence: Cadence,
+    key: string,
+  ) => Promise<{ relPath: string; content: string; degraded: boolean }>;
+  polishReview?: (
+    cadence: Cadence,
+    key: string,
+    mode: "expand" | "condense",
   ) => Promise<{ proposalId: string; changeSummary: string }>;
   // Conversation history, backed by Mastra memory threads.
   listThreads?: () => Promise<DesktopThread[]>;
@@ -298,6 +309,12 @@ export class DesktopService {
    *  period math of its own (the ui tsconfig cannot reach src/domain). */
   async journalRead(cadence: Cadence, key?: string) {
     const note = await readPeriod(this.vaultPath, cadence, key);
+    // The period's machine-written digest rides along so the view renders it
+    // without a second round-trip; a missing digest is a normal state.
+    const digestPath = digestRelPath(cadence, note.key);
+    const digest = await readVaultText(this.vaultPath, digestPath)
+      .then(({ content }) => ({ relPath: digestPath, exists: true, content: content as string | null }))
+      .catch(() => ({ relPath: digestPath, exists: false, content: null as string | null }));
     return {
       ...note,
       title: periodTitle(cadence, note.key),
@@ -305,6 +322,7 @@ export class DesktopService {
       prevKey: shiftPeriod(cadence, note.key, -1),
       nextKey: shiftPeriod(cadence, note.key, 1),
       currentKey: periodKeyFor(cadence),
+      digest,
     };
   }
 
@@ -318,6 +336,16 @@ export class DesktopService {
 
   journalAddPlan(target: PlanTarget, item: { title: string; time?: string; endTime?: string }) {
     return addPlanItem(this.vaultPath, target, item);
+  }
+
+  journalDigestGenerate(cadence: Cadence, key: string) {
+    if (!this.deps.generateDigest) throw new Error("digest_not_available");
+    return this.deps.generateDigest(cadence, key);
+  }
+
+  journalPolishReview(cadence: Cadence, key: string, mode: "expand" | "condense") {
+    if (!this.deps.polishReview) throw new Error("polish_not_available");
+    return this.deps.polishReview(cadence, key, mode);
   }
 
   /** Markdown/txt files inside a folder scope, for the Vault file list. */
