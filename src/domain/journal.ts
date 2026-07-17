@@ -99,6 +99,14 @@ export function parsePlanItems(content: string): PlanItem[] {
   return items;
 }
 
+/** One section's body text (trimmed), or null when the section is missing. */
+export function sectionBody(content: string, name: string): string | null {
+  const section = sectionRange(content, name);
+  if (!section) return null;
+  const lines = content.split(/\r?\n/);
+  return lines.slice(section.startLine - 1, section.endLine).join("\n").trim();
+}
+
 /** The review section counts as written once it has any non-blank body line. */
 export function reviewFilled(content: string): boolean {
   const section = sectionRange(content, REVIEW_SECTION);
@@ -149,6 +157,31 @@ export function insertPlanItem(
   const insertAt = hasSeparator ? anchorPartIndex + 2 : anchorPartIndex + 1;
   parts.splice(insertAt, 0, ...(hasSeparator ? [entry, eol] : [eol, entry, eol]));
   return parts.join("");
+}
+
+/**
+ * Replaces one section's body (the lines between its heading and the next
+ * same-or-higher heading) with `body`, preserving every byte outside that
+ * region. Returns null when the section does not exist — callers decide
+ * whether that is an error. The new body is framed by single blank lines so
+ * the note keeps its section rhythm.
+ */
+export function replaceSectionBody(content: string, name: string, body: string): string | null {
+  const section = sectionRange(content, name);
+  if (!section) return null;
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
+  const parts = splitKeepingNewlines(content);
+
+  // Prefix: everything up to and including the heading line (add its missing
+  // separator when the heading sits at EOF).
+  const headingPartIndex = (section.headingLine - 1) * 2;
+  const prefix = parts.slice(0, headingPartIndex + 1).join("") + (parts[headingPartIndex + 1] ?? eol);
+  // Suffix: everything from the line after the section's last body line.
+  const suffix = parts.slice(section.endLine * 2).join("");
+
+  const bodyLines = body.replace(/\s+$/, "").split(/\r?\n/);
+  const framed = [""].concat(bodyLines).concat(suffix ? [""] : []);
+  return prefix + framed.map((line) => `${line}${eol}`).join("") + suffix;
 }
 
 /**
@@ -324,7 +357,133 @@ export function defaultTemplate(cadence: Cadence, key: string): string {
     cadence === "daily"
       ? `## ${PLAN_SECTION}\n\n## ${LOG_SECTION}\n\n## ${REVIEW_SECTION}\n`
       : `## ${PLAN_SECTION}\n\n## ${REVIEW_SECTION}\n`;
-  return `---\ntitle: "${vars.title}"\ntype: journal\ncadence: ${cadence}\n${dateField[cadence]}\n---\n\n# ${vars.title}\n\n${sections}`;
+  // The digest embed sits in the preamble (before any `##`), so it belongs to
+  // no section: reviewFilled/parsePlanItems never see it, Obsidian renders the
+  // machine-written digest inline in the human's note.
+  const preamble = cadence === "daily" ? `${digestEmbedLine(cadence, key)}\n\n` : "";
+  return `---\ntitle: "${vars.title}"\ntype: journal\ncadence: ${cadence}\n${dateField[cadence]}\n---\n\n# ${vars.title}\n\n${preamble}${sections}`;
+}
+
+/* ── Activity digests ────────────────────────────────────────────────── */
+
+// Machine-owned namespace inside the vault: the agent regenerates these files
+// freely (no proposal gate — they are derived data, like the semantic layer),
+// humans read but do not edit. Audience is "everyone": Yuy, apothecary itself,
+// and external agents wanting to know recent activity.
+export const DIGEST_DIR = `${JOURNAL_DIR}/digests`;
+
+export function digestRelPath(cadence: Cadence, key: string): string {
+  return `${DIGEST_DIR}/${cadence}/${key}.md`;
+}
+
+export function digestTitle(key: string): string {
+  return `${key} 活动摘要`;
+}
+
+/** Obsidian embed of a period's digest, aliased for the human reader. */
+export function digestEmbedLine(cadence: Cadence, key: string): string {
+  // Wiki links resolve without the extension; that is also Obsidian's own style.
+  return `![[${digestRelPath(cadence, key).replace(/\.md$/, "")}|当期活动摘要]]`;
+}
+
+/** Everything the digest reports, already mapped to plain domain terms. */
+export type DigestFacts = {
+  /** External work from the change ledger — the human's own edits. */
+  userChanges: Array<{ kind: "created" | "modified" | "deleted"; path: string }>;
+  /** Applied agent operations; relocations carry the original path. */
+  agentOperations: Array<{ type: string; path: string; fromPath?: string; detail?: string }>;
+  /** Proposals resolved inside the period. */
+  proposals: Array<{ title: string; outcome: "applied" | "rejected" }>;
+};
+
+export const emptyDigestFacts = (): DigestFacts => ({ userChanges: [], agentOperations: [], proposals: [] });
+
+export const DIGEST_SUMMARY_SECTION = "摘要";
+export const DIGEST_FACTS_SECTION = "明细";
+
+/** Shown in `## 摘要` when the LLM narrative is unavailable — facts still land. */
+export const DIGEST_SUMMARY_FALLBACK = "（本期摘要生成失败，明细如下。）";
+
+const CHANGE_KIND_LABELS: Record<DigestFacts["userChanges"][number]["kind"], string> = {
+  created: "新增",
+  modified: "修改",
+  deleted: "删除",
+};
+const OPERATION_LABELS: Record<string, string> = {
+  edit: "编辑",
+  move: "归位",
+  archive: "归档",
+  merge: "合并",
+  promote: "视图转正",
+  canonical: "主笔记",
+  structure: "结构调整",
+  ingest: "收录",
+  capture: "生成",
+};
+
+const bulletList = (lines: string[]): string => (lines.length === 0 ? "- 无" : lines.join("\n"));
+
+export const digestFactCount = (facts: DigestFacts): number =>
+  facts.userChanges.length + facts.agentOperations.length + facts.proposals.length;
+
+/** The `## 明细` body — pure ledger facts, also what the summary writer reads. */
+export function renderDigestFacts(facts: DigestFacts): string {
+  const changes = facts.userChanges.map((c) => `- ${CHANGE_KIND_LABELS[c.kind]} ${c.path}`);
+  const operations = facts.agentOperations.map((op) => {
+    const label = OPERATION_LABELS[op.type] ?? op.type;
+    const subject = op.fromPath ? `${op.fromPath} → ${op.path}` : op.path;
+    return `- ${label} ${subject}${op.detail ? `（${op.detail}）` : ""}`;
+  });
+  const proposals = facts.proposals.map((p) => `- ${p.outcome === "applied" ? "已采纳" : "已拒绝"}：${p.title}`);
+  return [
+    "### 你的改动",
+    bulletList(changes),
+    "",
+    "### Agent 操作",
+    bulletList(operations),
+    "",
+    "### 提案",
+    bulletList(proposals),
+  ].join("\n");
+}
+
+/**
+ * Renders the digest note deterministically: `## 明细` comes verbatim from the
+ * ledgers (zero hallucination, machine-parsable), `## 摘要` is the caller's
+ * narrative (LLM output or the fallback placeholder).
+ */
+export function renderDigest(
+  cadence: Cadence,
+  key: string,
+  facts: DigestFacts,
+  summary: string,
+  generatedAt: string,
+): string {
+  const title = digestTitle(key);
+  const named: Record<Cadence, string> = { daily: "date", weekly: "week", monthly: "month", yearly: "year" };
+  const { start, end } = periodRange(cadence, key);
+  const rangeField = cadence === "daily" ? "" : `start: ${start}\nend: ${end}\n`;
+
+  return [
+    "---",
+    `title: "${title}"`,
+    "type: activity-digest",
+    `cadence: ${cadence}`,
+    `${named[cadence]}: ${key}`,
+    `${rangeField}generatedAt: ${generatedAt}`,
+    "---",
+    "",
+    `# ${title}`,
+    "",
+    `## ${DIGEST_SUMMARY_SECTION}`,
+    "",
+    summary.trim() || DIGEST_SUMMARY_FALLBACK,
+    "",
+    `## ${DIGEST_FACTS_SECTION}`,
+    "",
+    renderDigestFacts(facts),
+    "",
+  ].join("\n");
 }
 
 /* ── Plan summaries & reminders ──────────────────────────────────────── */

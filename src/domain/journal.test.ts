@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  DIGEST_SUMMARY_FALLBACK,
   defaultTemplate,
+  digestEmbedLine,
+  digestRelPath,
+  digestTitle,
   dueItems,
+  emptyDigestFacts,
+  renderDigest,
+  replaceSectionBody,
+  type DigestFacts,
   formatLocalDate,
   formatLocalMinute,
   insertPlanItem,
@@ -220,5 +228,80 @@ describe("dueItems and helpers", () => {
     expect(itemKey(items[3])).toBe("|D");
     expect(minutesBetween("09:00", "09:12")).toBe(12);
     expect(minutesBetween("09:12", "09:00")).toBe(-12);
+  });
+});
+
+describe("replaceSectionBody", () => {
+  it("replaces only the section body, byte-preserving everything else", () => {
+    const next = replaceSectionBody(note, "复盘", "今天推进了 digest 设计。\n明天继续。");
+    expect(next).not.toBeNull();
+    expect(next).toContain("## 复盘\n\n今天推进了 digest 设计。\n明天继续。\n");
+    // Everything before the 复盘 heading is untouched.
+    const headAt = note.indexOf("## 复盘");
+    expect(next!.slice(0, headAt)).toBe(note.slice(0, headAt));
+    expect(parsePlanItems(next!).length).toBe(parsePlanItems(note).length);
+  });
+
+  it("keeps a blank line before a following heading", () => {
+    const content = "# t\n\n## 日志\n\n旧内容一\n旧内容二\n\n## 复盘\n\n写过了\n";
+    const next = replaceSectionBody(content, "日志", "新内容");
+    expect(next).toBe("# t\n\n## 日志\n\n新内容\n\n## 复盘\n\n写过了\n");
+  });
+
+  it("preserves CRLF endings and handles a section at EOF", () => {
+    const content = "# t\r\n\r\n## 复盘\r\n\r\n旧的\r\n";
+    const next = replaceSectionBody(content, "复盘", "新的");
+    expect(next).toBe("# t\r\n\r\n## 复盘\r\n\r\n新的\r\n");
+  });
+
+  it("returns null for a missing section", () => {
+    expect(replaceSectionBody("# t\n\n## 计划\n", "复盘", "x")).toBeNull();
+  });
+});
+
+describe("activity digests", () => {
+  it("paths, titles and embed line", () => {
+    expect(digestRelPath("daily", "2026-07-17")).toBe("journal/digests/daily/2026-07-17.md");
+    expect(digestRelPath("weekly", "2026-W29")).toBe("journal/digests/weekly/2026-W29.md");
+    expect(digestTitle("2026-07-17")).toBe("2026-07-17 活动摘要");
+    expect(digestEmbedLine("daily", "2026-07-17")).toBe("![[journal/digests/daily/2026-07-17|当期活动摘要]]");
+  });
+
+  it("daily default template embeds the digest in the preamble, outside every section", () => {
+    const rendered = defaultTemplate("daily", "2026-07-17");
+    expect(rendered).toContain("![[journal/digests/daily/2026-07-17|当期活动摘要]]");
+    expect(rendered.indexOf("![[")).toBeLessThan(rendered.indexOf("## 计划"));
+    expect(parsePlanItems(rendered)).toEqual([]);
+    expect(reviewFilled(rendered)).toBe(false);
+    // Coarser cadences carry no embed.
+    expect(defaultTemplate("weekly", "2026-W29")).not.toContain("![[");
+  });
+
+  it("renders grouped facts deterministically", () => {
+    const facts: DigestFacts = {
+      userChanges: [{ kind: "created", path: "notes/JS OOP.md" }, { kind: "deleted", path: "_inbox/x.md" }],
+      agentOperations: [{ type: "move", path: "notes/待归位.md", fromPath: "_inbox/待归位.md", detail: "提案已批准" }],
+      proposals: [{ title: "把「待归位」移动到 notes/", outcome: "applied" }, { title: "润色复盘", outcome: "rejected" }],
+    };
+    const rendered = renderDigest("daily", "2026-07-17", facts, "今天主要在整理 inbox。", "2026-07-17T13:00:00Z");
+    expect(rendered).toContain('title: "2026-07-17 活动摘要"');
+    expect(rendered).toContain("type: activity-digest");
+    expect(rendered).toContain("date: 2026-07-17");
+    expect(rendered).toContain("generatedAt: 2026-07-17T13:00:00Z");
+    expect(rendered).toContain("## 摘要\n\n今天主要在整理 inbox。");
+    expect(rendered).toContain("- 新增 notes/JS OOP.md");
+    expect(rendered).toContain("- 删除 _inbox/x.md");
+    expect(rendered).toContain("- 归位 _inbox/待归位.md → notes/待归位.md（提案已批准）");
+    expect(rendered).toContain("- 已采纳：把「待归位」移动到 notes/");
+    expect(rendered).toContain("- 已拒绝：润色复盘");
+  });
+
+  it("weekly digests carry the period range; empty groups and summary degrade gracefully", () => {
+    const rendered = renderDigest("weekly", "2026-W29", emptyDigestFacts(), "", "2026-07-19T13:00:00Z");
+    expect(rendered).toContain("week: 2026-W29");
+    expect(rendered).toContain("start: 2026-07-13");
+    expect(rendered).toContain("end: 2026-07-19");
+    expect(rendered).toContain(DIGEST_SUMMARY_FALLBACK);
+    expect(rendered.match(/- 无/g)).toHaveLength(3);
   });
 });

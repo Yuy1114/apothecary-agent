@@ -55,8 +55,9 @@ const resolvePeriodPath = (vaultPath: string, cadence: Cadence, key: string): { 
  * watcher from re-flagging our own write as an external change. Reindex is
  * best-effort here, unlike ingest: a failed embedding call must not skip
  * commitSelfWrite, or the mark TTLs out and every toggle looks external.
+ * Exported for the sibling journal writers (activity digests).
  */
-async function writeCommitted(vaultPath: string, relPath: string, abs: string, content: string): Promise<void> {
+export async function writeCommitted(vaultPath: string, relPath: string, abs: string, content: string): Promise<void> {
   markSelfWrite([relPath]);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, content, "utf8");
@@ -204,5 +205,7 @@ function defaultTemplateSkeleton(cadence: Cadence): string {
       ? "week: {{week}}\nstart: {{start}}\nend: {{end}}"
       : `${named[cadence]}: {{${named[cadence]}}}`;
   const sections = cadence === "daily" ? "## 计划\n\n## 日志\n\n## 复盘\n" : "## 计划\n\n## 复盘\n";
-  return `---\ntitle: "{{title}}"\ntype: journal\ncadence: ${cadence}\n${dateField}\n---\n\n# {{title}}\n\n${sections}`;
+  // Preamble digest embed, same as the rendered built-in daily template.
+  const preamble = cadence === "daily" ? "![[journal/digests/daily/{{date}}|当期活动摘要]]\n\n" : "";
+  return `---\ntitle: "{{title}}"\ntype: journal\ncadence: ${cadence}\n${dateField}\n---\n\n# {{title}}\n\n${preamble}${sections}`;
 }
