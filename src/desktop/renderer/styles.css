@@ -513,6 +513,7 @@ a:hover { text-decoration: underline; }
 .qa-error { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--danger); background: var(--danger-soft); padding: 6px 10px; border-radius: var(--radius-sm); }
 .qa-input { display: flex; gap: 8px; padding: 10px 12px 0; margin-top: 10px; border-top: 1px solid var(--border); }
 .qa-input .input { flex: 1; font-size: 12.5px; padding: 7px 10px; }
+.qa-actions { display: flex; gap: 6px; padding: 8px 12px 0; }
 .qa-hint { padding: 6px 12px 10px; font-size: 11px; color: var(--fg-subtle); }
 
 /* ─── Toast ──────────────────────────────────────────────────────────── */

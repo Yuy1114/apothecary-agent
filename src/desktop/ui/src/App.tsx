@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "./markdown.js";
-import { QuickAsk, type QuickAskContext } from "./quickAsk.js";
+import { QuickAsk, type QuickAskContext, type QuickAskHandle, type QuickAskSaved } from "./quickAsk.js";
 import { sliceEnclosingSection } from "./quickAskSection.js";
 
 type View = "workspace" | "proposals" | "journal" | "vault" | "runs" | "knowledge" | "settings";
@@ -187,6 +187,14 @@ export function App() {
   // timeline would be wiped by a reload.
   const selectThread = useCallback((id: string) => { setActiveThreadId(id); setThreadNonce((n) => n + 1); setView("workspace"); }, []);
   const newThread = useCallback(() => { setActiveThreadId(null); setThreadNonce((n) => n + 1); setView("workspace"); }, []);
+  // A quick-ask transcript was explicitly saved into a thread: make that thread
+  // active and reload, so the appended turns show up as real history.
+  const onQuickAskSaved = useCallback((saved: QuickAskSaved, goWorkspace: boolean) => {
+    setActiveThreadId(saved.threadId);
+    setThreadNonce((n) => n + 1);
+    void loadThreads();
+    if (goWorkspace) setView("workspace");
+  }, [loadThreads]);
   const onThreadCreated = useCallback((id: string) => { setActiveThreadId(id); void loadThreads(); }, [loadThreads]);
   const deleteThread = useCallback(async (id: string) => {
     await api.deleteThread(id);
@@ -240,11 +248,11 @@ export function App() {
         </header>
 
         {view === "workspace" && <WorkspaceView refreshKey={refreshKey} dashboard={dashboard} refreshDashboard={refreshDashboard} queuedPrompt={queuedPrompt} clearQueuedPrompt={() => setQueuedPrompt("")} notify={notify} openDiff={setDiffProposal}
-          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} openInVault={openInVault} gotoProposals={() => setView("proposals")} />}
+          activeThreadId={activeThreadId} threadNonce={threadNonce} onThreadCreated={onThreadCreated} refreshThreads={loadThreads} openInVault={openInVault} gotoProposals={() => setView("proposals")} onQuickAskSaved={onQuickAskSaved} />}
         {view === "proposals" && <ProposalsView refreshKey={refreshKey} pendingCount={dashboard?.pendingProposals ?? 0} notify={notify} refreshDashboard={refreshDashboard}
           runProposals={runProposals} clearRunProposal={clearRunProposal} />}
-        {view === "journal" && <JournalView refreshKey={refreshKey} notify={notify} target={journalTarget} />}
-        {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} />}
+        {view === "journal" && <JournalView refreshKey={refreshKey} notify={notify} target={journalTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
+        {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
         {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
         {view === "settings" && <SettingsView refreshKey={refreshKey} notify={notify} />}
@@ -354,9 +362,10 @@ function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: str
 }
 
 /* ═══ Workspace ═══════════════════════════════════════════════════════ */
-function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads, openInVault, gotoProposals }: {
+function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, clearQueuedPrompt, notify, openDiff, activeThreadId, threadNonce, onThreadCreated, refreshThreads, openInVault, gotoProposals, onQuickAskSaved }: {
   refreshKey: number; dashboard: any; refreshDashboard: () => Promise<void>; queuedPrompt: string; clearQueuedPrompt: () => void; notify: (t: string) => void; openDiff: (p: any) => void;
   activeThreadId: string | null; threadNonce: number; onThreadCreated: (id: string) => void; refreshThreads: () => void; openInVault: (path: string) => void; gotoProposals: () => void;
+  onQuickAskSaved: (saved: QuickAskSaved, goWorkspace: boolean) => void;
 }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [input, setInput] = useState("");
@@ -447,6 +456,14 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
     const item = timelineRef.current.find((it) => it.kind === "run" && it.run.id === id);
     if (!item || item.kind !== "run" || !item.run.text) return null;
     return { contextText: item.run.text.slice(0, 8000), source: "chat" };
+  }, []);
+
+  // Direct (selection-less) quick ask: context = the latest assistant reply,
+  // possibly empty on a fresh conversation — the vault search carries it then.
+  const quickAskRef = useRef<QuickAskHandle>(null);
+  const resolveDirectChat = useCallback((): QuickAskContext | null => {
+    const last = [...timelineRef.current].reverse().find((it) => it.kind === "run" && it.run.text);
+    return { contextText: last && last.kind === "run" ? last.run.text.slice(0, 8000) : "", source: "chat" };
   }, []);
 
   const conversationFrom = (items: TimelineItem[]): Message[] => items.reduce<Message[]>((messages, item) => {
@@ -608,13 +625,16 @@ function WorkspaceView({ refreshKey, dashboard, refreshDashboard, queuedPrompt, 
           <div className="composer-bar">
             <span className="composer-pill" title="引用一篇笔记，把它的路径交给 Agent"
               onClick={() => { const ta = inputRef.current; if (!ta) return; ta.focus(); const caret = ta.selectionStart ?? input.length; const next = `${input.slice(0, caret)}@${input.slice(caret)}`; setInput(next); requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = caret + 1; syncMention(next, caret + 1); }); }}>@ 引用笔记</span>
+            <span className="composer-pill" title="不选中直接快问一次（Cmd+J）· 自动检索相关笔记，默认不进入对话"
+              onClick={() => quickAskRef.current?.openDirect()}>⚡ 快问</span>
             <span className="spacer" />
             <span className="hint">检索范围：整个 vault</span>
             <button type="submit" className="btn btn-primary sm" disabled={busy}>发送</button>
           </div>
         </div>
       </form>
-      <QuickAsk containerRef={scrollRef} resolveContext={resolveChatContext} />
+      <QuickAsk ref={quickAskRef} containerRef={scrollRef} resolveContext={resolveChatContext} direct={resolveDirectChat}
+        notify={notify} onSaved={onQuickAskSaved} currentThreadId={activeThreadId} chatBusy={busy} />
       {reasonDialog}
     </section>
   );
@@ -1007,9 +1027,10 @@ const PLAN_DEST_OPTIONS: Array<[string, string]> = [
   ["template:yearly", "每年（模板）"],
 ];
 
-function JournalView({ refreshKey, notify, target }: {
+function JournalView({ refreshKey, notify, target, qaThreadId, onQuickAskSaved }: {
   refreshKey: number; notify: (t: string) => void;
   target: { cadence: JournalCadence; key: string; nonce: number } | null;
+  qaThreadId: string | null; onQuickAskSaved: (saved: QuickAskSaved, goWorkspace: boolean) => void;
 }) {
   const [cadence, setCadence] = useState<JournalCadence>(target?.cadence ?? "daily");
   // null key = "current period" — resolved by the backend on read.
@@ -1017,6 +1038,24 @@ function JournalView({ refreshKey, notify, target }: {
   const [note, setNote] = useState<JournalPeriodView | null>(null);
   const [form, setForm] = useState({ title: "", time: "", endTime: "", dest: "period" });
   const [busy, setBusy] = useState(false);
+
+  // Quick ask over the open period note: selection asks get the enclosing
+  // section, direct asks the whole note (capped). Ref pattern keeps resolver
+  // identities stable across reloads (same as VaultView).
+  const previewRef = useRef<HTMLDivElement>(null);
+  const quickAskRef = useRef<QuickAskHandle>(null);
+  const noteRef = useRef<JournalPeriodView | null>(null);
+  useEffect(() => { noteRef.current = note; }, [note]);
+  const resolveJournalContext = useCallback((_range: Range, selectionText: string): QuickAskContext | null => {
+    const current = noteRef.current;
+    if (!current?.content) return null;
+    return { contextText: sliceEnclosingSection(current.content, selectionText), source: "note", sourcePath: current.relPath };
+  }, []);
+  const resolveDirectJournal = useCallback((): QuickAskContext | null => {
+    const current = noteRef.current;
+    if (!current?.content) return null;
+    return { contextText: current.content.slice(0, 8000), source: "note", sourcePath: current.relPath };
+  }, []);
 
   useEffect(() => {
     if (!target) return;
@@ -1166,7 +1205,7 @@ function JournalView({ refreshKey, notify, target }: {
           </form>
         </div>
 
-        <div className="preview-pane">
+        <div className="preview-pane" ref={previewRef}>
           {!note ? <Empty>加载中…</Empty> : !note.exists ? (
             <Empty>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
@@ -1182,6 +1221,8 @@ function JournalView({ refreshKey, notify, target }: {
                     <span className={`badge ${note.reviewFilled ? "success" : "warning"}`}>{note.reviewFilled ? "已复盘" : "未复盘"}</span>
                     <span className="hint">{note.range.start === note.range.end ? note.range.start : `${note.range.start} ~ ${note.range.end}`}</span>
                     <span className="spacer" />
+                    <button className="btn btn-ghost sm" title="就这篇日记直接快问（Cmd+J）· 自动检索相关笔记"
+                      onClick={() => quickAskRef.current?.openDirect()}>快问</button>
                     <button className="btn btn-ghost sm" disabled={busy || !note.reviewFilled}
                       title={note.reviewFilled ? "复盘写得太短？让 Agent 参考当期活动摘要扩写（出提案，需审批）" : "先在「## 复盘」写两行，再让 Agent 润色"}
                       onClick={() => void polishReview("expand")}>扩写复盘</button>
@@ -1221,6 +1262,8 @@ function JournalView({ refreshKey, notify, target }: {
           )}
         </div>
       </div>
+      <QuickAsk ref={quickAskRef} containerRef={previewRef} resolveContext={resolveJournalContext} direct={resolveDirectJournal}
+        notify={notify} onSaved={onQuickAskSaved} currentThreadId={qaThreadId} />
     </section>
   );
 }
@@ -1265,7 +1308,10 @@ const POLISH_MODE_OPTIONS: Array<{ key: PolishModeKey; label: string }> = [
   { key: "tags", label: "更新标签" },
 ];
 
-function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void; target?: { path: string; nonce: number } | null }) {
+function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQuickAskSaved }: {
+  scope: string; refreshKey: number; onChat: (p: string) => void; notify: (t: string) => void; target?: { path: string; nonce: number } | null;
+  qaThreadId: string | null; onQuickAskSaved: (saved: QuickAskSaved, goWorkspace: boolean) => void;
+}) {
   const [files, setFiles] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
   const [activity, setActivity] = useState<RecentActivityItem[]>([]);
@@ -1282,6 +1328,17 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
     if (!current || current.missing || !current.data?.content) return null;
     return {
       contextText: sliceEnclosingSection(current.data.content, selectionText),
+      source: "note",
+      sourcePath: typeof current.file?.path === "string" ? current.file.path : undefined,
+    };
+  }, []);
+  // Direct ask: the whole open note (capped) instead of an enclosing section.
+  const quickAskRef = useRef<QuickAskHandle>(null);
+  const resolveDirectNote = useCallback((): QuickAskContext | null => {
+    const current = selectedRef.current;
+    if (!current || current.missing || !current.data?.content) return null;
+    return {
+      contextText: String(current.data.content).slice(0, 8000),
       source: "note",
       sourcePath: typeof current.file?.path === "string" ? current.file.path : undefined,
     };
@@ -1425,6 +1482,8 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
                         {/\.md$/i.test(selected.file.path ?? "") && (
                           <button className="btn btn-secondary sm" onClick={() => setPolishOpen((open) => !open)}>润色笔记</button>
                         )}
+                        <button className="btn btn-ghost sm" title="就这篇笔记直接快问（Cmd+J）· 自动检索相关笔记"
+                          onClick={() => quickAskRef.current?.openDirect()}>快问</button>
                       </>
                     )}
                     {isChanges && (
@@ -1488,7 +1547,8 @@ function VaultView({ scope, refreshKey, onChat, notify, target }: { scope: strin
               </div>
             </>
           )}
-          <QuickAsk containerRef={previewRef} resolveContext={resolveNoteContext} />
+          <QuickAsk ref={quickAskRef} containerRef={previewRef} resolveContext={resolveNoteContext} direct={resolveDirectNote}
+            notify={notify} onSaved={onQuickAskSaved} currentThreadId={qaThreadId} />
         </div>
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "./markdown.js";
 
 const api = window.apothecary;
@@ -39,16 +39,32 @@ const initialPos = (rect: Snapshot["rect"]) => ({
     : rect.bottom + MARGIN,
 });
 
+/** How a saved quick-ask should land: into which thread, and did we mint it. */
+export type QuickAskSaved = { threadId: string; isNew: boolean };
+
+export type QuickAskHandle = { openDirect: () => void };
+
 /**
  * 划词快问: selecting text inside `containerRef` shows a floating 快问 button;
  * each click opens an independent draggable floating window whose Q&A streams
  * over runEvent with its own runIds. Clicking a window raises it; Esc closes
- * the frontmost one. Deliberately thread-free — closing discards everything.
+ * the frontmost one. With a `direct` resolver the view also gets selection-less
+ * asks (button via ref, or Cmd/Ctrl+J) grounded by a vault search server-side.
+ * Thread-free by default — closing discards everything; the explicit 存入 /
+ * 转新对话 actions are the only way a transcript enters conversation memory.
  */
-export function QuickAsk({ containerRef, resolveContext }: {
+export const QuickAsk = forwardRef<QuickAskHandle, {
   containerRef: { current: HTMLElement | null };
   resolveContext: (range: Range, selectionText: string) => QuickAskContext | null;
-}) {
+  notify: (t: string) => void;
+  onSaved: (saved: QuickAskSaved, goWorkspace: boolean) => void;
+  /** Resolves "what am I looking at" for a selection-less direct ask. */
+  direct?: () => QuickAskContext | null;
+  /** The workspace's active thread — target of 存入当前对话 (null = mint one). */
+  currentThreadId?: string | null;
+  /** True while the hosting view streams a chat run — blocks 存入当前对话. */
+  chatBusy?: boolean;
+}>(function QuickAsk({ containerRef, resolveContext, notify, onSaved, direct, currentThreadId, chatBusy }, ref) {
   const [fab, setFab] = useState<Snapshot | null>(null);
   // `windows` keeps creation order (stable DOM order, so raising a window never
   // moves its node and never blurs its input); `stack` holds the z-order, last
@@ -101,7 +117,7 @@ export function QuickAsk({ containerRef, resolveContext }: {
   }, [fab]);
 
   // Every fab click opens a fresh window on the snapshotted selection.
-  const openAt = (snapshot: Snapshot) => {
+  const openAt = useCallback((snapshot: Snapshot) => {
     const id = crypto.randomUUID();
     setWindows((current) => {
       let pos = initialPos(snapshot.rect);
@@ -117,7 +133,29 @@ export function QuickAsk({ containerRef, resolveContext }: {
     // The snapshot is taken — collapse the real selection so the mouseup that
     // follows the fab click cannot re-offer a stale fab for it.
     window.getSelection()?.removeAllRanges();
-  };
+  }, []);
+
+  // Selection-less direct ask: anchored to the viewport's top-right (openAt's
+  // cascade separates repeats). Exposed to the view's toolbar button via ref
+  // and to Cmd/Ctrl+J while this view is mounted.
+  const openDirect = useCallback(() => {
+    const context = direct?.();
+    if (!context) return;
+    const right = window.innerWidth - MARGIN;
+    openAt({ selection: "", context, rect: { top: 64, bottom: 64, left: right - POP_WIDTH, right } });
+  }, [direct, openAt]);
+  useImperativeHandle(ref, () => ({ openDirect }), [openDirect]);
+  useEffect(() => {
+    if (!direct) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j" && !event.isComposing) {
+        event.preventDefault();
+        openDirect();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [direct, openDirect]);
 
   const closeWindow = useCallback((id: string) => {
     setWindows((current) => current.filter((w) => w.id !== id));
@@ -172,23 +210,32 @@ export function QuickAsk({ containerRef, resolveContext }: {
           zIndex={50 + Math.max(0, stack.indexOf(w.id))}
           onClose={() => closeWindow(w.id)}
           onFocus={() => focusWindow(w.id)}
+          notify={notify}
+          onSaved={onSaved}
+          currentThreadId={currentThreadId ?? null}
+          chatBusy={chatBusy ?? false}
         />
       ))}
     </>
   );
-}
+});
 
 /** One independent floating quick-ask window: own transcript, stream, drag. */
-function QuickAskWindow({ snapshot, initial, zIndex, onClose, onFocus }: {
+function QuickAskWindow({ snapshot, initial, zIndex, onClose, onFocus, notify, onSaved, currentThreadId, chatBusy }: {
   snapshot: Snapshot;
   initial: { left: number; top: number };
   zIndex: number;
   onClose: () => void;
   onFocus: () => void;
+  notify: (t: string) => void;
+  onSaved: (saved: QuickAskSaved, goWorkspace: boolean) => void;
+  currentThreadId: string | null;
+  chatBusy: boolean;
 }) {
   const [pos, setPos] = useState(initial);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
+  const [saving, setSaving] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -295,6 +342,36 @@ function QuickAskWindow({ snapshot, initial, zIndex, onClose, onFocus }: {
     ask(turn.question);
   };
 
+  // The explicit "enter memory" outcomes. The transcript becomes real thread
+  // messages (first user turn prefixed with the source, so later turns keep
+  // their grounding); saving closes the window — its content lives on there.
+  const doneTurns = turns.filter((turn) => turn.status === "done");
+  const save = async (target: "current" | "new") => {
+    if (doneTurns.length === 0 || saving) return;
+    setSaving(true);
+    try {
+      const sourceNote = snapshot.context.source === "note" ? `笔记 ${snapshot.context.sourcePath ?? ""}`.trim() : "对话";
+      const header = `（快问 · 来源：${sourceNote}${snapshot.selection ? `，选中：「${snapshot.selection.slice(0, 60)}」` : ""}）`;
+      const messages = doneTurns.flatMap((turn, index) => [
+        { role: "user" as const, content: index === 0 ? `${header}\n${turn.question}` : turn.question },
+        { role: "assistant" as const, content: turn.answer },
+      ]);
+      const toCurrent = target === "current" && currentThreadId !== null;
+      const result = await api.threadAppend(
+        toCurrent ? currentThreadId : null,
+        doneTurns[0].question.slice(0, 30),
+        messages,
+      );
+      notify(toCurrent ? "已存入当前对话，作为后续上下文" : "已存入新对话");
+      onSaved({ threadId: result.threadId, isNew: !toCurrent }, target === "new");
+      onClose();
+    } catch (error) {
+      notify(`存入失败：${(error as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && !event.nativeEvent.isComposing) {
       event.preventDefault();
@@ -317,7 +394,13 @@ function QuickAskWindow({ snapshot, initial, zIndex, onClose, onFocus }: {
         <span className="spacer" />
         <button className="qa-close" onClick={onClose} title="关闭（Esc 关闭最前面的窗口）">×</button>
       </div>
-      <div className="qa-selection" title={snapshot.selection}>{snapshot.selection}</div>
+      {snapshot.selection ? (
+        <div className="qa-selection" title={snapshot.selection}>{snapshot.selection}</div>
+      ) : (
+        <div className="qa-selection" title="没有选区的直接快问：提问时会自动检索 vault 里的相关笔记">
+          直接快问 · {snapshot.context.source === "note" ? (snapshot.context.sourcePath ?? "当前笔记") : "当前对话"} · 自动检索相关笔记
+        </div>
+      )}
       {turns.length > 0 && (
         <div className="qa-body" ref={bodyRef}>
           {turns.map((turn) => (
@@ -342,12 +425,28 @@ function QuickAskWindow({ snapshot, initial, zIndex, onClose, onFocus }: {
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={onInputKeyDown}
-          placeholder="就选中内容提问…（Enter 发送）"
+          placeholder={snapshot.selection ? "就选中内容提问…（Enter 发送）" : "问点什么…（自动检索相关笔记，Enter 发送）"}
           disabled={busy}
         />
         <button className="btn btn-primary sm" onClick={submit} disabled={busy || !question.trim()}>发送</button>
       </div>
-      <div className="qa-hint">临时问答 · 不进入对话记忆，关闭即丢弃</div>
+      {doneTurns.length > 0 && (
+        <div className="qa-actions">
+          <button
+            className="btn btn-secondary sm"
+            disabled={busy || saving || chatBusy}
+            title={chatBusy ? "对话正在运行，稍后再存入" : currentThreadId ? "把这段问答写进当前对话，作为后续上下文" : "还没有进行中的对话，会新建一个"}
+            onClick={() => void save("current")}
+          >存入当前对话</button>
+          <button
+            className="btn btn-ghost sm"
+            disabled={busy || saving}
+            title="把这段问答另存为一个新对话并切换过去"
+            onClick={() => void save("new")}
+          >转为新对话</button>
+        </div>
+      )}
+      <div className="qa-hint">默认临时问答 · 不存入则关闭即丢弃</div>
     </div>
   );
 }
