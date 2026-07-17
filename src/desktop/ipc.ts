@@ -19,6 +19,7 @@ import {
   StartRunInputSchema,
   ThreadIdInputSchema,
   CreateThreadInputSchema,
+  ThreadAppendInputSchema,
   JournalReadInputSchema,
   JournalInstantiateInputSchema,
   JournalToggleInputSchema,
@@ -141,6 +142,10 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   ipcMain.handle(DesktopChannel.createThread, (_event, input) => {
     const { threadId, title } = CreateThreadInputSchema.parse(input);
     return service.createThread(threadId, title);
+  });
+  ipcMain.handle(DesktopChannel.threadAppend, (_event, input) => {
+    const { threadId, title, messages } = ThreadAppendInputSchema.parse(input);
+    return service.threadAppend(threadId ?? null, title, messages);
   });
   ipcMain.handle(DesktopChannel.deleteThread, (_event, input) => {
     const { threadId } = ThreadIdInputSchema.parse(input);

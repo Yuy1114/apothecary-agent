@@ -20,8 +20,10 @@ export const StartRunInputSchema = ChatInputSchema.extend({
 export const QuickAskInputSchema = z.object({
   runId: z.string().uuid(),
   question: z.string().min(1).max(2_000),
-  selection: z.string().min(1).max(8_000),
-  contextText: z.string().min(1).max(8_000),
+  // Empty selection = a direct ask (no 划词): the service compensates with a
+  // vault search on the question; empty context = nothing currently in view.
+  selection: z.string().max(8_000).default(""),
+  contextText: z.string().max(8_000).default(""),
   source: z.enum(["chat", "note"]),
   sourcePath: z.string().max(500).optional(),
   priorTurns: z
@@ -32,6 +34,23 @@ export const QuickAskInputSchema = z.object({
 export type QuickAskInput = z.infer<typeof QuickAskInputSchema>;
 
 export const ThreadIdInputSchema = z.object({ threadId: z.string().min(1) });
+
+// Append finished Q&A turns to a conversation thread (quick-ask's explicit
+// "save into context" outcome). No threadId = mint a new thread titled `title`.
+export const ThreadAppendInputSchema = z.object({
+  threadId: z.string().min(1).optional(),
+  title: z.string().max(60).optional(),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(16_000),
+      }),
+    )
+    .min(1)
+    .max(24),
+});
+export type ThreadAppendInput = z.infer<typeof ThreadAppendInputSchema>;
 
 export const CreateThreadInputSchema = z.object({
   threadId: z.string().min(1),
@@ -198,6 +217,7 @@ export const DesktopChannel = {
   threadMessages: "apothecary:thread-messages",
   createThread: "apothecary:create-thread",
   deleteThread: "apothecary:delete-thread",
+  threadAppend: "apothecary:thread-append",
   journalRead: "apothecary:journal-read",
   journalInstantiate: "apothecary:journal-instantiate",
   journalToggle: "apothecary:journal-toggle",

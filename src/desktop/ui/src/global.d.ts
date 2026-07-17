@@ -133,6 +133,11 @@ type ApothecaryApi = {
   threadMessages(threadId: string): Promise<ChatMessage[]>;
   createThread(threadId: string, title?: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;
+  threadAppend(
+    threadId: string | null,
+    title: string | undefined,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+  ): Promise<{ threadId: string }>;
 };
 
 interface Window {

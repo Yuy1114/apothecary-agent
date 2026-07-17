@@ -6,11 +6,13 @@ import { DesktopService } from "./desktopService.js";
 import { createProposal } from "../../vault/proposalStore.js";
 import { enqueueChange, setChangeLogClient } from "../../vault/changeLog.js";
 import { setOperationLedgerClient } from "../../vault/operationLedger.js";
+import { nullSearchIndex, setSearchIndex } from "../ports/searchIndex.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
   setChangeLogClient(null);
   setOperationLedgerClient(null);
+  setSearchIndex({ ...nullSearchIndex });
   vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -150,12 +152,73 @@ describe("DesktopService", () => {
 
   it("rejects a quick ask when the dep is not wired", async () => {
     const { service } = await setup();
-    expect(() =>
+    await expect(
       service.quickAsk(
         { runId: "run-qa", question: "q", selection: "s", contextText: "c", source: "chat", priorTurns: [] },
         () => {},
       ),
-    ).toThrow("quick_ask_not_available");
+    ).rejects.toThrow("quick_ask_not_available");
+  });
+
+  it("a direct ask (empty selection) is grounded by a vault search on the question", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-directask-"));
+    dirs.push(root);
+    const queries: Array<{ query: string; topK: number }> = [];
+    setSearchIndex({
+      ...nullSearchIndex,
+      queryVault: async (query, topK) => {
+        queries.push({ query, topK: topK ?? 0 });
+        return [
+          { source: "notes/ui-design.md", content: "按钮的可用性原则……", score: 0.9 },
+          { source: "notes/ui-design.md", content: "重复来源应被去重", score: 0.85 },
+          { source: "notes/old.md", content: "已被取代", score: 0.8, supersededBy: "notes/new.md" },
+          { source: "notes/ux-research.md", content: "访谈方法……", score: 0.7 },
+        ] as never;
+      },
+    });
+    const prompts: string[] = [];
+    const service = new DesktopService({
+      vaultPath: path.join(root, "vault"),
+      projectRoot: path.join(root, "project"),
+      deps: { chat: async () => "", quickAsk: async (prompt) => { prompts.push(prompt); } },
+    });
+    await service.initialize();
+
+    await service.quickAsk(
+      { runId: "run-direct", question: "有没有 ui/ux 相关的内容？", selection: "", contextText: "", source: "chat", priorTurns: [] },
+      () => {},
+    );
+
+    expect(queries).toEqual([{ query: "有没有 ui/ux 相关的内容？", topK: 6 }]);
+    const prompt = prompts[0];
+    expect(prompt).toContain("direct ask, no selection");
+    expect(prompt).toContain("- notes/ui-design.md:");
+    expect(prompt).toContain("- notes/ux-research.md:");
+    expect(prompt).not.toContain("notes/old.md"); // superseded hits dropped
+    expect(prompt).not.toContain("重复来源"); // duplicate source deduped
+    expect(prompt).not.toContain("Selected text:");
+  });
+
+  it("a dead search index degrades a direct ask instead of failing it", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "apothecary-desktop-directdeg-"));
+    dirs.push(root);
+    setSearchIndex({
+      ...nullSearchIndex,
+      queryVault: async () => { throw new Error("embedding down"); },
+    });
+    const prompts: string[] = [];
+    const service = new DesktopService({
+      vaultPath: path.join(root, "vault"),
+      projectRoot: path.join(root, "project"),
+      deps: { chat: async () => "", quickAsk: async (prompt) => { prompts.push(prompt); } },
+    });
+    await service.initialize();
+    await service.quickAsk(
+      { runId: "run-deg", question: "问题", selection: "", contextText: "看着的内容", source: "note", sourcePath: "notes/n.md", priorTurns: [] },
+      () => {},
+    );
+    expect(prompts[0]).not.toContain("Related notes");
+    expect(prompts[0]).toContain("看着的内容");
   });
 
   it("resumes a run with the human decision and injects the outcome", async () => {

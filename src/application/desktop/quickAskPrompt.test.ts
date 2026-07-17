@@ -49,3 +49,35 @@ describe("buildQuickAskPrompt", () => {
     expect(prompt).toContain("Q: 第三问");
   });
 });
+
+describe("direct asks (no selection)", () => {
+  const direct = { question: "有没有 ui/ux 相关的内容？", selection: "", contextText: "", sourceLabel: "the current conversation (direct ask, no selection)", priorTurns: [] };
+
+  it("omits empty selection and context blocks entirely", () => {
+    const prompt = buildQuickAskPrompt(direct);
+    expect(prompt).not.toContain("Selected text:");
+    expect(prompt).not.toContain("Context:");
+    expect(prompt).toContain("Source: the current conversation (direct ask, no selection)");
+    expect(prompt).toContain("Question: 有没有 ui/ux 相关的内容？");
+  });
+
+  it("renders related vault excerpts with their paths", () => {
+    const prompt = buildQuickAskPrompt({
+      ...direct,
+      relatedExcerpts: [
+        { path: "notes/ui-design.md", excerpt: "按钮的可用性……" },
+        { path: "notes/ux-research.md", excerpt: "访谈方法……" },
+      ],
+    });
+    expect(prompt).toContain("Related notes (vault search on the question):");
+    expect(prompt).toContain("- notes/ui-design.md:");
+    expect(prompt).toContain("按钮的可用性……");
+    expect(prompt).toContain("- notes/ux-research.md:");
+  });
+
+  it("selection asks carry no related-notes block", () => {
+    const prompt = buildQuickAskPrompt({ ...direct, selection: "选中的字", contextText: "上下文" });
+    expect(prompt).toContain("Selected text:");
+    expect(prompt).not.toContain("Related notes");
+  });
+});

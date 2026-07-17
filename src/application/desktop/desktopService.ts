@@ -19,7 +19,8 @@ import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { detectSupersededNotes } from "../maintenance/detectSupersededNotes.js";
 import { runConnectionDiagnostics } from "./connectionDiagnostics.js";
 import type { AgentRunEvent } from "./runEvents.js";
-import { buildQuickAskPrompt, type QuickAskTurn } from "./quickAskPrompt.js";
+import { buildQuickAskPrompt, type QuickAskExcerpt, type QuickAskTurn } from "./quickAskPrompt.js";
+import { searchIndex, type SearchHit } from "../ports/searchIndex.js";
 import type { PolishMode } from "../../domain/notePolish.js";
 import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
 import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
@@ -111,6 +112,13 @@ export type DesktopServiceDeps = {
   threadMessages?: (threadId: string) => Promise<DesktopChatMessage[]>;
   createThread?: (threadId: string, title?: string) => Promise<void>;
   deleteThread?: (threadId: string) => Promise<void>;
+  // Quick-ask's explicit save outcome: append finished Q&A turns as real
+  // thread messages (null threadId = mint a new thread titled `title`).
+  appendToThread?: (
+    threadId: string | null,
+    title: string | undefined,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+  ) => Promise<{ threadId: string }>;
 };
 
 export class DesktopService {
@@ -154,25 +162,62 @@ export class DesktopService {
     return this.deps.streamChat(messages.slice(-20), emit, runId, threadId);
   }
 
-  /** One-shot side-channel Q&A about selected text; isolated from all threads. */
-  quickAsk(request: QuickAskRequest, emit: (event: AgentRunEvent) => void): Promise<void> {
+  /**
+   * One-shot side-channel Q&A, isolated from all threads. With a selection the
+   * context is what the hosting view resolved; without one (a direct ask) the
+   * tool-less agent would be blind to the vault, so the question is compensated
+   * with a vector search whose hits ride along as excerpts. A dead embedding
+   * endpoint degrades to a context-only ask, never a failed one.
+   */
+  async quickAsk(request: QuickAskRequest, emit: (event: AgentRunEvent) => void): Promise<void> {
     if (!this.deps.quickAsk) throw new Error("quick_ask_not_available");
+    const direct = request.selection.trim() === "";
     const sourceLabel = request.source === "note"
-      ? `vault note ${request.sourcePath ?? "(unknown)"}`
-      : "a chat reply from the assistant";
+      ? `vault note ${request.sourcePath ?? "(unknown)"}${direct ? " (direct ask, no selection)" : ""}`
+      : direct
+        ? "the current conversation (direct ask, no selection)"
+        : "a chat reply from the assistant";
     const prompt = buildQuickAskPrompt({
       question: request.question,
       selection: request.selection,
       contextText: request.contextText,
       sourceLabel,
       priorTurns: request.priorTurns,
+      relatedExcerpts: direct ? await this.quickAskExcerpts(request.question) : [],
     });
     return this.deps.quickAsk(prompt, emit, request.runId);
+  }
+
+  private async quickAskExcerpts(question: string): Promise<QuickAskExcerpt[]> {
+    let hits: SearchHit[];
+    try {
+      hits = await searchIndex().queryVault(question, 6);
+    } catch {
+      return [];
+    }
+    const seen = new Set<string>();
+    const excerpts: QuickAskExcerpt[] = [];
+    for (const hit of hits) {
+      if (hit.supersededBy || seen.has(hit.source)) continue;
+      seen.add(hit.source);
+      excerpts.push({ path: hit.source, excerpt: hit.content.slice(0, 500) });
+      if (excerpts.length >= 4) break;
+    }
+    return excerpts;
   }
 
   /** List persisted conversations (Mastra memory threads), newest first. */
   threads(): Promise<DesktopThread[]> {
     return this.deps.listThreads?.() ?? Promise.resolve([]);
+  }
+
+  threadAppend(
+    threadId: string | null,
+    title: string | undefined,
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+  ): Promise<{ threadId: string }> {
+    if (!this.deps.appendToThread) throw new Error("threads_not_available");
+    return this.deps.appendToThread(threadId, title, messages);
   }
 
   /** Load a conversation's user/assistant messages for replay in the timeline. */

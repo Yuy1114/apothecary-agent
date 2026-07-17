@@ -392,6 +392,26 @@ async function createService(): Promise<DesktopService> {
       deleteThread: async (threadId) => {
         await boundMemory?.deleteThread(threadId);
       },
+      appendToThread: async (threadId, title, messages) => {
+        if (!boundMemory) throw new Error("threads_not_available");
+        const id = threadId ?? randomUUID();
+        if (!threadId) await boundMemory.createThread({ resourceId: RESOURCE, threadId: id, title });
+        // Staggered createdAt keeps the turns ordered; semanticRecall stays off
+        // so a dead embedding endpoint can never fail a save.
+        const base = Date.now();
+        await boundMemory.saveMessages({
+          messages: messages.map((message, index) => ({
+            id: randomUUID(),
+            threadId: id,
+            resourceId: RESOURCE,
+            role: message.role,
+            createdAt: new Date(base + index),
+            content: { format: 2 as const, parts: [{ type: "text" as const, text: message.content }], content: message.content },
+          })),
+          memoryConfig: { semanticRecall: false },
+        });
+        return { threadId: id };
+      },
     },
   });
   await service.initialize();
