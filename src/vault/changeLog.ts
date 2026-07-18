@@ -15,7 +15,11 @@ export type PendingChange = {
 };
 
 /** A change row regardless of triage state, for history views. */
-export type ChangeRecord = PendingChange & { status: ChangeStatus };
+export type ChangeRecord = PendingChange & {
+  status: ChangeStatus;
+  /** Vault git commit that captured this external edit, when versioning is on. */
+  commitSha?: string;
+};
 
 // ── Client singleton (set at startup, see index.ts) ──
 
@@ -42,6 +46,11 @@ export async function initChangeLog(dbUrl: string): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_change_log_status ON vault_change_log(status)`,
   );
+  try {
+    await db.execute(`ALTER TABLE vault_change_log ADD COLUMN commit_sha TEXT`);
+  } catch {
+    // Column already exists.
+  }
   client = db;
 }
 
@@ -108,7 +117,7 @@ export async function listRecentChanges(options: {
 }): Promise<ChangeRecord[]> {
   if (!client) return [];
   const result = await client.execute({
-    sql: `SELECT id, path, change_type, source, status, detected_at
+    sql: `SELECT id, path, change_type, source, status, detected_at, commit_sha
           FROM vault_change_log WHERE detected_at >= ?
           ORDER BY detected_at DESC LIMIT ?`,
     args: [options.since, options.limit ?? 200],
@@ -120,7 +129,28 @@ export async function listRecentChanges(options: {
     source: row.source as ChangeSource,
     status: row.status as ChangeStatus,
     detectedAt: row.detected_at as string,
+    commitSha: (row.commit_sha as string | null) ?? undefined,
   }));
+}
+
+/**
+ * Stamp the vault-git commit that captured a settled batch of external edits
+ * onto the change rows it covered. The `since` guard keeps the stamp off older
+ * unsnapshotted rows for the same paths (e.g. pre-versioning history).
+ */
+export async function markChangesSnapshotted(
+  paths: string[],
+  commitSha: string,
+  since: string,
+): Promise<number> {
+  if (!client || paths.length === 0) return 0;
+  const placeholders = paths.map(() => "?").join(", ");
+  const result = await client.execute({
+    sql: `UPDATE vault_change_log SET commit_sha = ?
+          WHERE path IN (${placeholders}) AND commit_sha IS NULL AND detected_at >= ?`,
+    args: [commitSha, ...paths, since],
+  });
+  return result.rowsAffected;
 }
 
 export async function resolveChanges(

@@ -9,6 +9,7 @@ import {
   type SnapshotFiles,
 } from "../../vault/syncSnapshot.js";
 import { syncSemanticsFromChanges } from "../semantic/syncSemanticsFromChanges.js";
+import { snapshotExternalChanges } from "../versioning/vaultSnapshots.js";
 import { nowIso } from "../../utils/time.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 
@@ -37,6 +38,7 @@ export async function manualSync(
   input: { vaultPath: string },
   deps: { refreshSemantics: RefreshSemantics } = { refreshSemantics: syncSemanticsFromChanges },
 ): Promise<ManualSyncReport> {
+  const syncStart = nowIso();
   const scan = await scanVault({
     vaultPath: input.vaultPath,
     includeHash: true,
@@ -61,6 +63,18 @@ export async function manualSync(
   for (const p of diff.deleted) await enqueueChange({ path: p, changeType: "deleted", source: "manual" });
 
   await saveSnapshot(apothecaryHome(), { generatedAt: nowIso(), files: current });
+
+  // Version the recovered external edits as one commit and link the rows just
+  // enqueued. Best-effort — sync must succeed even when git can't.
+  try {
+    await snapshotExternalChanges(
+      input.vaultPath,
+      [...diff.created, ...diff.modified, ...diff.deleted],
+      syncStart,
+    );
+  } catch (error) {
+    console.warn("Manual sync: vault snapshot failed:", error);
+  }
 
   // Chain the incremental semantic refresh so the understanding layer catches up
   // too — only when something actually changed, to avoid needless LLM work.

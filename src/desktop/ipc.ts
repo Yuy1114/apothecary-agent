@@ -11,6 +11,7 @@ import {
   ResolveChangesInputSchema,
   VaultFolderInputSchema,
   ResolveProposalInputSchema,
+  ActivityCommitInputSchema,
   ProposalDiffInputSchema,
   PolishNoteInputSchema,
   RecentActivityInputSchema,
@@ -131,6 +132,14 @@ export function registerDesktopIpc(ipcMain: IpcMain, service: DesktopService): v
   ipcMain.handle(DesktopChannel.recentActivity, (_event, input) => {
     const { days } = RecentActivityInputSchema.parse(input ?? {});
     return service.recentActivity(days);
+  });
+  ipcMain.handle(DesktopChannel.activityDiff, (_event, input) => {
+    const { sha, path: filePath } = ActivityCommitInputSchema.parse(input);
+    return service.activityDiff(sha, filePath);
+  });
+  ipcMain.handle(DesktopChannel.activityRestore, (_event, input) => {
+    const { sha, path: filePath } = ActivityCommitInputSchema.parse(input);
+    return service.activityRestore(sha, filePath);
   });
   ipcMain.handle(DesktopChannel.knowledge, () => service.knowledge());
   ipcMain.handle(DesktopChannel.diagnostics, () => service.diagnostics());

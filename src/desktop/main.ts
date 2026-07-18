@@ -415,6 +415,14 @@ async function createService(): Promise<DesktopService> {
     },
   });
   await service.initialize();
+  // Vault version control: repo + per-operation snapshot hook. Best-effort —
+  // the desktop must boot even when git is unavailable.
+  try {
+    const { installVaultVersioning } = await import("../application/versioning/vaultSnapshots.js");
+    await installVaultVersioning(service.vaultPath);
+  } catch (error) {
+    logger.warn("main", "vault versioning failed to install", String(error));
+  }
   return service;
 }
 

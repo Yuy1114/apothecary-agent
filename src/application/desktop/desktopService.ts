@@ -1,7 +1,12 @@
 import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
 import { initChangeLog, listPendingChanges, listRecentChanges, resolveChanges } from "../../vault/changeLog.js";
-import { initOperationLedger, listOperations } from "../../vault/operationLedger.js";
+import { initOperationLedger, listOperations, recordOperation } from "../../vault/operationLedger.js";
+import { commitFileDiff, fileAtCommit } from "../../vault/versioning.js";
+import { markSelfWrite } from "../../vault/selfWriteGuard.js";
+import { commitSelfWrite } from "../../vault/syncSnapshot.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
+import { syncSemanticsForPaths } from "../semantic/syncSemanticsFromChanges.js";
 import { buildRecentActivity, type RecentActivityItem } from "./recentActivity.js";
 import { listProposals, loadProposal } from "../../vault/proposalStore.js";
 import { resolveProposalById } from "../proposals/resolveProposal.js";
@@ -281,15 +286,17 @@ export class DesktopService {
   }
 
   async dashboard() {
-    const [changes, proposals, operations, profileState] = await Promise.all([
+    const [changes, proposals, operations, profileState, inboxFiles] = await Promise.all([
       listPendingChanges(),
       listProposals(apothecaryHome()),
       listOperations({ limit: 8 }),
       loadProfileRefreshState(apothecaryHome()),
+      this.inbox().catch(() => []),
     ]);
     return {
       vaultPath: this.vaultPath,
       pendingChanges: changes.length,
+      inboxCount: inboxFiles.length,
       pendingProposals: proposals.filter((proposal) => proposal.status === "proposed").length,
       recentOperations: operations,
       profileStale: profileState.dirty,
@@ -515,6 +522,54 @@ export class DesktopService {
       listOperations({ since, limit: 200 }),
     ]);
     return buildRecentActivity(changes, operations);
+  }
+
+  /** Before/after content of one file across a versioned activity commit. */
+  activityDiff(sha: string, filePath: string) {
+    const normalized = this.versionedPath(sha, filePath);
+    return commitFileDiff(this.vaultPath, sha, normalized);
+  }
+
+  /**
+   * Put a file back to its content just before the given activity commit —
+   * the user-facing undo for both agent edits and external changes. The write
+   * is a self-write (baseline updated, watcher stays quiet) and is recorded as
+   * a `restore` operation, so it snapshots into vault history like any other
+   * applied operation.
+   */
+  async activityRestore(sha: string, filePath: string): Promise<{ restored: boolean }> {
+    const normalized = this.versionedPath(sha, filePath);
+    const absolute = safeVaultPath(this.vaultPath, normalized);
+    if (!absolute) throw new Error("unsafe_path");
+    const content = await fileAtCommit(this.vaultPath, `${sha}^`, normalized);
+    // The parent side of a creation has no content to go back to.
+    if (content === null) throw new Error("restore_unavailable");
+
+    markSelfWrite([normalized]);
+    await fs.mkdir(path.dirname(absolute), { recursive: true });
+    await fs.writeFile(absolute, content, "utf8");
+    await commitSelfWrite(this.vaultPath, [normalized]);
+    try {
+      if (normalized.endsWith(".md")) await searchIndex().reindexFile(normalized);
+    } catch {
+      // Stale index is repaired by the next sync.
+    }
+    await recordOperation({
+      type: "restore",
+      targetFiles: [normalized],
+      source: "desktop",
+      rationale: `恢复到提交 ${sha.slice(0, 7)} 之前的内容`,
+    });
+    // Refresh the semantic layer for the restored content in the background.
+    void syncSemanticsForPaths({ vaultPath: this.vaultPath, paths: [normalized] }).catch(() => undefined);
+    return { restored: true };
+  }
+
+  private versionedPath(sha: string, filePath: string): string {
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) throw new Error("invalid_sha");
+    const normalized = filePath.replaceAll("\\", "/");
+    if (!safeVaultPath(this.vaultPath, normalized)) throw new Error("unsafe_path");
+    return normalized;
   }
 
   async diagnostics() {

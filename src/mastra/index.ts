@@ -21,6 +21,7 @@ import { startVaultWatcher } from "./workflows/sync-watcher.js";
 import { manualSync } from "../application/sync/manualSync.js";
 import { initChangeLog } from "../vault/changeLog.js";
 import { initOperationLedger } from "../vault/operationLedger.js";
+import { installVaultVersioning } from "../application/versioning/vaultSnapshots.js";
 import { initWorkflow } from "./workflows/init.js";
 import { reviewWorkflow } from "./workflows/review.js";
 import { mapWorkflow } from "./workflows/map.js";
@@ -141,6 +142,12 @@ async function bootstrapChangeAwareness(): Promise<void> {
     await initOperationLedger(OPERATIONS_DB_PATH);
   } catch (error) {
     console.warn("Operation ledger failed to initialize:", error);
+  }
+  // Before the seeding sync, so its recovered-edit snapshot can commit.
+  try {
+    await installVaultVersioning(VAULT_PATH);
+  } catch (error) {
+    console.warn("Vault versioning failed to install:", error);
   }
   try {
     await manualSync({ vaultPath: VAULT_PATH });

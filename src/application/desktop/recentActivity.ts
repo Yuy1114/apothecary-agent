@@ -18,6 +18,8 @@ export type RecentActivityItem = {
   fromPath?: string;
   at: string;
   detail?: string;
+  /** Vault git commit that captured this event — enables diff + restore. */
+  commitSha?: string;
 };
 
 // Operations whose ledger entry stores [from, ..., to]: the file's current home
@@ -34,6 +36,7 @@ function operationToItem(op: OperationRecord): RecentActivityItem {
     fromPath: relocated ? op.targetFiles[0] : undefined,
     at: op.appliedAt,
     detail: op.rationale || undefined,
+    commitSha: op.commitSha,
   };
 }
 
@@ -50,6 +53,7 @@ export function buildRecentActivity(
       actor: "user",
       path: change.path,
       at: change.detectedAt,
+      commitSha: change.commitSha,
     })),
     ...operations.map(operationToItem),
   ];

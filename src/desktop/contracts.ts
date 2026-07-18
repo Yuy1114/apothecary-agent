@@ -102,6 +102,12 @@ export const RecentActivityInputSchema = z.object({
   days: z.number().int().min(1).max(90).optional(),
 });
 
+// Versioned-activity endpoints: diff across / restore to before one vault commit.
+export const ActivityCommitInputSchema = z.object({
+  sha: z.string().regex(/^[0-9a-f]{7,40}$/i),
+  path: z.string().min(1),
+});
+
 // 日记 (journal): unified daily/weekly/monthly/yearly notes with a 计划 section.
 export const CadenceSchema = z.enum(["daily", "weekly", "monthly", "yearly"]);
 export type CadenceInput = z.infer<typeof CadenceSchema>;
@@ -211,6 +217,8 @@ export const DesktopChannel = {
   notes: "apothecary:notes",
   operations: "apothecary:operations",
   recentActivity: "apothecary:recent-activity",
+  activityDiff: "apothecary:activity-diff",
+  activityRestore: "apothecary:activity-restore",
   knowledge: "apothecary:knowledge",
   diagnostics: "apothecary:diagnostics",
   threads: "apothecary:threads",

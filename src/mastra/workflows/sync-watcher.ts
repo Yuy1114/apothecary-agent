@@ -9,6 +9,7 @@ import { hashFile } from "../../vault/hash.js";
 import { loadSnapshot, commitSelfWrite } from "../../vault/syncSnapshot.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
+import { snapshotExternalChanges } from "../../application/versioning/vaultSnapshots.js";
 import { proposeIntakePlan } from "../../application/intake/proposeIntake.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
@@ -54,6 +55,9 @@ let semanticSyncPending = false;
 let autoIntakeTimer: ReturnType<typeof setTimeout> | null = null;
 let autoIntakeRunning = false;
 let autoIntakePending = false;
+let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+let snapshotPaths = new Set<string>();
+let snapshotBatchStart: string | null = null;
 
 function toPortablePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
@@ -127,6 +131,9 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
   // exists-only check.
   try {
     await enqueueChange({ path: relativePath, changeType: classification, source: "watcher" });
+    // Version the edit once the burst settles: one commit per batch, sha
+    // stamped back onto the rows just enqueued.
+    scheduleManualSnapshot(relativePath);
   } catch (error) {
     console.warn(`Vault watcher: failed to log change for ${relativePath}:`, error);
   }
@@ -200,6 +207,25 @@ function scheduleAutoIntake(mastra: Mastra): void {
     autoIntakeTimer = null;
     void runAutoIntake(mastra);
   }, AUTO_INTAKE_DEBOUNCE_MS);
+}
+
+// Batch external edits into one snapshot commit per settled burst. The batch
+// start is remembered (with a minute of slack) so the sha only stamps rows
+// enqueued by this batch, never older unsnapshotted history for the same path.
+function scheduleManualSnapshot(relativePath: string): void {
+  if (!snapshotBatchStart) snapshotBatchStart = new Date(Date.now() - 60_000).toISOString();
+  snapshotPaths.add(relativePath);
+  if (snapshotTimer) clearTimeout(snapshotTimer);
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = null;
+    const paths = [...snapshotPaths];
+    const since = snapshotBatchStart ?? new Date(Date.now() - 60_000).toISOString();
+    snapshotPaths = new Set();
+    snapshotBatchStart = null;
+    void snapshotExternalChanges(VAULT_PATH, paths, since).catch((error) => {
+      console.warn("Vault watcher: snapshot of external edits failed:", error);
+    });
+  }, SEMANTIC_SYNC_DEBOUNCE_MS);
 }
 
 async function runSemanticSync(): Promise<void> {

@@ -56,6 +56,7 @@ describe("DesktopService", () => {
     await expect(service.dashboard()).resolves.toMatchObject({
       pendingChanges: 1,
       pendingProposals: 1,
+      inboxCount: 1,
     });
   });
 

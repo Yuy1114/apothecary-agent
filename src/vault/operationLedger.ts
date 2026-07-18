@@ -11,7 +11,8 @@ export type OperationType =
   | "canonical"
   | "structure"
   | "ingest"
-  | "capture";
+  | "capture"
+  | "restore";
 
 export type OperationRecord = {
   id: string;
@@ -21,7 +22,29 @@ export type OperationRecord = {
   source: string;
   appliedAt: string;
   detail: string;
+  /** Vault git commit that captured this operation's file changes, when versioning is on. */
+  commitSha?: string;
 };
+
+/** Input recordOperation feeds to the snapshot hook after inserting the row. */
+export type OperationSnapshotInput = {
+  type: OperationType;
+  targetFiles: string[];
+  rationale: string;
+  source: string;
+  detail: string;
+};
+
+// Injected at the composition root (desktop runtime / mastra index) when vault
+// versioning is enabled: snapshots the operation's paths into a git commit and
+// returns the sha (null = nothing to commit / snapshot failed).
+let snapshotHook: ((op: OperationSnapshotInput) => Promise<string | null>) | null = null;
+
+export function setOperationSnapshotHook(
+  hook: ((op: OperationSnapshotInput) => Promise<string | null>) | null,
+): void {
+  snapshotHook = hook;
+}
 
 // ── Client singleton (set at startup, see index.ts) ──
 
@@ -48,6 +71,11 @@ export async function initOperationLedger(dbUrl: string): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_operation_ledger_applied_at ON operation_ledger(applied_at)`,
   );
+  try {
+    await db.execute(`ALTER TABLE operation_ledger ADD COLUMN commit_sha TEXT`);
+  } catch {
+    // Column already exists.
+  }
   client = db;
 }
 
@@ -68,12 +96,13 @@ export async function recordOperation(op: {
   detail?: string;
 }): Promise<void> {
   if (!client) return;
+  const id = createId("op");
   try {
     await client.execute({
       sql: `INSERT INTO operation_ledger (id, type, target_files, rationale, source, applied_at, detail)
             VALUES (?, ?, ?, ?, ?, ?, ?)`,
       args: [
-        createId("op"),
+        id,
         op.type,
         JSON.stringify(op.targetFiles),
         op.rationale ?? "",
@@ -84,6 +113,27 @@ export async function recordOperation(op: {
     });
   } catch (error) {
     console.warn("Operation ledger: failed to record operation:", error);
+    return;
+  }
+  // Version the applied change: one commit per operation, sha back onto the
+  // row. Same never-throw stance — a failed snapshot only costs the sha link.
+  if (!snapshotHook) return;
+  try {
+    const sha = await snapshotHook({
+      type: op.type,
+      targetFiles: op.targetFiles,
+      rationale: op.rationale ?? "",
+      source: op.source,
+      detail: op.detail ?? "",
+    });
+    if (sha) {
+      await client.execute({
+        sql: `UPDATE operation_ledger SET commit_sha = ? WHERE id = ?`,
+        args: [sha, id],
+      });
+    }
+  } catch (error) {
+    console.warn("Operation ledger: snapshot hook failed:", error);
   }
 }
 
@@ -113,7 +163,7 @@ export async function listOperations(query: {
   args.push(query.limit ?? 50);
 
   const result = await client.execute({
-    sql: `SELECT id, type, target_files, rationale, source, applied_at, detail
+    sql: `SELECT id, type, target_files, rationale, source, applied_at, detail, commit_sha
           FROM operation_ledger ${where} ORDER BY applied_at DESC LIMIT ?`,
     args,
   });
@@ -126,5 +176,6 @@ export async function listOperations(query: {
     source: row.source as string,
     appliedAt: row.applied_at as string,
     detail: (row.detail as string) ?? "",
+    commitSha: (row.commit_sha as string | null) ?? undefined,
   }));
 }

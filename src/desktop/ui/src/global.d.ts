@@ -24,6 +24,7 @@ type RecentActivityItem = {
   fromPath?: string;
   at: string;
   detail?: string;
+  commitSha?: string;
 };
 type QuickAskRequest = {
   runId: string;
@@ -104,6 +105,8 @@ type ApothecaryApi = {
   notes(): Promise<Array<{ path: string; title: string }>>;
   operations(): Promise<any[]>;
   recentActivity(days?: number): Promise<RecentActivityItem[]>;
+  activityDiff(sha: string, path: string): Promise<{ before: string | null; after: string | null }>;
+  activityRestore(sha: string, path: string): Promise<{ restored: boolean }>;
   knowledge(): Promise<any>;
   diagnostics(): Promise<any>;
   getSettings(): Promise<DesktopSettingsView>;

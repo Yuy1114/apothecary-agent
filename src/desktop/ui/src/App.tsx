@@ -3,7 +3,7 @@ import { Markdown } from "./markdown.js";
 import { QuickAsk, type QuickAskContext, type QuickAskHandle, type QuickAskSaved } from "./quickAsk.js";
 import { sliceEnclosingSection } from "./quickAskSection.js";
 
-type View = "workspace" | "proposals" | "journal" | "vault" | "runs" | "knowledge" | "settings";
+type View = "workspace" | "proposals" | "journal" | "recent" | "inbox" | "changes" | "vault" | "runs" | "knowledge" | "settings";
 type Message = { role: "user" | "assistant"; content: string };
 type ProposalStatus = "proposed" | "applied" | "rejected";
 type RunTool = { toolCallId: string; toolName: string; status: "running" | "completed" | "failed" };
@@ -27,7 +27,10 @@ const titles: Record<View, [string, string]> = {
   workspace: ["工作区 Workspace", "对话 · 运行动态"],
   proposals: ["提案 Proposals", "集中审批 · Agent 发起的所有变更"],
   journal: ["日记 Journal", "计划 · 记录 · 复盘"],
-  vault: ["Vault 文件库", "最近 · Inbox · 变更 · 监听中"],
+  recent: ["最近 Recent", "Agent 与手动的文件变动时间线"],
+  inbox: ["收件箱 Inbox", "_inbox · 待分类归位"],
+  changes: ["变更 Changes", "检测到的外部改动"],
+  vault: ["Vault 文件库", "分类归位的药柜 · 按文件夹浏览"],
   runs: ["审阅 Review", "检查并复核 Agent 对药柜的改动"],
   knowledge: ["知识体系 Knowledge", "主题域 · 关系 · 维护机会"],
   settings: ["设置 Settings", "本地配置 · 不会上传"],
@@ -52,6 +55,9 @@ const Icon = {
   workspace: () => S("M14 10.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 2.5V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7z"),
   proposal: () => S("M2.5 8.5V12A1.5 1.5 0 0 0 4 13.5h8a1.5 1.5 0 0 0 1.5-1.5V8.5M2.5 8.5l1.9-5.1a1.5 1.5 0 0 1 1.4-.9h4.4a1.5 1.5 0 0 1 1.4.9l1.9 5.1M2.5 8.5h3l1 2h3l1-2h3"),
   journal: () => S("M3.5 2h8A1.5 1.5 0 0 1 13 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1 1 0 0 1 3 13V3a1 1 0 0 1 .5-1zM5.5 2v12M8 5.5h3M8 8h3"),
+  recent: () => S("M1.5 8.5h2.6l2.2-5 3.4 9 2.1-4h2.7"),
+  inbox: () => S("M8 1.8v5.4M5.8 5 8 7.2 10.2 5M2.5 9.5V12A1.5 1.5 0 0 0 4 13.5h8a1.5 1.5 0 0 0 1.5-1.5V9.5M2.5 9.5h3l1 1.8h3l1-1.8h3"),
+  changes: () => S("M2.5 5h9L9.2 2.7M13.5 11h-9l2.3 2.3"),
   vault: () => S("M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 2h4.5A1.5 1.5 0 0 1 14 6.5v5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5v-7z"),
   runs: () => (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
@@ -117,7 +123,9 @@ export function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [queuedPrompt, setQueuedPrompt] = useState("");
   const [diffProposal, setDiffProposal] = useState<any>(null);
-  const [vaultScope, setVaultScope] = useState<string>("inbox");
+  // The vault view scopes filed top-level folders only ("" until the tree
+  // loads and picks one); 最近/收件箱/变更 are standalone views.
+  const [vaultScope, setVaultScope] = useState<string>("");
   // A request to open a specific note in the Vault view (from a RAG source chip
   // or an in-answer link). The nonce forces VaultView to re-open even if the same
   // path is clicked twice.
@@ -173,14 +181,18 @@ export function App() {
   useEffect(() => { void loadThreads(); }, [loadThreads]);
 
   const openChat = useCallback((prompt: string) => { setQueuedPrompt(prompt); setView("workspace"); }, []);
-  // Jump to a note in the Vault view: scope the tree to its top-level folder and
-  // ask VaultView to open the exact file.
+  // Jump to a note: _inbox files live in the 收件箱 view, filed notes in the
+  // vault view. Scope the target view accordingly and open the exact file.
   const openInVault = useCallback((filePath: string) => {
     const normalized = filePath.replace(/\\/g, "/").replace(/^\.\//, "");
     const top = normalized.split("/")[0];
-    setVaultScope(top === "_inbox" ? "inbox" : top || "inbox");
+    if (top === "_inbox") {
+      setView("inbox");
+    } else {
+      setVaultScope(top);
+      setView("vault");
+    }
     setVaultTarget({ path: normalized, nonce: Date.now() });
-    setView("vault");
   }, []);
   // Explicit conversation switches bump threadNonce so WorkspaceView reloads;
   // a locally-minted thread (onThreadCreated) must NOT bump it, or the in-flight
@@ -212,7 +224,10 @@ export function App() {
           <NavItem id="workspace" icon={<Icon.workspace />} label="工作区 Workspace" active={view} onClick={setView} />
           <NavItem id="proposals" icon={<Icon.proposal />} label="提案 Proposals" active={view} onClick={setView} badge={dashboard?.pendingProposals} />
           <NavItem id="journal" icon={<Icon.journal />} label="日记 Journal" active={view} onClick={setView} />
-          <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
+          <NavItem id="recent" icon={<Icon.recent />} label="最近 Recent" active={view} onClick={setView} />
+          <NavItem id="inbox" icon={<Icon.inbox />} label="收件箱 Inbox" active={view} onClick={setView} badge={dashboard?.inboxCount} />
+          <NavItem id="changes" icon={<Icon.changes />} label="变更 Changes" active={view} onClick={setView} badge={dashboard?.pendingChanges} />
+          <NavItem id="vault" icon={<Icon.vault />} label="Vault" active={view} onClick={setView} />
           <NavItem id="runs" icon={<Icon.runs />} label="审阅 Review" active={view} onClick={setView} />
           <NavItem id="knowledge" icon={<Icon.knowledge />} label="知识体系 Knowledge" active={view} onClick={setView} />
         </nav>
@@ -252,6 +267,9 @@ export function App() {
         {view === "proposals" && <ProposalsView refreshKey={refreshKey} pendingCount={dashboard?.pendingProposals ?? 0} notify={notify} refreshDashboard={refreshDashboard}
           runProposals={runProposals} clearRunProposal={clearRunProposal} />}
         {view === "journal" && <JournalView refreshKey={refreshKey} notify={notify} target={journalTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
+        {view === "recent" && <VaultView scope="recent" refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
+        {view === "inbox" && <VaultView scope="inbox" refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
+        {view === "changes" && <VaultView scope="changes" refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
         {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
         {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
@@ -307,7 +325,7 @@ function SidePanel({ view, dashboard, refreshKey, vaultScope, setVaultScope, thr
     );
   }
   if (view === "vault") {
-    return <VaultTreePanel scope={vaultScope} setScope={setVaultScope} dashboard={dashboard} refreshKey={refreshKey} />;
+    return <VaultTreePanel scope={vaultScope} setScope={setVaultScope} refreshKey={refreshKey} />;
   }
   const ops: any[] = dashboard?.recentOperations ?? [];
   return (
@@ -327,35 +345,29 @@ function SidePanel({ view, dashboard, refreshKey, vaultScope, setVaultScope, thr
 
 const INBOX_DIR_NAMES = ["inbox", "_inbox"];
 
-function VaultTreePanel({ scope, setScope, dashboard, refreshKey }: { scope: string; setScope: (s: string) => void; dashboard: any; refreshKey: number }) {
+function VaultTreePanel({ scope, setScope, refreshKey }: { scope: string; setScope: (s: string) => void; refreshKey: number }) {
   const [tree, setTree] = useState<{ directories: any[]; totalFiles: number } | null>(null);
-  const [inboxCount, setInboxCount] = useState<number | null>(null);
   useEffect(() => {
     void api.vaultTree().then(setTree).catch(() => setTree({ directories: [], totalFiles: 0 }));
-    void api.inbox().then((f) => setInboxCount(f.length)).catch(() => setInboxCount(null));
   }, [refreshKey]);
   const dirs = (tree?.directories ?? []).filter((d) => !INBOX_DIR_NAMES.includes(d.path.toLowerCase()));
+  // The vault shows filed folders only (triage feeds live in 动态), so land on
+  // the first folder whenever the current scope isn't one of them.
+  useEffect(() => {
+    if (tree && dirs.length > 0 && !dirs.some((d) => d.path === scope)) setScope(dirs[0].path);
+  }, [tree, scope]);
+  // Count what this panel actually lists — tree.totalFiles would include _inbox.
+  const filedCount = dirs.reduce((sum, d) => sum + (d.fileCount ?? 0), 0);
   return (
     <div className="side-panel">
-      <div className="side-head"><span>Vault</span><span className="count mono">{tree ? `${tree.totalFiles} 篇` : "…"}</span></div>
+      <div className="side-head"><span>Vault</span><span className="count mono">{tree ? `${filedCount} 篇` : "…"}</span></div>
       <div className="side-list">
-        <div className={`tree-row ${scope === "recent" ? "active" : ""}`} onClick={() => setScope("recent")}>
-          <Icon.runs /><span className="label">最近</span>
-        </div>
-        <div className={`tree-row ${scope === "inbox" ? "active" : ""}`} onClick={() => setScope("inbox")}>
-          <Icon.file /><span className="label">_inbox</span>
-          {inboxCount != null && inboxCount > 0 && <span className="badge accent">{inboxCount} 待处理</span>}
-        </div>
-        <div className={`tree-row ${scope === "changes" ? "active" : ""}`} onClick={() => setScope("changes")}>
-          <Icon.refresh /><span className="label">变更</span>
-          {dashboard?.pendingChanges > 0 && <span className="badge warning">{dashboard.pendingChanges}</span>}
-        </div>
         {dirs.map((d) => (
           <div key={d.path} className={`tree-row ${scope === d.path ? "active" : ""}`} onClick={() => setScope(d.path)}>
             <Icon.vault /><span className="label">{d.path}</span><span className="count">{d.fileCount}</span>
           </div>
         ))}
-        {dirs.length === 0 && tree && <div className="side-empty">Vault 里还没有其它文件夹。</div>}
+        {dirs.length === 0 && tree && <div className="side-empty">Vault 里还没有分类文件夹。</div>}
       </div>
     </div>
   );
@@ -1278,8 +1290,10 @@ const CHANGE_LABELS: Record<string, string> = { created: "新增", modified: "�
 const activityKindLabel = (kind: string) => CHANGE_LABELS[kind] ?? OP_LABELS[kind] ?? kind;
 const activityBadgeClass = (item: RecentActivityItem) =>
   item.kind === "created" ? "success" : item.kind === "modified" ? "warning" : item.kind === "deleted" ? "danger" : "accent";
-// Deleted files and directory-level ops have nothing to preview.
-const activityOpensFile = (item: RecentActivityItem) => item.kind !== "deleted" && item.kind !== "structure";
+// Directory-level ops have nothing to preview; a deleted file opens only when a
+// vault commit captured it (the missing-file view can then diff and restore it).
+const activityOpensFile = (item: RecentActivityItem) =>
+  item.kind !== "structure" && (item.kind !== "deleted" || !!item.commitSha);
 
 const formatTime = (value: string) =>
   new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
@@ -1346,6 +1360,10 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
   const [polishOpen, setPolishOpen] = useState(false);
   const [polishModes, setPolishModes] = useState<PolishModeKey[]>(["format"]);
   const [polishing, setPolishing] = useState(false);
+  // Versioned activity (最近): before/after across the selected item's commit.
+  const [versionDiff, setVersionDiff] = useState<{ before: string | null; after: string | null } | null>(null);
+  const [versionDiffOpen, setVersionDiffOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const isChanges = scope === "changes";
   const isInbox = scope === "inbox";
   const isRecent = scope === "recent";
@@ -1354,11 +1372,14 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
     setSelected(null);
     if (isRecent) { setFiles([]); setChanges([]); void api.recentActivity().then(setActivity).catch((e) => notify(e.message)); }
     else if (isChanges) { setFiles([]); setActivity([]); void api.changes().then(setChanges).catch((e) => notify(e.message)); }
+    else if (!scope) { setFiles([]); setChanges([]); setActivity([]); } // vault tree still picking the first folder
     else { setChanges([]); setActivity([]); const p = isInbox ? api.inbox() : api.vaultFolder(scope); void p.then(setFiles).catch((e) => notify(e.message)); }
   }, [scope, isChanges, isInbox, isRecent, notify]);
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const openFile = async (file: any, inboxScoped: boolean, opts?: { allowMissing?: boolean }) => {
+    setVersionDiffOpen(false);
+    setVersionDiff(null);
     try {
       const data = inboxScoped ? await api.readInbox(file.path) : await api.readFile(file.path);
       setSelected({ file, data });
@@ -1369,6 +1390,39 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
         setSelected({ file, data: null, missing: true });
         setPolishOpen(false);
       } else notify(message);
+    }
+  };
+
+  const toggleVersionDiff = async () => {
+    if (versionDiffOpen) { setVersionDiffOpen(false); return; }
+    setVersionDiffOpen(true);
+    if (!versionDiff && selected?.file.commitSha) {
+      try {
+        setVersionDiff(await api.activityDiff(selected.file.commitSha, selected.file.path));
+      } catch (error) {
+        notify(`加载改动失败：${(error as Error).message}`);
+        setVersionDiffOpen(false);
+      }
+    }
+  };
+
+  const runRestore = async () => {
+    const file = selected?.file;
+    if (!file?.commitSha) return;
+    const ok = window.confirm(
+      `将「${lastSegment(file.path)}」恢复到本次改动之前的内容？\n当前内容会被覆盖；这次恢复本身也会进入版本历史，可以再次恢复。`,
+    );
+    if (!ok) return;
+    setRestoring(true);
+    try {
+      await api.activityRestore(file.commitSha, file.path);
+      notify("已恢复到改动前的版本");
+      load();
+      await openFile({ path: file.path }, file.path.replace(/\\/g, "/").startsWith("_inbox/"), { allowMissing: true });
+    } catch (error) {
+      notify(`恢复失败：${(error as Error).message}`);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -1406,7 +1460,7 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
       <div className="split">
         <div className="file-pane">
           <div className="pane-head">
-            <span style={{ color: "var(--fg-subtle)" }}>Vault</span><span>/</span>
+            {!(isRecent || isInbox || isChanges) && <><span style={{ color: "var(--fg-subtle)" }}>Vault</span><span>/</span></>}
             <span style={{ color: "var(--fg)", fontWeight: 500 }}>{scopeLabel(scope)}</span>
             <span className="spacer" />
             <span className="mono" style={{ fontSize: 11 }}>{isRecent ? `${activity.length} 项` : isChanges ? `${changes.length} 项` : `${files.length} 项`}</span>
@@ -1423,7 +1477,7 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
                       <div
                         key={item.id}
                         className={`file-row ${selected?.file.path === item.path ? "active" : ""} ${clickable ? "" : "static"}`}
-                        onClick={() => clickable && openFile({ path: item.path }, item.path.replace(/\\/g, "/").startsWith("_inbox/"))}
+                        onClick={() => clickable && openFile({ path: item.path, commitSha: item.commitSha }, item.path.replace(/\\/g, "/").startsWith("_inbox/"), { allowMissing: true })}
                       >
                         <Icon.file />
                         <div className="info">
@@ -1492,7 +1546,35 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
                         <button className="btn btn-ghost sm" onClick={() => void resolveChange(selected.file.id, "dismissed")}>忽略</button>
                       </>
                     )}
+                    {isRecent && selected.file.commitSha && (
+                      <button className="btn btn-secondary sm" onClick={() => void toggleVersionDiff()}>
+                        {versionDiffOpen ? "收起改动" : "查看改动"}
+                      </button>
+                    )}
                   </div>
+                  {versionDiffOpen && (
+                    <div className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                      {!versionDiff ? (
+                        <div className="hint">正在载入改动…</div>
+                      ) : (
+                        <>
+                          <DiffView diff={{ before: versionDiff.before ?? undefined, after: versionDiff.after ?? undefined, path: selected.file.path } as ProposalDiffData} />
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span className="hint" style={{ flex: 1 }}>
+                              {versionDiff.before == null
+                                ? "这次改动创建了该文件，没有更早的版本可以恢复。"
+                                : `提交 #${selected.file.commitSha.slice(0, 7)} · 恢复会把文件写回改动前的内容`}
+                            </span>
+                            {versionDiff.before != null && (
+                              <button className="btn btn-danger sm" disabled={restoring} onClick={() => void runRestore()}>
+                                {restoring ? "恢复中…" : "恢复到改动前"}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                   {polishOpen && /\.md$/i.test(selected.file.path ?? "") && (
                     <div className="card" style={{ padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {POLISH_MODE_OPTIONS.map(({ key, label }) => (
@@ -1530,7 +1612,11 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
                   </div>
                   {selected.missing ? (
                     <div className="doc-body">
-                      <div className="hint">这个文件已不在磁盘上，可能被手动删除或移动了。内容无法预览，你可以用上方按钮把这条变更「标记已处理」或「忽略」。</div>
+                      <div className="hint">
+                        {isRecent && selected.file.commitSha
+                          ? "这个文件已不在磁盘上。可以点上方「查看改动」检视它最后的内容，并从版本历史恢复。"
+                          : "这个文件已不在磁盘上，可能被手动删除或移动了。内容无法预览，你可以用上方按钮把这条变更「标记已处理」或「忽略」。"}
+                      </div>
                     </div>
                   ) : (() => {
                     const isMd = /\.md$/i.test(selected.file.path ?? "") || selected.data.mediaType === "markdown";
@@ -1559,6 +1645,7 @@ function VaultView({ scope, refreshKey, onChat, notify, target, qaThreadId, onQu
 const OP_LABELS: Record<string, string> = {
   edit: "编辑", move: "移动", archive: "归档", merge: "合并", promote: "提升",
   canonical: "规范化", structure: "结构调整", ingest: "归入", capture: "捕获",
+  restore: "恢复",
 };
 // Operations whose reverse is well-defined (just move the file back).
 const REVERSIBLE_OPS = new Set(["move", "archive"]);
