@@ -1,3 +1,5 @@
+// The one CommonJS file in an otherwise ESM-only codebase: sandboxed Electron
+// preload scripts (sandbox: true in main.ts) cannot be ES modules.
 const { contextBridge, ipcRenderer } = require("electron") as typeof import("electron");
 
 const channel = {

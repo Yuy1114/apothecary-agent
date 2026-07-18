@@ -119,10 +119,8 @@ agent conversation, changed-file queue, inbox triage, proposal review, and
 knowledge-profile views without requiring Mastra Studio:
 
 ```bash
-pnpm run desktop:dev   # Vite HMR + main/preload watch + Electron auto-restart
-pnpm run desktop:dev:once # one build + one Electron launch (smoke/CI)
-pnpm run desktop:pack  # create release/mac-arm64/Apothecary.app
-pnpm run desktop:dist  # create distributable macOS artifacts
+pnpm run desktop:dev     # Vite HMR + main/preload watch + Electron auto-restart
+pnpm run desktop:install # one-click: build → install to /Applications → launch
 ```
 
 Mastra Studio remains available as a development and debugging surface:
@@ -134,10 +132,8 @@ pnpm run dev     # Mastra Studio (agents, tools, workflows)
 ## Verifying
 
 ```bash
-pnpm run check        # tsc --noEmit, the renderer tsconfig, and the layer guard
-pnpm run check:layers # dependency-cruiser only
-pnpm run test         # vitest (watch)
-pnpm run ci           # check + build + vitest run
+pnpm run check # tsc --noEmit, the renderer tsconfig, and the layer guard
+pnpm run test  # vitest (watch); `pnpm vitest run` for a single pass
 ```
 
 Domain logic and stores are covered by unit tests; `src/acceptance/` holds an end-to-end test that drives a proposal from approval through the physical layer, README index, vector index, semantic layer and operation ledger, asserting they stay consistent. LLM boundaries (embeddings, summarizer) and the vector index are reached through `application/ports/`, so tests install a fake with `setSearchIndex(...)` / `setFileSummarizer(...)` rather than mocking modules — the suite is deterministic and runs without API keys.

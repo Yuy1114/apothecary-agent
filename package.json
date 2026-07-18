@@ -6,16 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "build": "tsc && vite build --config vite.desktop.config.ts",
-    "check": "tsc --noEmit && tsc --project tsconfig.renderer.json && pnpm run check:layers",
-    "check:layers": "depcruise src --config .dependency-cruiser.cjs",
-    "test": "vitest",
-    "ci": "pnpm run check && pnpm run build && pnpm vitest run",
-    "desktop:dev": "node scripts/desktop-dev.mjs",
-    "desktop:dev:once": "pnpm run build && electron .",
-    "desktop:pack": "pnpm run build && electron-builder --dir",
+    "desktop:dev": "node scripts/desktop-dev.js",
     "desktop:install": "./scripts/desktop-install.sh",
-    "desktop:dist": "pnpm run build && electron-builder"
+    "build": "tsc && vite build --config vite.desktop.config.ts",
+    "check": "tsc --noEmit && tsc --project tsconfig.renderer.json && depcruise src --config .dependency-cruiser.js",
+    "test": "vitest"
   },
   "keywords": [
     "agent",

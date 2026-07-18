@@ -8,7 +8,8 @@ APP_SRC="release/mac-arm64/Apothecary.app"
 APP_DST="/Applications/Apothecary.app"
 
 echo "▶ 打包（tsc + vite + electron-builder --dir）"
-pnpm run desktop:pack
+pnpm run build
+pnpm exec electron-builder --dir
 
 echo "▶ 安装到 /Applications"
 # 正在运行的实例会占着旧 bundle，先礼貌退出，退不掉就强杀。

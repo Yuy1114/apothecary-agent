@@ -12,7 +12,7 @@
  * The one rule that matters: dependencies point down. Every violation this file
  * forbids was a real edge in the codebase before the layering refactor.
  */
-module.exports = {
+export default {
   forbidden: [
     {
       name: "no-circular",
