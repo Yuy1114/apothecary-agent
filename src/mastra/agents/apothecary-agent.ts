@@ -25,6 +25,7 @@ import { listDuplicateClustersTool } from "../tools/list-duplicate-clusters.js";
 import { listRelationsTool } from "../tools/list-relations.js";
 import { listCanonicalCandidatesTool } from "../tools/list-canonical-candidates.js";
 import { listMaintenanceFindingsTool } from "../tools/list-maintenance-findings.js";
+import { auditReadmesTool } from "../tools/audit-readmes.js";
 import { executeIntakeTool } from "../tools/execute-intake.js";
 import { organizer } from "./organizer.js";
 
@@ -68,7 +69,8 @@ export const apothecaryAgent = new Agent({
 - “润色 / 续写 / 优化格式 / 补 tags 某篇笔记” → polishNote（modes 按用户要求选 expand/format/tags；产出 edit 提案待用户审批，绝不直接改文件）
 - “最近做了什么” → listOperations / listChangeProposals
 - “我的知识体系如何” → readKnowledgeProfile / generateKnowledgeView
-- “有哪些内容需要维护” → duplicate/canonical/maintenance tools`,
+- “有哪些内容需要维护” → duplicate/canonical/maintenance tools
+- “做一次大清理 / 结构体检 / 核对一下 README” → auditReadmes（逐目录核对 README 索引与实际文件，对每个有出入的目录生成修正索引的 edit 提案；只重写索引、不改其余内容，待用户审批）。转达它返回的 findings 概要即可`,
   tools: {
     queryVault: queryVaultTool,
     scanVault: scanVaultTool,
@@ -93,6 +95,7 @@ export const apothecaryAgent = new Agent({
     listRelations: listRelationsTool,
     listCanonicalCandidates: listCanonicalCandidatesTool,
     listMaintenanceFindings: listMaintenanceFindingsTool,
+    auditReadmes: auditReadmesTool,
     executeIntake: executeIntakeTool,
   },
 });
