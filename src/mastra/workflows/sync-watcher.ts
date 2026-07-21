@@ -11,6 +11,8 @@ import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
 import { snapshotExternalChanges } from "../../application/versioning/vaultSnapshots.js";
 import { proposeIntakePlan } from "../../application/intake/proposeIntake.js";
+import { manualSync, type ManualSyncReport } from "../../application/sync/manualSync.js";
+import { surveyInbox } from "../../vault/inboxSurvey.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
 
@@ -80,6 +82,15 @@ function isIgnoredPath(relativePath: string): boolean {
  */
 export function shouldScheduleAutoIntake(relativePath: string, enabled: boolean): boolean {
   return enabled && relativePath.startsWith(INBOX_PREFIX);
+}
+
+/**
+ * The startup catch-up should plan an intake pass iff auto-intake is opted in
+ * and `_inbox` currently holds at least one (non-junk) item — offline drops the
+ * live watcher never saw an event for. Pure so the boot trigger is unit-tested.
+ */
+export function shouldCatchUpAutoIntake(inboxEntryCount: number, enabled: boolean): boolean {
+  return enabled && inboxEntryCount > 0;
 }
 
 // Opt-in (see settingsEnv → APOTHECARY_AUTO_INTAKE): the background pass costs
@@ -262,6 +273,60 @@ function scheduleSemanticSync(): void {
   }, SEMANTIC_SYNC_DEBOUNCE_MS);
 }
 
+type CatchUpDeps = {
+  sync: (input: { vaultPath: string }) => Promise<ManualSyncReport>;
+  survey: (vaultPath: string) => Promise<{ entries: unknown[] }>;
+  schedule: (mastra: Mastra) => void;
+};
+
+const defaultCatchUpDeps: CatchUpDeps = {
+  sync: manualSync,
+  survey: surveyInbox,
+  schedule: scheduleAutoIntake,
+};
+
+/**
+ * Boot-time catch-up sweep. The live watcher below only observes events from the
+ * moment it starts, so anything that changed in the vault — or was dropped into
+ * `_inbox` — while the app was closed is invisible to it. On startup we run one
+ * manual sync to recover those offline edits into the index / change ledger /
+ * snapshot / semantic layers, then, if auto-intake is opted in and `_inbox`
+ * holds anything, plan an intake pass so offline drops get filed just like live
+ * ones. Fully isolated and best-effort — each half fails independently and only
+ * logs, so a boot-time hiccup never takes down the watcher host.
+ */
+export async function runStartupCatchUp(
+  mastra: Mastra,
+  deps: CatchUpDeps = defaultCatchUpDeps,
+): Promise<void> {
+  try {
+    const report = await deps.sync({ vaultPath: VAULT_PATH });
+    if (report.created || report.modified || report.deleted) {
+      console.log(
+        `Vault watcher: startup catch-up recovered offline changes (created=${report.created}, modified=${report.modified}, deleted=${report.deleted})`,
+      );
+    }
+  } catch (error) {
+    console.warn("Vault watcher: startup catch-up sync failed:", error);
+  }
+
+  // Offline `_inbox` drops fired no watcher event, so they were never scheduled.
+  // Survey the folder and, if opted in and non-empty, plan one intake pass — the
+  // same planning-only path a live drop takes (still gated on human approval).
+  if (!autoIntakeEnabled()) return;
+  try {
+    const survey = await deps.survey(VAULT_PATH);
+    if (shouldCatchUpAutoIntake(survey.entries.length, autoIntakeEnabled())) {
+      console.log(
+        `Vault watcher: startup found ${survey.entries.length} _inbox item(s) — scheduling auto-intake`,
+      );
+      deps.schedule(mastra);
+    }
+  } catch (error) {
+    console.warn("Vault watcher: startup inbox survey failed:", error);
+  }
+}
+
 export function startVaultWatcher(mastra: Mastra): void {
   if (watcher) return;
   try {
@@ -275,4 +340,8 @@ export function startVaultWatcher(mastra: Mastra): void {
   } catch {
     console.warn("Vault watcher failed to start");
   }
+  // Recover anything that changed while the app was closed — the live watcher
+  // above only sees events from here on. Deferred (not awaited) so the
+  // full-vault scan never blocks boot.
+  if (watcher) void runStartupCatchUp(mastra);
 }
