@@ -96,6 +96,7 @@ type ApothecaryApi = {
   proposalDiff(id: string): Promise<{
     type: string; path?: string; pathChange?: { from: string; to: string };
     before?: string; after?: string; note?: string;
+    decisions?: Array<{ action: "move" | "archive" | "leave"; source: string; target?: string; rationale: string; confidence: number }>;
   }>;
   resolveProposal(id: string, decision: "approve" | "reject", note?: string): Promise<any>;
   polishNote(

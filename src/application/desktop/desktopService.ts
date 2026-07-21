@@ -28,7 +28,11 @@ import { buildQuickAskPrompt, type QuickAskExcerpt, type QuickAskTurn } from "./
 import { searchIndex, type SearchHit } from "../ports/searchIndex.js";
 import type { PolishMode } from "../../domain/notePolish.js";
 import type { AutoIntakeStatus } from "../../domain/autoIntakeStatus.js";
-import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
+import {
+  buildIntakeDecisionViews,
+  type IntakeDecision,
+  type IntakeDecisionView,
+} from "../../domain/intakePlan.js";
 import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
 import { digestRelPath, periodKeyFor, periodRange, periodTitle, shiftPeriod, type Cadence } from "../../domain/journal.js";
 
@@ -463,6 +467,7 @@ export class DesktopService {
   async proposalDiff(id: string): Promise<{
     type: string; path?: string; pathChange?: { from: string; to: string };
     before?: string; after?: string; note?: string;
+    decisions?: IntakeDecisionView[];
   }> {
     const proposal = await loadProposal(apothecaryHome(), id);
     if (!proposal) return { type: "unknown" };
@@ -490,17 +495,11 @@ export class DesktopService {
         const parts = [payload.add?.length ? `新增关键词：${payload.add.join("、")}` : "", payload.remove?.length ? `移除关键词：${payload.remove.join("、")}` : ""].filter(Boolean);
         return { type: "structure", path: payload.directory, note: parts.join("；") || "调整目录分类关键词" };
       }
-      case "intake": {
-        // One line per decision; the renderer shows the note pre-line.
-        const lines = (payload.decisions as IntakeDecision[]).map((d) => {
-          if (d.action === "archive") return `归档 ${d.source}`;
-          if (d.action === "leave") return `保留 ${d.source}（${d.rationale}）`;
-          return d.kind === "directory"
-            ? `迁移 ${d.source}/* → ${d.dest ?? ""}`
-            : `迁移 ${d.source} → ${fileTargetPath(d)}`;
-        });
-        return { type: "intake", note: lines.join("\n") };
-      }
+      case "intake":
+        // Structured per-file plan (which file, from→to, why) so the renderer can
+        // show a clear participant list instead of collapsing every source/target
+        // basename into look-alike chips. See buildIntakeDecisionViews.
+        return { type: "intake", decisions: buildIntakeDecisionViews(payload.decisions as IntakeDecision[]) };
       default:
         return { type: "unknown" };
     }

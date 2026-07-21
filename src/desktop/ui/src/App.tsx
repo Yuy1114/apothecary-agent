@@ -817,7 +817,10 @@ function AgentRunBubble({ run, onResolve, onApprove, onCancel, onOpenSource, onO
   );
 }
 
-type ProposalDiffData = { type: string; path?: string; pathChange?: { from: string; to: string }; before?: string; after?: string; note?: string };
+type IntakeDecisionView = { action: "move" | "archive" | "leave"; source: string; target?: string; rationale: string; confidence: number };
+type ProposalDiffData = { type: string; path?: string; pathChange?: { from: string; to: string }; before?: string; after?: string; note?: string; decisions?: IntakeDecisionView[] };
+const INTAKE_ACTION_LABEL: Record<IntakeDecisionView["action"], string> = { move: "迁移", archive: "归档", leave: "保留" };
+const INTAKE_ACTION_BADGE: Record<IntakeDecisionView["action"], string> = { move: "accent", archive: "warning", leave: "" };
 type DiffLine = { type: "add" | "del" | "ctx"; text: string };
 
 // LCS line diff. Bounded: for very large notes the O(n·m) table is skipped in
@@ -852,6 +855,28 @@ function DiffView({ diff, compact }: { diff: ProposalDiffData; compact?: boolean
   const hiddenCount = compact ? changed.length - shown.length : 0;
   return (
     <div className="prop-diff-view">
+      {/* Intake: a structured per-file plan — which file participates, from→to,
+          and why — instead of collapsing every source/target into look-alike
+          chips. Files are only moved here, never rewritten. */}
+      {diff.decisions && diff.decisions.length > 0 && (
+        <div className="intake-plan">
+          {diff.decisions.map((d, index) => (
+            <div className={`intake-row ${d.action}`} key={index}>
+              <span className={`badge ${INTAKE_ACTION_BADGE[d.action]}`.trim()}>{INTAKE_ACTION_LABEL[d.action]}</span>
+              <div className="intake-paths">
+                <div className="route">
+                  <span className="src" title={d.source}>{d.source}</span>
+                  {d.target != null && <><span className="arrow">→</span><span className="dst" title={d.target}>{d.target}</span></>}
+                </div>
+                <div className="why">
+                  {d.rationale}
+                  {d.action === "move" && <span className="tag">仅移动 · 内容不变</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {diff.pathChange && (
         <div className="pathchange">
           <span className="from">{diff.pathChange.from}</span>
@@ -859,7 +884,7 @@ function DiffView({ diff, compact }: { diff: ProposalDiffData; compact?: boolean
           <span className="to">{diff.pathChange.to}</span>
         </div>
       )}
-      {/* pre-line: intake plans list one decision per line. */}
+      {/* pre-line: legacy text notes for non-intake proposal types. */}
       {diff.note && <div className="hint" style={{ lineHeight: 1.6, whiteSpace: "pre-line" }}>{diff.note}</div>}
       {shown.length > 0 && (
         <div className="diff">
@@ -1039,7 +1064,10 @@ function ProposalsView({ refreshKey, pendingCount, notify, refreshDashboard, run
                     </div>
                     <div className="meta"><span>{formatDate(selected.createdAt)}</span><span>·</span><span>{selected.id.slice(0, 24)}…</span></div>
                     {selected.rationale && <div className="hint" style={{ lineHeight: 1.6 }}>{selected.rationale}</div>}
-                    {(selected.targetFiles?.length ?? 0) > 0 && (
+                    {/* Intake renders its participants as a structured from→to
+                        plan below (ProposalDiffBody); the basename chips would
+                        just show look-alike duplicates, so skip them here. */}
+                    {selected.type !== "intake" && (selected.targetFiles?.length ?? 0) > 0 && (
                       <div className="chips">
                         {selected.targetFiles.map((file: string) => (
                           <div className="chip" key={file} title={file}><Icon.file /><span>{lastSegment(file)}</span></div>

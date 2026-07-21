@@ -444,6 +444,20 @@ a:hover { text-decoration: underline; }
 .pathchange .arrow { color: var(--fg-subtle); }
 .pathchange .to { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); padding: 2px 8px; border-radius: var(--radius-sm); }
 
+/* Intake proposal: structured per-file plan (which file, from→to, why). */
+.intake-plan { display: flex; flex-direction: column; gap: 8px; }
+.intake-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-subtle); }
+.intake-row .badge { flex: none; margin-top: 1px; }
+.intake-row.leave { opacity: .82; }
+.intake-paths { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.intake-paths .route { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; }
+.intake-paths .route .src { color: var(--fg-muted); word-break: break-all; }
+.intake-paths .route .arrow { color: var(--fg-subtle); flex: none; }
+.intake-paths .route .dst { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); padding: 1px 7px; border-radius: var(--radius-sm); word-break: break-all; }
+.intake-row.leave .route .src { color: var(--fg); }
+.intake-paths .why { font-size: 12px; color: var(--fg-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.intake-paths .why .tag { font-size: 11px; color: var(--fg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 6px; }
+
 /* ─── Markdown ───────────────────────────────────────────────────────── */
 .md { line-height: 1.7; }
 .md > :first-child { margin-top: 0; }
