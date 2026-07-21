@@ -13,6 +13,8 @@ import { snapshotExternalChanges } from "../../application/versioning/vaultSnaps
 import { proposeIntakePlan } from "../../application/intake/proposeIntake.js";
 import { manualSync, type ManualSyncReport } from "../../application/sync/manualSync.js";
 import { surveyInbox } from "../../vault/inboxSurvey.js";
+import type { AutoIntakeStatus } from "../../domain/autoIntakeStatus.js";
+import { nowIso } from "../../utils/time.js";
 
 export type WatchClassification = "unchanged" | "created" | "modified" | "deleted";
 
@@ -57,6 +59,21 @@ let semanticSyncPending = false;
 let autoIntakeTimer: ReturnType<typeof setTimeout> | null = null;
 let autoIntakeRunning = false;
 let autoIntakePending = false;
+
+// The observable phase of the auto-intake pass, surfaced to the desktop so the
+// user can see what the agent is doing during the trigger→proposal window. This
+// module is the single source of truth; the desktop reads it via an injected
+// dep (the application layer must not import mastra).
+let autoIntakeStatus: AutoIntakeStatus = { phase: "idle", since: nowIso() };
+
+function setAutoIntakePhase(patch: Partial<AutoIntakeStatus> & Pick<AutoIntakeStatus, "phase">): void {
+  autoIntakeStatus = { ...autoIntakeStatus, ...patch, since: nowIso() };
+}
+
+/** Live auto-intake phase for the desktop sidebar/settings status. */
+export function getAutoIntakeStatus(): AutoIntakeStatus {
+  return autoIntakeStatus;
+}
 let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
 let snapshotPaths = new Set<string>();
 let snapshotBatchStart: string | null = null;
@@ -164,7 +181,7 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
   // A new drop into `_inbox` (and only there) is a candidate for auto-filing: if
   // the user opted in, plan it in the background once the burst settles and put
   // the plan up for approval.
-  if (shouldScheduleAutoIntake(relativePath, autoIntakeEnabled())) scheduleAutoIntake(mastra);
+  if (shouldScheduleAutoIntake(relativePath, autoIntakeEnabled())) scheduleAutoIntake(mastra, "drop");
 }
 
 /**
@@ -179,29 +196,52 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
  * Single-flight with a trailing re-run: drops that arrive mid-pass schedule one
  * more pass when this one settles, so nothing is stranded in `_inbox`.
  */
-async function runAutoIntake(mastra: Mastra): Promise<void> {
-  if (autoIntakeRunning) {
-    autoIntakePending = true;
-    return;
-  }
-  autoIntakeRunning = true;
-  try {
-    // Planning only — the organizer never moves files; it records one decision
-    // per entry into the durable intake plan.
+type AutoIntakeDeps = {
+  /** Run the organizer headlessly to (re)build the durable intake plan. */
+  plan: (mastra: Mastra) => Promise<void>;
+  /** Wrap the current plan into an approvable proposal (the consent gate). */
+  propose: () => Promise<{ proposalId?: string; actionable: number; superseded: number }>;
+};
+
+const defaultAutoIntakeDeps: AutoIntakeDeps = {
+  // Planning only — the organizer never moves files; it records one decision
+  // per entry into the durable intake plan.
+  plan: async (mastra) => {
     await mastra
       .getAgent("organizer")
       .generate("勘查 _inbox 并为每个条目产出迁移决策（recordDecision）。低置信度的留在 _inbox。", {
         maxSteps: 20,
       });
+  },
+  propose: proposeIntakePlan,
+};
+
+export async function runAutoIntake(
+  mastra: Mastra,
+  deps: AutoIntakeDeps = defaultAutoIntakeDeps,
+): Promise<void> {
+  if (autoIntakeRunning) {
+    autoIntakePending = true;
+    return;
+  }
+  autoIntakeRunning = true;
+  setAutoIntakePhase({ phase: "planning" });
+  try {
+    await deps.plan(mastra);
     // Consent gate: wrap the plan into an approvable proposal (superseding any
     // still-pending one) instead of executing it.
-    const result = await proposeIntakePlan();
+    const result = await deps.propose();
     if (result.proposalId) {
+      setAutoIntakePhase({ phase: "proposed", lastProposalId: result.proposalId, actionable: result.actionable });
       console.log(
         `Vault watcher: auto-intake plan proposed (actionable=${result.actionable}, superseded=${result.superseded}, proposal=${result.proposalId})`,
       );
+    } else {
+      // Nothing actionable in `_inbox` — back to idle rather than a stale phase.
+      setAutoIntakePhase({ phase: "idle" });
     }
   } catch (error) {
+    setAutoIntakePhase({ phase: "failed", lastError: error instanceof Error ? error.message : String(error) });
     console.warn("Vault watcher: auto-intake failed:", error);
   } finally {
     autoIntakeRunning = false;
@@ -212,7 +252,13 @@ async function runAutoIntake(mastra: Mastra): Promise<void> {
   }
 }
 
-function scheduleAutoIntake(mastra: Mastra): void {
+function scheduleAutoIntake(
+  mastra: Mastra,
+  trigger: AutoIntakeStatus["trigger"] = autoIntakeStatus.trigger,
+): void {
+  // Reflect "a pass is queued" — unless one is already planning, in which case
+  // this is a trailing re-run and the user should keep seeing "planning".
+  if (!autoIntakeRunning) setAutoIntakePhase({ phase: "scheduled", trigger });
   if (autoIntakeTimer) clearTimeout(autoIntakeTimer);
   autoIntakeTimer = setTimeout(() => {
     autoIntakeTimer = null;
@@ -282,7 +328,7 @@ type CatchUpDeps = {
 const defaultCatchUpDeps: CatchUpDeps = {
   sync: manualSync,
   survey: surveyInbox,
-  schedule: scheduleAutoIntake,
+  schedule: (mastra) => scheduleAutoIntake(mastra, "startup"),
 };
 
 /**

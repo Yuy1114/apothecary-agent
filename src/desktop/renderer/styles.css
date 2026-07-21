@@ -256,6 +256,14 @@ a:hover { text-decoration: underline; }
 .sync-status .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--success); animation: pulse-dot 2.4s ease-in-out infinite; }
 .sync-status .dot.off { background: var(--fg-subtle); animation: none; }
 .sync-status .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Auto-intake badge pulses while a background pass is scheduled/planning. */
+.badge.accent.working { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+/* Live auto-intake phase line inside the settings card. */
+.auto-intake-status { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--fg-muted); }
+.auto-intake-status .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--fg-subtle); }
+.auto-intake-status .dot.working { background: var(--accent-500); animation: pulse-dot 1.6s ease-in-out infinite; }
+.auto-intake-status .muted { color: var(--fg-subtle); }
 
 /* ─── Main column ────────────────────────────────────────────────────── */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }

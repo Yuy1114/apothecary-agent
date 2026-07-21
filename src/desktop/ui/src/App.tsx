@@ -23,6 +23,36 @@ type DesktopThread = { id: string; title: string; createdAt: string; updatedAt: 
 
 const api = window.apothecary;
 
+// Live auto-intake phase → sidebar badge / settings status copy. `working` marks
+// the two in-flight phases so the badge can pulse. Mirrors the AutoIntakeStatus
+// state machine in the backend (domain/autoIntakeStatus.ts).
+const AUTO_INTAKE_PHASE_TEXT: Record<string, string> = {
+  scheduled: "排队中…",
+  planning: "起草中…",
+  proposed: "已生成提案",
+  failed: "上次失败",
+};
+function autoIntakeBadge(status: any): { text: string; working: boolean; title: string } {
+  const phase = status?.phase as string | undefined;
+  const suffix = phase ? AUTO_INTAKE_PHASE_TEXT[phase] : undefined;
+  const working = phase === "scheduled" || phase === "planning";
+  const detail =
+    phase === "planning"
+      ? "Agent 正在勘查 _inbox 并起草归位计划。"
+      : phase === "scheduled"
+        ? "检测到 _inbox 有新内容，稍后开始勘查。"
+        : phase === "proposed"
+          ? "已生成归位提案，待你在「提案」中采纳（文件尚未移动）。"
+          : phase === "failed"
+            ? `上次自动整理失败${status?.lastError ? `：${status.lastError}` : ""}。`
+            : "新落入 _inbox 的文件会在后台自动起草归位提案（不会直接移动，需你采纳）。";
+  return {
+    text: suffix ? `自动整理 · ${suffix}` : "自动整理:开",
+    working,
+    title: `${detail} 可在设置中关闭。`,
+  };
+}
+
 const titles: Record<View, [string, string]> = {
   workspace: ["工作区 Workspace", "对话 · 运行动态"],
   proposals: ["提案 Proposals", "集中审批 · Agent 发起的所有变更"],
@@ -239,13 +269,17 @@ export function App() {
           <nav className="nav">
             <NavItem id="settings" icon={<Icon.settings />} label="设置 Settings" active={view} onClick={setView} />
           </nav>
-          {/* Standing reminder while unattended inbox planning is armed — the
-              user must always be able to see that background drafting is on. */}
-          {dashboard?.autoIntakeActive && (
-            <div className="sync-status" title="新落入 _inbox 的文件会在后台自动起草归位提案（不会直接移动，需你采纳）。可在设置中关闭。">
-              <span className="badge accent">自动整理:开</span>
-            </div>
-          )}
+          {/* Standing reminder while unattended inbox planning is armed, now
+              reflecting the live phase so the trigger→proposal window isn't a
+              black box: 排队中 / 起草中 / 已生成提案 / 上次失败. */}
+          {dashboard?.autoIntakeActive && (() => {
+            const badge = autoIntakeBadge(dashboard?.autoIntake);
+            return (
+              <div className="sync-status" title={badge.title}>
+                <span className={`badge accent${badge.working ? " working" : ""}`}>{badge.text}</span>
+              </div>
+            );
+          })()}
           <div className="sync-status">
             <span className={`dot ${dashboard ? "" : "off"}`} />
             <span className="t">{dashboard ? "监听中 · 已连接" : "连接中…"}</span>
@@ -273,7 +307,7 @@ export function App() {
         {view === "vault" && <VaultView scope={vaultScope} refreshKey={refreshKey} onChat={openChat} notify={notify} target={vaultTarget} qaThreadId={activeThreadId} onQuickAskSaved={onQuickAskSaved} />}
         {view === "runs" && <ReviewView refreshKey={refreshKey} onChat={openChat} notify={notify} />}
         {view === "knowledge" && <KnowledgeView refreshKey={refreshKey} onChat={openChat} />}
-        {view === "settings" && <SettingsView refreshKey={refreshKey} notify={notify} />}
+        {view === "settings" && <SettingsView refreshKey={refreshKey} notify={notify} dashboard={dashboard} />}
       </main>
 
       {diffProposal && <DiffModal proposal={diffProposal} onClose={() => setDiffProposal(null)} />}
@@ -1873,7 +1907,7 @@ function DiagBadge({ diagnostic }: { diagnostic: any }) {
 
 type SettingsForm = { chatModel: string; deepseekBaseUrl: string; embeddingBaseUrl: string; embeddingModel: string; embeddingTimeoutMs: string; watch: boolean; autoIntakePlanning: boolean };
 
-function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: string) => void }) {
+function SettingsView({ refreshKey, notify, dashboard }: { refreshKey: number; notify: (t: string) => void; dashboard: any }) {
   const [diag, setDiag] = useState<any>(null);
   const [settings, setSettings] = useState<DesktopSettingsView | null>(null);
   const [form, setForm] = useState<SettingsForm | null>(null);
@@ -2003,6 +2037,20 @@ function SettingsView({ refreshKey, notify }: { refreshKey: number; notify: (t: 
             <div className="grow"><div className="rt">自动整理 _inbox（默认关闭）</div><div className="rd">新文件落入 _inbox 后，后台自动勘查并起草归位计划，生成提案待你在「工作区」采纳后才会移动文件；低置信度的留在原处。保存后立即生效，开启期间侧边栏会常驻提示。</div></div>
             <button className={`switch ${form.autoIntakePlanning ? "on" : ""}`} onClick={() => set("autoIntakePlanning", !form.autoIntakePlanning)}><i /></button>
           </div>
+          {dashboard?.autoIntakeActive && (() => {
+            const badge = autoIntakeBadge(dashboard?.autoIntake);
+            const phase = dashboard?.autoIntake?.phase as string | undefined;
+            const label = phase ? (AUTO_INTAKE_PHASE_TEXT[phase] ?? "待命") : "待命";
+            return (
+              <div className="auto-intake-status" title={badge.title}>
+                <span className={`dot ${badge.working ? "working" : ""}`} />
+                <span className="t">当前状态：{label}</span>
+                {dashboard?.autoIntake?.phase === "proposed" && (
+                  <span className="muted">· 前往「提案」采纳</span>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="actions">

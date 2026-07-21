@@ -240,6 +240,9 @@ async function createService(): Promise<DesktopService> {
   const { mastraDigestWriter } = await import("../mastra/adapters/mastraDigestWriter.js");
   const { polishReview } = await import("../application/journal/polishReview.js");
   const { quickAsk: quickAskAgent } = await import("../mastra/agents/transformers/quick-ask.js");
+  // The auto-intake state machine lives in the watcher module (already in the
+  // runtime graph); expose its getter so dashboard() can surface the live phase.
+  const { getAutoIntakeStatus } = await import("../mastra/workflows/sync-watcher.js");
   const runtimeRoot = app.isPackaged ? app.getPath("userData") : projectRoot;
   await fs.mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
   const desktopRuntime = createDesktopRuntime(runtimeRoot);
@@ -412,6 +415,7 @@ async function createService(): Promise<DesktopService> {
         });
         return { threadId: id };
       },
+      autoIntakeStatus: getAutoIntakeStatus,
     },
   });
   await service.initialize();

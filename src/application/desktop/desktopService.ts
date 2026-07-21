@@ -27,6 +27,7 @@ import type { AgentRunEvent } from "./runEvents.js";
 import { buildQuickAskPrompt, type QuickAskExcerpt, type QuickAskTurn } from "./quickAskPrompt.js";
 import { searchIndex, type SearchHit } from "../ports/searchIndex.js";
 import type { PolishMode } from "../../domain/notePolish.js";
+import type { AutoIntakeStatus } from "../../domain/autoIntakeStatus.js";
 import { fileTargetPath, type IntakeDecision } from "../../domain/intakePlan.js";
 import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
 import { digestRelPath, periodKeyFor, periodRange, periodTitle, shiftPeriod, type Cadence } from "../../domain/journal.js";
@@ -124,6 +125,10 @@ export type DesktopServiceDeps = {
     title: string | undefined,
     messages: Array<{ role: "user" | "assistant"; content: string }>,
   ) => Promise<{ threadId: string }>;
+  // Live auto-intake phase for the sidebar/settings status, bound to the vault
+  // watcher's state machine by the composition root (this service must not import
+  // mastra). Absent → the desktop treats auto-intake as idle.
+  autoIntakeStatus?: () => AutoIntakeStatus;
 };
 
 export class DesktopService {
@@ -303,6 +308,9 @@ export class DesktopService {
       // Live env, same source the watcher checks — the sidebar shows a standing
       // reminder whenever unattended inbox planning is armed.
       autoIntakeActive: process.env.APOTHECARY_AUTO_INTAKE === "1",
+      // Live phase of the background pass (scheduled/planning/proposed/…) so the
+      // user can perceive the trigger→proposal window rather than a black box.
+      autoIntake: this.deps.autoIntakeStatus?.(),
     };
   }
 

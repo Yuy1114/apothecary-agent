@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mastra } from "@mastra/core/mastra";
 import {
   classifyWatchEvent,
+  getAutoIntakeStatus,
+  runAutoIntake,
   runStartupCatchUp,
   shouldCatchUpAutoIntake,
   shouldScheduleAutoIntake,
@@ -124,5 +126,40 @@ describe("runStartupCatchUp", () => {
     });
     await expect(runStartupCatchUp(mastra, d)).resolves.toBeUndefined();
     expect(d.schedule).toHaveBeenCalledOnce();
+  });
+});
+
+describe("runAutoIntake state machine", () => {
+  const mastra = {} as Mastra;
+
+  it("planning → proposed when a plan produces a proposal", async () => {
+    await runAutoIntake(mastra, {
+      plan: vi.fn(async () => {}),
+      propose: vi.fn(async () => ({ proposalId: "prop-1", actionable: 3, superseded: 0 })),
+    });
+    const status = getAutoIntakeStatus();
+    expect(status.phase).toBe("proposed");
+    expect(status.lastProposalId).toBe("prop-1");
+    expect(status.actionable).toBe(3);
+  });
+
+  it("planning → idle when the plan has nothing actionable", async () => {
+    await runAutoIntake(mastra, {
+      plan: vi.fn(async () => {}),
+      propose: vi.fn(async () => ({ actionable: 0, superseded: 0 })),
+    });
+    expect(getAutoIntakeStatus().phase).toBe("idle");
+  });
+
+  it("planning → failed, capturing the error message, when planning throws", async () => {
+    await runAutoIntake(mastra, {
+      plan: vi.fn(async () => {
+        throw new Error("organizer down");
+      }),
+      propose: vi.fn(async () => ({ actionable: 0, superseded: 0 })),
+    });
+    const status = getAutoIntakeStatus();
+    expect(status.phase).toBe("failed");
+    expect(status.lastError).toContain("organizer down");
   });
 });
