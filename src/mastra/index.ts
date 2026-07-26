@@ -31,6 +31,7 @@ import { manualSyncWorkflow } from "./workflows/manual-sync.js";
 import { detectDuplicatesWorkflow } from "./workflows/detect-duplicates.js";
 import { refreshProfileWorkflow } from "./workflows/refresh-profile.js";
 import { polishNoteWorkflow } from "./workflows/polish-note.js";
+import { dailyPlanWorkflow } from "./workflows/daily-plan.js";
 import { workspace } from "./workspaces.js";
 import { apothecaryMemory } from "./memory.js";
 import { apothecaryDb } from "../config/apothecaryDb.js";
@@ -96,6 +97,7 @@ export const mastra = new Mastra({
     detectDuplicatesWorkflow,
     refreshProfileWorkflow,
     polishNoteWorkflow,
+    dailyPlanWorkflow,
   },
   workspace,
   storage: new MastraCompositeStore({
