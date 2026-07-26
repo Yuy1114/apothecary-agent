@@ -2,6 +2,7 @@ import { constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
 import { initChangeLog, listPendingChanges, listRecentChanges, resolveChanges } from "../../vault/changeLog.js";
 import { initOperationLedger, listOperations, recordOperation } from "../../vault/operationLedger.js";
+import { initEnglishCaptureLog } from "../../vault/englishCaptureLog.js";
 import { commitFileDiff, fileAtCommit } from "../../vault/versioning.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
@@ -149,6 +150,7 @@ export class DesktopService {
     await Promise.all([
       initChangeLog(apothecaryDb.changeLog()),
       initOperationLedger(apothecaryDb.operations()),
+      initEnglishCaptureLog(apothecaryDb.englishCaptureLog()),
     ]);
   }
 

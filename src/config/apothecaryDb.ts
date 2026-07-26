@@ -29,6 +29,8 @@ export const apothecaryDb = {
   desktopStore: () => dbUrl("memory", "desktop.db"),
   /** Pending-change ledger (agent work queue). */
   changeLog: () => dbUrl("queue", "change-log.db"),
+  /** Reading-mode English captures waiting to be settled against Anki. */
+  englishCaptureLog: () => dbUrl("queue", "english-capture.db"),
   /** Operation audit ledger (durable trace of what the agent did). */
   operations: () => dbUrl("operations.db"),
 };

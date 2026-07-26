@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, safeStorage, shell } from "electron";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,7 +27,8 @@ import {
   type NavigationTarget,
 } from "./contracts.js";
 import { initFileLogging } from "./logging.js";
-import { installScheduleTray } from "./tray.js";
+import { installScheduleTray, type ScheduleTray } from "./tray.js";
+import { startCaptureWatcher } from "./englishCapture.js";
 import { startScheduleTicker, type ReviewReminder } from "./scheduler.js";
 import { togglePlanItem } from "../application/journal/journalStore.js";
 import { formatLocalDate, type PlanItem } from "../domain/journal.js";
@@ -559,12 +560,46 @@ app
       notification.on("click", () => void navigateTo({ view: "journal", cadence: reminder.cadence, key: reminder.key }));
       notification.show();
     };
+    // English reading mode. Loaded here rather than in createService for the
+    // same reason as the digest imports below: sequential, post-runtime.
+    const { recordCapture } = await import("../vault/englishCaptureLog.js");
+    const { drainCaptures } = await import("../application/english/ingestCapture.js");
+    const { ankiConfig } = await import("../application/english/ankiConnect.js");
+    // The tray owns the switch and the watcher owns the state, so the redraw
+    // callback is late-bound — the tray does not exist yet.
+    let trayHandle: ScheduleTray | null = null;
+    const captureWatcher = startCaptureWatcher({
+      readClipboard: () => clipboard.readText(),
+      onCapture: async (capture) => {
+        await recordCapture(capture);
+      },
+      onSessionChanged: () => trayHandle?.redraw(),
+    });
+    const drainToAnki = async (): Promise<void> => {
+      const report = await drainCaptures({ config: ankiConfig() });
+      logger.info(
+        "english",
+        `入 Anki：激活 ${report.activated} · 新建 ${report.created} · 跳过 ${report.skipped} · 等 Anki ${report.deferred}`,
+      );
+      trayHandle?.redraw();
+    };
+
     const tray = installScheduleTray({
       vaultPath,
       showConsole,
       openJournal: openJournalToday,
       iconPath: path.join(app.getAppPath(), "build", "tray", "apothecaryTemplate.png"),
+      reading: {
+        session: captureWatcher.session,
+        toggle: captureWatcher.toggle,
+        drain: drainToAnki,
+      },
     });
+    trayHandle = tray;
+    // Catch up on words queued while Anki was closed. A no-op when it still is.
+    void drainToAnki().catch((error) =>
+      logger.warn("english", `启动补推失败: ${(error as Error).message}`),
+    );
     // Digest generation shares the module cache with createService's imports;
     // loading here (sequentially, post-runtime) avoids the concurrent-ESM
     // deadlock noted in createService.
@@ -583,6 +618,7 @@ app
     void ticker.tick();
     app.on("before-quit", () => {
       ticker.stop();
+      captureWatcher.stop();
       tray.destroy();
     });
     if (testHooks) {
