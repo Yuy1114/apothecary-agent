@@ -22,6 +22,9 @@ const exists = async (rel: string) =>
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-archive-test-"));
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  // Archiving rewrites README indexes, which commit a self-write into the sync
+  // baseline under apothecaryHome() — keep it inside the fixture.
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ archiveVaultFileCore } = await import("./archiveVaultFile.js"));
 });
 

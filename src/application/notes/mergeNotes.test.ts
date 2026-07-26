@@ -23,6 +23,9 @@ const exists = async (rel: string) =>
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-merge-test-"));
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  // Merging rewrites README indexes, which commit a self-write into the sync
+  // baseline under apothecaryHome() — keep it inside the fixture.
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ mergeNotesCore } = await import("./mergeNotes.js"));
 });
 

@@ -17,6 +17,9 @@ const exists = (rel: string) =>
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-readme-test-"));
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
+  // updateReadmesForMove calls commitSelfWrite, which writes the sync baseline
+  // under apothecaryHome() — keep that inside the fixture, not the real home.
+  vi.stubEnv("APOTHECARY_HOME", vault);
   ({ updateReadmesForMove } = await import("./updateReadmes.js"));
 });
 
