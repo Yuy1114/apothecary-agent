@@ -1,8 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { searchIndex } from "../ports/searchIndex.js";
-import { loadStructure, classifyWithStructure } from "../../vault/structureStore.js";
-import type { VaultStructure } from "../../domain/vaultStructure.js";
+import { INBOX_DIR } from "../../domain/vaultPolicy.js";
 import { addReadmeEntry } from "../../vault/readmeIndex.js";
 import { safeVaultPath } from "../../safety/pathSafety.js";
 import { recordOperation, type OperationType } from "../../vault/operationLedger.js";
@@ -16,42 +15,54 @@ export function slugify(text: string): string {
 }
 
 /**
- * Decide the target directory + label for new content: an exact/keyword topic
- * hint wins, otherwise classify by content, otherwise fall back to inbox. Pure.
+ * Sanitize a caller-supplied directory hint into a vault-relative POSIX
+ * directory, or null when it cannot be one. Pure.
+ *
+ * The hint comes from an LLM (proposeChange's `topic` field), so it is treated
+ * as untrusted: separators are normalized, a trailing slash is tolerated, and
+ * anything that would escape the vault or name a file is rejected outright.
+ * Whether the directory actually *exists* is not decided here — see
+ * `writeVaultNote`, which refuses to invent one.
  */
-export function resolveIngestDir(
-  structure: VaultStructure,
-  input: { topic?: string; content: string },
-): { dir: string; label: string } {
-  let dir = "inbox";
-  let label = "未分类";
-
-  if (input.topic) {
-    if (structure.directories[input.topic]) {
-      dir = input.topic;
-      label = structure.directories[input.topic].description;
-    } else {
-      for (const [d, def] of Object.entries(structure.directories)) {
-        if (!def.keywords) continue;
-        if (def.keywords.some((kw) => input.topic!.toLowerCase().includes(kw))) {
-          dir = d;
-          label = def.description;
-          break;
-        }
-      }
-    }
-  }
-
-  if (dir === "inbox") {
-    ({ dir, label } = classifyWithStructure(input.content, structure));
-  }
-
-  return { dir, label };
+export function normalizeTopicDir(topic: string | undefined): string | null {
+  if (!topic) return null;
+  const posix = topic.replaceAll("\\", "/").trim();
+  const dir = posix.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!dir) return null;
+  if (dir.split("/").some((segment) => segment === "." || segment === "..")) return null;
+  if (dir.endsWith(".md")) return null;
+  return dir;
 }
 
 /**
- * Shared note-writing core: classify → write frontmatter'd file → update the
- * directory README → reindex → audit. Used by ingestVault and captureInsight.
+ * Human-readable label for a target directory, used in the note's frontmatter
+ * and its README entry. Mirrors `updateReadmeForCreatedNote`'s fallback: the
+ * last path segment, since the skeleton's directory names are already the
+ * meaningful label. Pure.
+ */
+export function labelForDir(dir: string): string {
+  if (dir === INBOX_DIR) return "未分类";
+  return dir.split("/").filter(Boolean).at(-1) ?? dir;
+}
+
+/**
+ * Resolve where a new note goes: an existing directory named by the hint,
+ * otherwise the inbox. Never invents a directory — a hint naming somewhere that
+ * is not on disk (a stale skeleton name, an LLM guess) lands in the inbox for
+ * filing rather than growing a parallel tree beside the real one.
+ */
+async function resolveTargetDir(topic: string | undefined): Promise<string> {
+  const hinted = normalizeTopicDir(topic);
+  if (!hinted) return INBOX_DIR;
+  const abs = safeVaultPath(VAULT_PATH, hinted);
+  if (!abs) return INBOX_DIR;
+  const stats = await fs.stat(abs).catch(() => null);
+  return stats?.isDirectory() ? hinted : INBOX_DIR;
+}
+
+/**
+ * Shared note-writing core: resolve target → write frontmatter'd file → update
+ * the directory README → reindex → audit. Used by ingestVault and captureInsight.
  */
 export async function writeVaultNote(params: {
   content: string;
@@ -61,20 +72,23 @@ export async function writeVaultNote(params: {
   source: string;
   operationType: OperationType;
 }): Promise<{ filePath: string; topic: string; title: string; readmeUpdated: boolean }> {
-  const structure = await loadStructure();
-  const { dir, label } = resolveIngestDir(structure, { topic: params.topic, content: params.content });
+  const dir = await resolveTargetDir(params.topic);
+  const label = labelForDir(dir);
 
   const headingMatch = params.content.match(/^#\s+(.+)/m);
   const title =
     params.title ?? headingMatch?.[1] ?? params.content.split("\n")[0]?.slice(0, 60) ?? "untitled";
-  // The target dir comes from the structure (or inbox) and the filename is
-  // slugified (no separators), so this is safe by construction — guard anyway so
-  // no note-writing path can ever land outside the vault.
+  // The target dir is either an existing directory or the inbox, and the
+  // filename is slugified (no separators), so this is safe by construction —
+  // guard anyway so no note-writing path can ever land outside the vault.
   const fileName = `${slugify(title)}.md`;
   const filePath = safeVaultPath(VAULT_PATH, path.join(dir, fileName));
   if (!filePath) throw new Error(`Refusing to write note outside the vault: ${dir}/${fileName}`);
   const dirPath = path.dirname(filePath);
-  await fs.mkdir(dirPath, { recursive: true });
+  // The inbox is the one directory this writer may create; every other target
+  // was proven to exist by resolveTargetDir. Creating directories freely here is
+  // what let a stale "inbox" fallback materialize a whole parallel tree.
+  if (dir === INBOX_DIR) await fs.mkdir(dirPath, { recursive: true });
 
   const relativePath = path.relative(VAULT_PATH, filePath);
   const readmePath = path.join(dirPath, "README.md");

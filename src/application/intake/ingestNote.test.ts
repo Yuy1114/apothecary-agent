@@ -1,40 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { resolveIngestDir } from "./ingestNote.js";
-import type { VaultStructure } from "../../domain/vaultStructure.js";
+import { labelForDir, normalizeTopicDir } from "./ingestNote.js";
+import { INBOX_DIR } from "../../domain/vaultPolicy.js";
 
-const structure: VaultStructure = {
-  directories: {
-    "inbox/": { description: "临时未归类，待整理" },
-    "notes/programming/Redis/": { description: "Redis", keywords: ["redis", "缓存"] },
-    "reflections/": { description: "反思、复盘、感想", keywords: ["感想", "反思"] },
-  },
-  aliases: {},
-};
-
-describe("resolveIngestDir", () => {
-  it("uses an exact topic key when it matches a directory", () => {
-    expect(resolveIngestDir(structure, { topic: "notes/programming/Redis/", content: "x" })).toEqual({
-      dir: "notes/programming/Redis/",
-      label: "Redis",
-    });
+describe("normalizeTopicDir", () => {
+  it("accepts a plain vault-relative directory", () => {
+    expect(normalizeTopicDir("notes")).toBe("notes");
+    expect(normalizeTopicDir("areas/career")).toBe("areas/career");
   });
 
-  it("matches a directory by keyword contained in the topic hint", () => {
-    expect(resolveIngestDir(structure, { topic: "redis 持久化", content: "x" })).toEqual({
-      dir: "notes/programming/Redis/",
-      label: "Redis",
-    });
+  it("tolerates trailing slashes, leading slashes and backslashes", () => {
+    expect(normalizeTopicDir("notes/")).toBe("notes");
+    expect(normalizeTopicDir("/notes/")).toBe("notes");
+    expect(normalizeTopicDir("areas\\career")).toBe("areas/career");
   });
 
-  it("classifies by content keywords when no topic hint resolves", () => {
-    const r = resolveIngestDir(structure, { topic: undefined, content: "今天做了一些反思和复盘" });
-    expect(r.dir).toBe("reflections/");
+  it("rejects hints that are not usable directories", () => {
+    expect(normalizeTopicDir(undefined)).toBeNull();
+    expect(normalizeTopicDir("")).toBeNull();
+    expect(normalizeTopicDir("   ")).toBeNull();
+    // A file, not a directory.
+    expect(normalizeTopicDir("notes/redis.md")).toBeNull();
+    // Traversal — the hint comes from an LLM and is untrusted.
+    expect(normalizeTopicDir("../outside")).toBeNull();
+    expect(normalizeTopicDir("notes/../../etc")).toBeNull();
+    expect(normalizeTopicDir("./notes")).toBeNull();
   });
 
-  it("falls back to inbox when nothing matches", () => {
-    expect(resolveIngestDir(structure, { topic: undefined, content: "无关内容 xyz" })).toEqual({
-      dir: "inbox",
-      label: "未分类",
-    });
+  it("passes through a nonexistent directory unchanged — existence is checked later", () => {
+    // normalizeTopicDir only sanitizes. `reflections/` no longer exists in the
+    // skeleton, and resolveTargetDir is what redirects it to the inbox.
+    expect(normalizeTopicDir("reflections/")).toBe("reflections");
+  });
+});
+
+describe("labelForDir", () => {
+  it("labels the inbox as unfiled", () => {
+    expect(labelForDir(INBOX_DIR)).toBe("未分类");
+  });
+
+  it("uses the last path segment for everything else", () => {
+    expect(labelForDir("notes")).toBe("notes");
+    expect(labelForDir("areas/career")).toBe("career");
   });
 });

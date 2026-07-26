@@ -13,6 +13,11 @@ export function classifyLayer(relativePath: string): VaultLayer {
 
   if (!first) return "unknown";
   if (first === ".apothecary" || first === ".agent") return "agent";
+  // `_inbox` is the canonical name (INBOX_DIR). The looser `includes` is
+  // backwards compatibility only: a stale fallback in the note writer created a
+  // plain `inbox/`, and the change ledger plus the vector index still hold
+  // history under that path. Do not read this as two valid spellings — new
+  // writes must use INBOX_DIR.
   if (first === "_inbox" || first.includes("inbox")) return "inbox";
   if (first === "journal") return "journal";
   if (first === "notes") return "notes";

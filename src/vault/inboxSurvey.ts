@@ -9,8 +9,8 @@ import {
   type InboxEntry,
   type InboxSurvey,
 } from "../domain/inboxSurvey.js";
+import { INBOX_DIR as INBOX } from "../domain/vaultPolicy.js";
 
-const INBOX = "_inbox";
 const DIR_WALK_CAP = 2000;
 const SAMPLE_SIZE = 8;
 const JUNK_SAMPLE_SIZE = 6;

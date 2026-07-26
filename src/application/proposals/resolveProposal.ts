@@ -6,7 +6,6 @@ import { archiveVaultFileCore } from "../notes/archiveVaultFile.js";
 import { mergeNotesCore } from "../notes/mergeNotes.js";
 import { writeVaultNote } from "../intake/ingestNote.js";
 import { executeIntake } from "../intake/executeIntake.js";
-import { updateDirectoryKeywords } from "../../vault/structureStore.js";
 import { recordOperation } from "../../vault/operationLedger.js";
 import { resolvePendingByPaths } from "../../vault/changeLog.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
@@ -98,16 +97,6 @@ async function executeProposal(
         operationType: "capture",
       });
       return { ok: true, affected: [captured.filePath] };
-    }
-    case "structure": {
-      // updateDirectoryKeywords validates the directory exists (throws otherwise)
-      // and records a `structure` op.
-      await updateDirectoryKeywords({
-        directory: proposal.payload.directory,
-        add: proposal.payload.add,
-        remove: proposal.payload.remove,
-      });
-      return { ok: true, affected: [] };
     }
     case "view_promotion": {
       const { sourceViewPath, targetPath, content } = proposal.payload;

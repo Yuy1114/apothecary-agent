@@ -36,9 +36,7 @@ import {
 import { addPlanItem, instantiatePeriod, readPeriod, togglePlanItem, type PlanTarget } from "../journal/journalStore.js";
 import { digestRelPath, periodKeyFor, periodRange, periodTitle, shiftPeriod, type Cadence } from "../../domain/journal.js";
 
-// The frozen vault skeleton names the intake folder `_inbox` (see
-// classifyLayer / inboxSurvey). The desktop service scopes and guards on it.
-const INBOX_DIR = "_inbox";
+import { INBOX_DIR } from "../../domain/vaultPolicy.js";
 
 // Meta files that describe a folder rather than being triageable content:
 // `README.md` directory indexes and `_inbox/ABOUT.md` entry notes (see the
@@ -484,17 +482,13 @@ export class DesktopService {
       case "edit":
         return { type: "edit", path: payload.filePath, before: await readSafe(payload.filePath), after: payload.suggestedContent };
       case "capture":
-        return { type: "capture", after: payload.content, note: payload.topic ? `主题提示：${payload.topic}` : "归位目标在应用时分类" };
+        return { type: "capture", after: payload.content, note: payload.topic ? `归位目标：${payload.topic}` : `未指定目标，落 ${INBOX_DIR}/` };
       case "merge":
         return { type: "merge", pathChange: { from: payload.sourcePath, to: payload.canonicalPath }, before: await readSafe(payload.canonicalPath), after: payload.canonicalContent, note: "合并后源笔记归档" };
       case "view_promotion":
         return { type: "view_promotion", pathChange: { from: payload.sourceViewPath, to: payload.targetPath }, after: payload.content };
       case "canonical_note":
         return { type: "canonical_note", path: payload.canonicalPath, before: await readSafe(payload.canonicalPath), after: payload.content, note: payload.supersedes?.length ? `将取代：${payload.supersedes.join("、")}` : undefined };
-      case "structure": {
-        const parts = [payload.add?.length ? `新增关键词：${payload.add.join("、")}` : "", payload.remove?.length ? `移除关键词：${payload.remove.join("、")}` : ""].filter(Boolean);
-        return { type: "structure", path: payload.directory, note: parts.join("；") || "调整目录分类关键词" };
-      }
       case "intake":
         // Structured per-file plan (which file, from→to, why) so the renderer can
         // show a clear participant list instead of collapsing every source/target

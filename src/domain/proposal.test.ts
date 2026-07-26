@@ -38,7 +38,6 @@ describe("deriveTargetFiles", () => {
       "reflections/",
     ]);
     expect(deriveTargetFiles({ type: "capture", payload: { content: "x" } })).toEqual([]);
-    expect(deriveTargetFiles({ type: "structure", payload: { directory: "notes/db/" } })).toEqual(["notes/db/"]);
     expect(
       deriveTargetFiles({
         type: "view_promotion",

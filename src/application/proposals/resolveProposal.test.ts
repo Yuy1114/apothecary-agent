@@ -36,11 +36,6 @@ beforeAll(async () => {
   // and production's apothecaryHome() resolve the same artifact dir.
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
-  await writeFile(
-    path.join(vault, "structure.yaml"),
-    "directories:\n  reflections/:\n    description: 反思\n    keywords:\n      - 反思\n  notes/:\n    description: 笔记\naliases: {}\n",
-    "utf8",
-  );
   ({ resolveProposalById } = await import("./resolveProposal.js"));
 });
 
@@ -78,14 +73,14 @@ describe("resolveProposalById", () => {
   });
 
   it("approving a move proposal relocates the file", async () => {
-    await mkdir(abs("inbox"), { recursive: true });
-    await writeFile(abs("inbox/x.md"), "x", "utf8");
-    const p = await propose("move", { from: "inbox/x.md", to: "notes/x.md" });
+    await mkdir(abs("_inbox"), { recursive: true });
+    await writeFile(abs("_inbox/x.md"), "x", "utf8");
+    const p = await propose("move", { from: "_inbox/x.md", to: "notes/x.md" });
 
     const result = await resolve(p.id, "approve");
 
     expect(result.status).toBe("applied");
-    expect(await exists("inbox/x.md")).toBe(false);
+    expect(await exists("_inbox/x.md")).toBe(false);
     expect(await exists("notes/x.md")).toBe(true);
   });
 
@@ -180,33 +175,36 @@ describe("resolveProposalById", () => {
     });
   });
 
-  it("approving a capture proposal writes a classified note", async () => {
-    const p = await propose("capture", { content: "# 复盘\n\n今天的反思与总结", topic: "reflections/" });
+  it("approving a capture proposal files the note in the hinted directory", async () => {
+    await mkdir(abs("notes"), { recursive: true });
+    const p = await propose("capture", { content: "# 复盘\n\n今天的反思与总结", topic: "notes" });
 
     const result = await resolve(p.id, "approve");
 
     expect(result).toMatchObject({ resolved: true, type: "capture", status: "applied" });
     // Lands in the hinted directory and its README index is created.
-    expect(await exists("reflections/README.md")).toBe(true);
+    expect(await exists("notes/复盘.md")).toBe(true);
+    expect(await exists("notes/README.md")).toBe(true);
   });
 
-  it("approving a structure proposal adds keywords to structure.yaml", async () => {
-    const p = await propose("structure", { directory: "reflections/", add: ["复盘"] });
+  it("captures into _inbox when the hinted directory does not exist, without creating it", async () => {
+    // Regression: a stale hint (`reflections/` predates the skeleton redesign)
+    // used to have writeVaultNote mkdir a parallel directory for it.
+    const p = await propose("capture", { content: "# 孤儿\n\n无处安放", topic: "reflections/" });
 
     const result = await resolve(p.id, "approve");
 
     expect(result.status).toBe("applied");
-    expect(await read("structure.yaml")).toContain("复盘");
+    expect(await exists("reflections")).toBe(false);
+    expect(await exists("_inbox/孤儿.md")).toBe(true);
   });
 
-  it("leaves a structure proposal pending when the directory is unknown", async () => {
-    const p = await propose("structure", { directory: "nope/", add: ["x"] });
+  it("captures into _inbox when no directory is hinted", async () => {
+    const p = await propose("capture", { content: "# 随想\n\n没有归属" });
 
-    const result = await resolve(p.id, "approve");
+    await resolve(p.id, "approve");
 
-    expect(result.resolved).toBe(false);
-    expect(result.reason).toMatch(/not defined/);
-    expect((await loadProposal(vault, p.id))?.status).toBe("proposed");
+    expect(await exists("_inbox/随想.md")).toBe(true);
   });
 
   it("approving a view_promotion writes the target note", async () => {

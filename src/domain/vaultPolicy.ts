@@ -1,4 +1,14 @@
 /**
+ * The vault's single entry point for unfiled content, and the fallback target
+ * for any write whose destination cannot be established. Note the leading
+ * underscore — it sorts the directory to the top in Obsidian, and a plain
+ * `inbox` is NOT the same place. Import this constant rather than typing the
+ * literal: a stale `"inbox"` fallback in the note writer silently created a
+ * second, parallel inbox directory for every captured note.
+ */
+export const INBOX_DIR = "_inbox";
+
+/**
  * Vault-relative directory that holds archived notes. Archiving is a
  * non-destructive alternative to deletion: the file still exists on disk (users
  * can browse it) but it leaves the active knowledge picture — excluded from

@@ -2,7 +2,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { addReadmeEntry, removeReadmeEntry } from "../../vault/readmeIndex.js";
 import { parseMarkdownSnapshot } from "../../vault/markdown.js";
-import { loadStructure } from "../../vault/structureStore.js";
 import { markSelfWrite } from "../../vault/selfWriteGuard.js";
 import { commitSelfWrite } from "../../vault/syncSnapshot.js";
 
@@ -28,10 +27,7 @@ export async function updateReadmeForCreatedNote(vaultPath: string, notePath: st
   const base = path.posix.basename(notePath);
   const noteContent = (await readOrNull(path.join(vaultPath, notePath))) ?? "";
   const title = parseMarkdownSnapshot(notePath, noteContent).title ?? base;
-  const structure = await loadStructure();
-  const structureKey = dir === "" ? "" : `${dir}/`;
-  const fallbackLabel = dir === "" ? "笔记索引" : (dir.split("/").at(-1) ?? dir);
-  const label = structure.directories[structureKey]?.description ?? fallbackLabel;
+  const label = dir === "" ? "笔记索引" : (dir.split("/").at(-1) ?? dir);
   const readmePath = readmeAbs(vaultPath, dir);
   const existing = await readOrNull(readmePath);
   const next = addReadmeEntry(existing, {

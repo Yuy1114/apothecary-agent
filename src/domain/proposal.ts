@@ -9,8 +9,8 @@ import { IntakeDecisionSchema, fileTargetPath } from "./intakePlan.js";
  *
  * Covers every action that has an executor: the maintenance actions
  * (edit / move / archive / merge), the knowledge-entry actions
- * (capture / structure / view_promotion), canonicalization (canonical_note),
- * and batch inbox filing (intake — the organizer's whole plan as one review).
+ * (capture / view_promotion), canonicalization (canonical_note), and batch
+ * inbox filing (intake — the organizer's whole plan as one review).
  */
 export const ProposalTypeSchema = z.enum([
   "edit",
@@ -18,7 +18,6 @@ export const ProposalTypeSchema = z.enum([
   "archive",
   "merge",
   "capture",
-  "structure",
   "view_promotion",
   "canonical_note",
   "intake",
@@ -49,12 +48,6 @@ export const CapturePayloadSchema = z.object({
   content: z.string().min(1),
   /** Optional directory hint/key; the note's title is derived from the content. */
   topic: z.string().optional(),
-});
-/** Update classification keywords for an existing directory in structure.yaml. */
-export const StructurePayloadSchema = z.object({
-  directory: z.string().min(1),
-  add: z.array(z.string()).optional(),
-  remove: z.array(z.string()).optional(),
 });
 /** Promote a generated `.agent/views/` view into a permanent vault note. */
 export const ViewPromotionPayloadSchema = z.object({
@@ -87,7 +80,6 @@ export const PAYLOAD_SCHEMAS = {
   archive: ArchivePayloadSchema,
   merge: MergePayloadSchema,
   capture: CapturePayloadSchema,
-  structure: StructurePayloadSchema,
   view_promotion: ViewPromotionPayloadSchema,
   canonical_note: CanonicalNotePayloadSchema,
   intake: IntakePayloadSchema,
@@ -110,7 +102,6 @@ export const ProposalSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("archive"), payload: ArchivePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("merge"), payload: MergePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("capture"), payload: CapturePayloadSchema, ...baseFields }),
-  z.object({ type: z.literal("structure"), payload: StructurePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("view_promotion"), payload: ViewPromotionPayloadSchema, ...baseFields }),
   z.object({ type: z.literal("canonical_note"), payload: CanonicalNotePayloadSchema, ...baseFields }),
   z.object({ type: z.literal("intake"), payload: IntakePayloadSchema, ...baseFields }),
@@ -141,8 +132,6 @@ export function deriveTargetFiles(input: ProposalAction): string[] {
     case "capture":
       // The exact filename is decided at apply time; show the directory hint if given.
       return input.payload.topic ? [input.payload.topic] : [];
-    case "structure":
-      return [input.payload.directory];
     case "view_promotion":
       return [input.payload.sourceViewPath, input.payload.targetPath];
     case "canonical_note":

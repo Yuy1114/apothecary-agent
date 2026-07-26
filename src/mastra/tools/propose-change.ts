@@ -26,8 +26,6 @@ function buildPayload(type: Exclude<ProposalType, "intake">, input: Record<strin
       };
     case "capture":
       return { content: input.content, topic: input.topic };
-    case "structure":
-      return { directory: input.directory, add: input.add, remove: input.remove };
     case "view_promotion":
       return {
         sourceViewPath: input.sourceViewPath,
@@ -53,8 +51,7 @@ export const proposeChangeTool = createTool({
     "- move: from + to\n" +
     "- archive: from\n" +
     "- merge: sourcePath + canonicalPath + canonicalContent (full merged content)\n" +
-    "- capture: content (the synthesized note) + optional topic (directory hint)\n" +
-    "- structure: directory + add and/or remove (classification keywords)\n" +
+    "- capture: content (the synthesized note) + optional topic (an EXISTING directory to file it in)\n" +
     "- view_promotion: sourceViewPath (the generated view's path, e.g. 'views/...') + targetPath + content (the note to write)\n" +
     "- canonical_note: canonicalPath + content (the canonical note) + supersedes (older notes it replaces; each is " +
     "stamped with a superseded_by link)\n" +
@@ -71,10 +68,13 @@ export const proposeChangeTool = createTool({
     canonicalPath: z.string().optional().describe("merge/canonical_note: the note to keep/canonicalize"),
     canonicalContent: z.string().optional().describe("merge: full merged content"),
     content: z.string().optional().describe("capture/view_promotion: the note content to write"),
-    topic: z.string().optional().describe("capture: directory hint, e.g. 'reflections/'"),
-    directory: z.string().optional().describe("structure: exact directory key"),
-    add: z.array(z.string()).optional().describe("structure: keywords to add"),
-    remove: z.array(z.string()).optional().describe("structure: keywords to remove"),
+    topic: z
+      .string()
+      .optional()
+      .describe(
+        "capture: vault-relative directory to file the note in, e.g. 'notes' or 'areas/career'. " +
+          "It must already exist — a directory that does not exist is NOT created, the note lands in '_inbox' instead.",
+      ),
     sourceViewPath: z.string().optional().describe("view_promotion: the generated view path returned by generateKnowledgeView (e.g. 'views/redis.md')"),
     targetPath: z.string().optional().describe("view_promotion: target vault note path"),
     supersedes: z

@@ -17,9 +17,9 @@ const abs = (rel: string) => path.join(vault, rel);
 
 beforeEach(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-txt-inbox-"));
-  await mkdir(abs("inbox"), { recursive: true });
+  await mkdir(abs("_inbox"), { recursive: true });
   await mkdir(abs("references"), { recursive: true });
-  await writeFile(abs("inbox/redis.txt"), "Redis 复盘\nRDB 与 AOF 的取舍", "utf8");
+  await writeFile(abs("_inbox/redis.txt"), "Redis 复盘\nRDB 与 AOF 的取舍", "utf8");
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
@@ -34,23 +34,23 @@ afterEach(async () => {
 
 describe("txt inbox triage end-to-end", () => {
   it("reads txt for classification and moves it only after proposal approval", async () => {
-    const inspected = await readVaultText(vault, "inbox/redis.txt");
+    const inspected = await readVaultText(vault, "_inbox/redis.txt");
     expect(inspected).toMatchObject({ mediaType: "text", content: expect.stringContaining("RDB") });
 
     const proposal = await createProposal(vault, {
       type: "move",
       title: "归位 Redis 资料",
       rationale: "内容属于长期参考资料",
-      payload: { from: "inbox/redis.txt", to: "references/redis.txt" },
+      payload: { from: "_inbox/redis.txt", to: "references/redis.txt" },
     });
-    await expect(access(abs("inbox/redis.txt"))).resolves.toBeUndefined();
+    await expect(access(abs("_inbox/redis.txt"))).resolves.toBeUndefined();
 
     const result = await resolveProposalById(proposal.id, "approve", undefined, {
       postApplyRefresh: async () => undefined,
     });
 
     expect(result).toMatchObject({ resolved: true, status: "applied" });
-    await expect(access(abs("inbox/redis.txt"))).rejects.toBeDefined();
+    await expect(access(abs("_inbox/redis.txt"))).rejects.toBeDefined();
     expect(await readFile(abs("references/redis.txt"), "utf8")).toBe(inspected.content);
     expect(reindexFile).not.toHaveBeenCalled();
     expect(removeFromIndex).not.toHaveBeenCalled();

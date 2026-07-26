@@ -49,11 +49,9 @@ const postApplyRefresh = (vaultPath: string, paths: string[]) =>
 
 beforeAll(async () => {
   vault = await mkdtemp(path.join(tmpdir(), "apothecary-e2e-test-"));
-  await writeFile(
-    path.join(vault, "structure.yaml"),
-    "directories:\n  reflections/:\n    description: 反思\n    keywords:\n      - 反思\n      - 复盘\naliases: {}\n",
-    "utf8",
-  );
+  // The capture's `topic` hint only resolves to a directory that exists, so the
+  // fixture has to contain it — the writer no longer conjures one.
+  await mkdir(path.join(vault, "notes"), { recursive: true });
   await initOperationLedger(`file:${path.join(vault, "operations.db")}`);
   vi.stubEnv("APOTHECARY_VAULT_PATH", vault);
   vi.stubEnv("APOTHECARY_HOME", vault);
@@ -72,7 +70,7 @@ describe("capture proposal end-to-end", () => {
       type: "capture",
       title: "Redis 复盘",
       rationale: "durable insight from the conversation",
-      payload: { content: "# Redis 复盘\n\n今天关于 Redis 持久化的反思与复盘。", topic: "reflections/" },
+      payload: { content: "# Redis 复盘\n\n今天关于 Redis 持久化的反思与复盘。", topic: "notes" },
     });
     expect(proposal.status).toBe("proposed");
 
@@ -88,14 +86,14 @@ describe("capture proposal end-to-end", () => {
     const captureOp = ops.find((op) => op.type === "capture");
     expect(captureOp).toBeDefined();
     const notePath = captureOp!.targetFiles[0];
-    expect(notePath.startsWith("reflections/")).toBe(true);
+    expect(notePath.startsWith("notes/")).toBe(true);
 
     // Physical layer: the note exists with the captured content.
     const noteBody = await readFile(path.join(vault, notePath), "utf8");
     expect(noteBody).toContain("今天关于 Redis 持久化的反思与复盘。");
 
     // README index: the directory index lists the new note.
-    const readme = await readFile(path.join(vault, "reflections", "README.md"), "utf8");
+    const readme = await readFile(path.join(vault, "notes", "README.md"), "utf8");
     expect(readme).toContain(`(${path.posix.basename(notePath)})`);
 
     // Search index: the vector store was kept in sync for the new note.
@@ -114,6 +112,6 @@ describe("capture proposal end-to-end", () => {
     // own capture as an external change (the README fold was previously missing).
     const snapshot = await loadSnapshot(vault);
     expect(snapshot.files[notePath]).toBeDefined();
-    expect(snapshot.files["reflections/README.md"]).toBeDefined();
+    expect(snapshot.files["notes/README.md"]).toBeDefined();
   });
 });
