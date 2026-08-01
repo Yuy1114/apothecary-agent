@@ -134,6 +134,7 @@ describe("runAutoIntake state machine", () => {
 
   it("planning → proposed when a plan produces a proposal", async () => {
     await runAutoIntake(mastra, {
+      quickFile: vi.fn(async () => ({ filed: 0, remaining: 1 })),
       plan: vi.fn(async () => {}),
       propose: vi.fn(async () => ({ proposalId: "prop-1", actionable: 3, superseded: 0 })),
     });
@@ -145,6 +146,7 @@ describe("runAutoIntake state machine", () => {
 
   it("planning → idle when the plan has nothing actionable", async () => {
     await runAutoIntake(mastra, {
+      quickFile: vi.fn(async () => ({ filed: 0, remaining: 1 })),
       plan: vi.fn(async () => {}),
       propose: vi.fn(async () => ({ actionable: 0, superseded: 0 })),
     });
@@ -153,6 +155,7 @@ describe("runAutoIntake state machine", () => {
 
   it("planning → failed, capturing the error message, when planning throws", async () => {
     await runAutoIntake(mastra, {
+      quickFile: vi.fn(async () => ({ filed: 0, remaining: 1 })),
       plan: vi.fn(async () => {
         throw new Error("organizer down");
       }),
@@ -161,5 +164,28 @@ describe("runAutoIntake state machine", () => {
     const status = getAutoIntakeStatus();
     expect(status.phase).toBe("failed");
     expect(status.lastError).toContain("organizer down");
+  });
+
+  it("skips the organizer entirely when 快速归位 settled every entry", async () => {
+    const plan = vi.fn(async () => {});
+    await runAutoIntake(mastra, {
+      quickFile: vi.fn(async () => ({ filed: 4, remaining: 0 })),
+      plan,
+      propose: vi.fn(async () => ({ proposalId: "prop-2", actionable: 4, superseded: 0 })),
+    });
+    // Four screenshots must not cost a model pass — that is the whole point of
+    // running the rules first.
+    expect(plan).not.toHaveBeenCalled();
+    expect(getAutoIntakeStatus().phase).toBe("proposed");
+  });
+
+  it("still runs the organizer when anything is left to judge", async () => {
+    const plan = vi.fn(async () => {});
+    await runAutoIntake(mastra, {
+      quickFile: vi.fn(async () => ({ filed: 3, remaining: 1 })),
+      plan,
+      propose: vi.fn(async () => ({ proposalId: "prop-3", actionable: 4, superseded: 0 })),
+    });
+    expect(plan).toHaveBeenCalledOnce();
   });
 });

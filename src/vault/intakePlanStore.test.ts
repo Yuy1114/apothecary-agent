@@ -25,6 +25,7 @@ function decision(source: string, extra: Partial<IntakeDecision> = {}): IntakeDe
     tags: ["programming"],
     confidence: 0.9,
     rationale: "技术笔记",
+    decidedBy: "agent",
     decidedAt: "2026-07-05T00:00:00.000Z",
     ...extra,
   };

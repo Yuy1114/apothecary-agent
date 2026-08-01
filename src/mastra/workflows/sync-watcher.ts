@@ -11,6 +11,7 @@ import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { syncSemanticsFromChanges } from "../../application/semantic/syncSemanticsFromChanges.js";
 import { snapshotExternalChanges } from "../../application/versioning/vaultSnapshots.js";
 import { proposeIntakePlan } from "../../application/intake/proposeIntake.js";
+import { quickFileInbox } from "../../application/intake/quickFile.js";
 import { manualSync, type ManualSyncReport } from "../../application/sync/manualSync.js";
 import { surveyInbox } from "../../vault/inboxSurvey.js";
 import type { AutoIntakeStatus } from "../../domain/autoIntakeStatus.js";
@@ -197,6 +198,8 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
  * more pass when this one settles, so nothing is stranded in `_inbox`.
  */
 type AutoIntakeDeps = {
+  /** 快速归位: place the type-determined entries by rule, before any model runs. */
+  quickFile: () => Promise<{ filed: number; remaining: number }>;
   /** Run the organizer headlessly to (re)build the durable intake plan. */
   plan: (mastra: Mastra) => Promise<void>;
   /** Wrap the current plan into an approvable proposal (the consent gate). */
@@ -204,6 +207,7 @@ type AutoIntakeDeps = {
 };
 
 const defaultAutoIntakeDeps: AutoIntakeDeps = {
+  quickFile: () => quickFileInbox(VAULT_PATH),
   // Planning only — the organizer never moves files; it records one decision
   // per entry into the durable intake plan.
   plan: async (mastra) => {
@@ -227,7 +231,15 @@ export async function runAutoIntake(
   autoIntakeRunning = true;
   setAutoIntakePhase({ phase: "planning" });
   try {
-    await deps.plan(mastra);
+    // 快速归位 first: screenshots, photos, media, books and source files are
+    // placed by rule. Whatever it settles, the organizer never sees.
+    const quick = await deps.quickFile();
+    if (quick.filed > 0) {
+      console.log(`Vault watcher: quick-filed ${quick.filed} entries by rule (${quick.remaining} left to judge)`);
+    }
+    // When the rules covered everything, there is nothing to reason about — skip
+    // the model entirely rather than paying for a pass that finds no work.
+    if (quick.remaining > 0) await deps.plan(mastra);
     // Consent gate: wrap the plan into an approvable proposal (superseding any
     // still-pending one) instead of executing it.
     const result = await deps.propose();

@@ -26,6 +26,14 @@ export const IntakeDecisionSchema = z.object({
   tags: z.array(z.string()).default([]),
   /** 0–1. Below the charter threshold the organizer should choose action="leave". */
   confidence: z.number().min(0).max(1),
+  /**
+   * Who placed this entry. `rule` marks a 快速归位 decision derived from the file
+   * type alone (see domain/quickFiling.ts); those are hidden from the organizer's
+   * survey, since re-deriving a deterministic answer costs a decision and can
+   * only reproduce it. Agent decisions stay visible so a rejected plan can still
+   * be revised. Defaults for plans written before the field existed.
+   */
+  decidedBy: z.enum(["rule", "agent"]).default("agent"),
   /** Short, concrete reason (Chinese) — shown to the human in the plan review. */
   rationale: z.string().min(1),
   decidedAt: z.string(),
