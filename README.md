@@ -25,7 +25,7 @@ new knowledge / file / manual edit
 | # | Capability | What it does |
 |---|------------|--------------|
 | 1 | Chat / Knowledge Capture | RAG Q&A over the vault with source citations; capture a durable insight from a conversation as a proposal. |
-| 2 | Inbox Triage | Understand `inbox/` notes and propose where they belong; moving a note keeps directory README indexes in sync. |
+| 2 | Inbox Triage | Understand `_inbox/` items and propose where they belong; moving a note keeps directory README indexes in sync. Type-determined files (screenshots, photos, media, ebooks, source) are placed by deterministic rule before any model runs; documents are read for real — `.md`/`.txt` plus `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html` — so a bank statement and a research paper are told apart rather than guessed at from the filename. |
 | 3 | Change Awareness / Sync | A file watcher records created/modified/deleted notes; manual sync + snapshot diff recover missed events and re-sync the index and semantic layer. |
 | 4 | Semantic Maintenance | File summaries, topic/concept graph, typed relations, duplicate detection/classification, canonical candidates, and a maintenance-findings worklist. |
 | 5 | Knowledge Profile & Views | A standing `knowledge-profile.{md,json}` and per-topic knowledge-system views under `.agent/views/`. |
