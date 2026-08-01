@@ -26,10 +26,15 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
   apo audit readme                README 与实际文件对不上的地方 → 编辑提案
   apo polish <path> --mode <m>    重写一篇笔记 → 编辑提案（m: expand|format|tags，可重复）
 
+维护命令（只写 agent 自己的目录，不碰药柜）
+  apo describe images             用视觉模型读遍药柜里的图片，写进语义层并建索引
+                                  之后 apo ask 就能搜到图。按内容哈希去重，重跑不会重复付费。
+
 通用选项
   --json                          输出 JSON（给 agent）；缺省中文摘要（给人）
   --vault <path>                  指定药柜；缺省依次尝试 APOTHECARY_VAULT_PATH、桌面 app 当前药柜、默认路径
-  --limit <n>                     findings / proposals 的条数上限
+  --limit <n>                     findings / proposals 的条数上限；describe images 的本次张数上限
+  --force                         describe images：即使内容没变也重新描述
   --top-k <n>                     ask 返回的片段数（默认 5）
   -h, --help                      显示本帮助
 
@@ -41,6 +46,8 @@ export type ParsedArgs = {
   positionals: string[];
   json: boolean;
   help: boolean;
+  /** Redo work that is already done — currently only `describe images`. */
+  force: boolean;
   vault?: string;
   topic?: string;
   /** Repeatable: `--mode expand --mode tags`. */
@@ -78,7 +85,7 @@ function applyValue(parsed: ParsedArgs, flag: string, value: string): void {
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { positionals: [], json: false, help: false, modes: [] };
+  const parsed: ParsedArgs = { positionals: [], json: false, help: false, force: false, modes: [] };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -89,6 +96,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--json") {
       parsed.json = true;
+      continue;
+    }
+    if (arg === "--force") {
+      parsed.force = true;
       continue;
     }
 

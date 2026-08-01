@@ -22,6 +22,12 @@ export type SearchHit = {
 export interface SearchIndexPort {
   /** Re-chunk and re-embed one vault-relative file, replacing its old chunks. */
   reindexFile(relativePath: string): Promise<{ added: number }>;
+  /**
+   * Index text that stands in for a file whose bytes are not searchable — an
+   * image's vision description, attributed to the image's own path so a hit
+   * points at the picture. Replaces any previous chunks for that path.
+   */
+  indexText(relativePath: string, content: string): Promise<{ added: number }>;
   /** Drop every chunk belonging to one vault-relative file. */
   removeFromIndex(relativePath: string): Promise<{ removed: number }>;
   /** Nearest-neighbour lookup over indexed chunks. */
@@ -49,6 +55,9 @@ export function searchIndex(): SearchIndexPort {
  */
 export const nullSearchIndex: SearchIndexPort = {
   async reindexFile() {
+    return { added: 0 };
+  },
+  async indexText() {
     return { added: 0 };
   },
   async removeFromIndex() {

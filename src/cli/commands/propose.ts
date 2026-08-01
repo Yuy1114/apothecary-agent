@@ -139,3 +139,46 @@ export async function polishCommand(
     ].join("\n"),
   };
 }
+
+/**
+ * 描述药柜里的图片，让它们可被检索。Maintenance, not a proposal: descriptions
+ * are derived data under the agent's own home and never touch the vault.
+ */
+export async function describeImagesCommand(
+  vaultPath: string,
+  options: { limit?: number; force?: boolean } = {},
+): Promise<CommandResult> {
+  // Dynamic: installing the ports pulls in rag.ts, which freezes the vault path.
+  const [{ installCliPorts }, { describeVaultImages }] = await Promise.all([
+    import("../runtime.js"),
+    import("../../application/images/describeVaultImages.js"),
+  ]);
+  await installCliPorts();
+
+  try {
+    const report = await describeVaultImages({ vaultPath, ...options });
+    const lines = [
+      `图片 ${report.total} 张：本次描述 ${report.described} · 已是最新 ${report.upToDate}`,
+    ];
+    if (report.failed.length > 0) {
+      lines.push(`失败 ${report.failed.length} 张：`);
+      for (const failure of report.failed.slice(0, 5)) {
+        lines.push(`  · ${failure.path} — ${failure.reason}`);
+      }
+    }
+    if (report.pruned > 0) lines.push(`清掉 ${report.pruned} 条已不存在图片的记录`);
+    if (report.more) lines.push("", "还有没描述完的，再跑一次继续（已完成的不会重复付费）。");
+    else if (report.described > 0) lines.push("", '现在可以搜图了，例如：apo ask "那张讲 Redis 的截图"');
+    return { json: report, text: lines.join("\n") };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    if (reason === "no_vision_model_configured") {
+      return {
+        json: { ok: false, error: reason },
+        text: "没有配置视觉模型。设置 APOTHECARY_VISION_MODEL（凭据默认复用 embedding 那套）后再试。",
+        exitCode: 1,
+      };
+    }
+    throw error;
+  }
+}

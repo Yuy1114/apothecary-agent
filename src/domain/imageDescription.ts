@@ -132,3 +132,26 @@ export function renderImageDescription(draft: ImageDescriptionDraft): string {
   if (draft.text.trim()) lines.push("", "文字内容：", draft.text.trim());
   return lines.join("\n");
 }
+
+/**
+ * The searchable document standing in for an image in the vector index.
+ *
+ * An image has no text of its own, so what gets embedded is what the vision
+ * model saw. Written as Markdown because the indexer chunks Markdown — the H1
+ * becomes the hit's title, so a search result names the picture rather than
+ * showing a path. The transcription carries most of the retrieval value (asking
+ * for "那张讲 Redis 过期策略的截图" matches words that were *in* the screenshot),
+ * so it is included verbatim rather than summarised away. Pure.
+ */
+export function imageSearchDocument(input: {
+  path: string;
+  draft: ImageDescriptionDraft;
+}): string {
+  const { path: filePath, draft } = input;
+  const fileName = filePath.split("/").filter(Boolean).at(-1) ?? filePath;
+  const title = draft.suggestedName.trim() || fileName;
+
+  const lines = [`# ${title}`, "", `图片：${filePath}`, `类型：${draft.kind}`, "", draft.description];
+  if (draft.text.trim()) lines.push("", "## 图中文字", "", draft.text.trim());
+  return lines.join("\n");
+}
