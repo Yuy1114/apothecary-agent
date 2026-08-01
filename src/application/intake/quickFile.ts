@@ -1,6 +1,7 @@
 import { surveyInbox } from "../../vault/inboxSurvey.js";
 import { loadIntakePlan, recordIntakeDecision } from "../../vault/intakePlanStore.js";
 import { quickFileEntry } from "../../domain/quickFiling.js";
+import { imageDescriber } from "../ports/imageDescriber.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { nowIso } from "../../utils/time.js";
 
@@ -22,6 +23,8 @@ export type QuickFileReport = {
   filed: number;
   /** Entries with no rule and no decision yet — what the organizer must handle. */
   remaining: number;
+  /** Provisional placements handed to the organizer because a describer can do better. */
+  escalated: number;
   /** Vault-relative sources the rules placed, for the log. */
   sources: string[];
 };
@@ -29,18 +32,33 @@ export type QuickFileReport = {
 export async function quickFileInbox(
   vaultPath: string,
   home: string = apothecaryHome(),
+  options: { escalate?: boolean } = {},
 ): Promise<QuickFileReport> {
   const survey = await surveyInbox(vaultPath);
   const decided = new Set((await loadIntakePlan(home)).decisions.map((d) => d.source));
+  // A hash-named image is handed over only when something can actually look at
+  // it — and only on the first pass. The floor pass (escalate: false) runs after
+  // the organizer and applies the rule to whatever it left undecided, so a
+  // vision model that is configured but broken cannot leave a file worse off
+  // than having no vision model at all.
+  const canSee = options.escalate !== false && imageDescriber().available();
 
   const sources: string[] = [];
   let remaining = 0;
+  let escalated = 0;
 
   for (const entry of survey.entries) {
     if (decided.has(entry.path)) continue;
 
     const filing = quickFileEntry(entry);
     if (!filing) {
+      remaining += 1;
+      continue;
+    }
+    if (filing.provisional && canSee) {
+      // Leave it for the organizer, which will read it through the vision model
+      // and can both place and rename it properly.
+      escalated += 1;
       remaining += 1;
       continue;
     }
@@ -62,5 +80,5 @@ export async function quickFileInbox(
     sources.push(entry.path);
   }
 
-  return { filed: sources.length, remaining, sources };
+  return { filed: sources.length, remaining, escalated, sources };
 }

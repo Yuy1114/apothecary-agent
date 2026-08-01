@@ -198,8 +198,13 @@ async function syncChange(mastra: Mastra, relativePath: string): Promise<void> {
  * more pass when this one settles, so nothing is stranded in `_inbox`.
  */
 type AutoIntakeDeps = {
-  /** 快速归位: place the type-determined entries by rule, before any model runs. */
-  quickFile: () => Promise<{ filed: number; remaining: number }>;
+  /**
+   * 快速归位: place the type-determined entries by rule. Runs twice — before the
+   * organizer to keep it from reasoning about screenshots, and again after it as
+   * a floor, so anything escalated to a vision model that then failed still ends
+   * up with the rule's answer instead of rotting in `_inbox`.
+   */
+  quickFile: (options?: { escalate?: boolean }) => Promise<{ filed: number; remaining: number }>;
   /** Run the organizer headlessly to (re)build the durable intake plan. */
   plan: (mastra: Mastra) => Promise<void>;
   /** Wrap the current plan into an approvable proposal (the consent gate). */
@@ -207,7 +212,7 @@ type AutoIntakeDeps = {
 };
 
 const defaultAutoIntakeDeps: AutoIntakeDeps = {
-  quickFile: () => quickFileInbox(VAULT_PATH),
+  quickFile: (options) => quickFileInbox(VAULT_PATH, undefined, options),
   // Planning only — the organizer never moves files; it records one decision
   // per entry into the durable intake plan.
   plan: async (mastra) => {
@@ -239,7 +244,16 @@ export async function runAutoIntake(
     }
     // When the rules covered everything, there is nothing to reason about — skip
     // the model entirely rather than paying for a pass that finds no work.
-    if (quick.remaining > 0) await deps.plan(mastra);
+    if (quick.remaining > 0) {
+      await deps.plan(mastra);
+      // Floor: whatever the organizer left undecided — most likely an image it
+      // was handed because a vision model was configured, which then failed —
+      // still gets the rule's placement rather than being stranded.
+      const floor = await deps.quickFile({ escalate: false });
+      if (floor.filed > 0) {
+        console.log(`Vault watcher: quick-filed ${floor.filed} entries the organizer left undecided`);
+      }
+    }
     // Consent gate: wrap the plan into an approvable proposal (superseding any
     // still-pending one) instead of executing it.
     const result = await deps.propose();

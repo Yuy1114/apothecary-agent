@@ -134,7 +134,9 @@ describe("runAutoIntake state machine", () => {
 
   it("planning → proposed when a plan produces a proposal", async () => {
     await runAutoIntake(mastra, {
-      quickFile: vi.fn(async () => ({ filed: 0, remaining: 1 })),
+      quickFile: vi.fn(async (options?: { escalate?: boolean }) =>
+        options?.escalate === false ? { filed: 0, remaining: 0 } : { filed: 0, remaining: 1 },
+      ),
       plan: vi.fn(async () => {}),
       propose: vi.fn(async () => ({ proposalId: "prop-1", actionable: 3, superseded: 0 })),
     });
@@ -146,7 +148,9 @@ describe("runAutoIntake state machine", () => {
 
   it("planning → idle when the plan has nothing actionable", async () => {
     await runAutoIntake(mastra, {
-      quickFile: vi.fn(async () => ({ filed: 0, remaining: 1 })),
+      quickFile: vi.fn(async (options?: { escalate?: boolean }) =>
+        options?.escalate === false ? { filed: 0, remaining: 0 } : { filed: 0, remaining: 1 },
+      ),
       plan: vi.fn(async () => {}),
       propose: vi.fn(async () => ({ actionable: 0, superseded: 0 })),
     });
@@ -155,7 +159,9 @@ describe("runAutoIntake state machine", () => {
 
   it("planning → failed, capturing the error message, when planning throws", async () => {
     await runAutoIntake(mastra, {
-      quickFile: vi.fn(async () => ({ filed: 0, remaining: 1 })),
+      quickFile: vi.fn(async (options?: { escalate?: boolean }) =>
+        options?.escalate === false ? { filed: 0, remaining: 0 } : { filed: 0, remaining: 1 },
+      ),
       plan: vi.fn(async () => {
         throw new Error("organizer down");
       }),
@@ -187,5 +193,31 @@ describe("runAutoIntake state machine", () => {
       propose: vi.fn(async () => ({ proposalId: "prop-3", actionable: 4, superseded: 0 })),
     });
     expect(plan).toHaveBeenCalledOnce();
+  });
+
+  it("applies the rule floor after the organizer, so a broken vision model strands nothing", async () => {
+    const quickFile = vi.fn(async (options?: { escalate?: boolean }) =>
+      options?.escalate === false ? { filed: 1, remaining: 0 } : { filed: 0, remaining: 1 },
+    );
+    await runAutoIntake(mastra, {
+      quickFile,
+      plan: vi.fn(async () => {}),
+      propose: vi.fn(async () => ({ proposalId: "prop-4", actionable: 1, superseded: 0 })),
+    });
+    // Second pass must forbid escalation, or it would hand the same image back
+    // to the model that just failed to read it.
+    expect(quickFile).toHaveBeenCalledTimes(2);
+    expect(quickFile.mock.calls[0][0]).toBeUndefined();
+    expect(quickFile.mock.calls[1][0]).toEqual({ escalate: false });
+  });
+
+  it("does not run the floor pass when the organizer never ran", async () => {
+    const quickFile = vi.fn(async () => ({ filed: 2, remaining: 0 }));
+    await runAutoIntake(mastra, {
+      quickFile,
+      plan: vi.fn(async () => {}),
+      propose: vi.fn(async () => ({ proposalId: "prop-5", actionable: 2, superseded: 0 })),
+    });
+    expect(quickFile).toHaveBeenCalledOnce();
   });
 });

@@ -35,6 +35,13 @@ export type QuickFiling = {
   rationale: string;
   /** Honest about how much the rule actually knows. */
   confidence: number;
+  /**
+   * The rule is guessing, and looking at the file would beat guessing. Set only
+   * where a vision model could actually help — an unrecognisable image, never a
+   * video, which nothing here can watch. Callers with a describer available
+   * should leave these to the organizer instead of settling them.
+   */
+  provisional?: boolean;
 };
 
 /** Screenshot tools, across the ones that actually run on this machine. */
@@ -91,7 +98,13 @@ export function quickFileEntry(entry: InboxEntry): QuickFiling | null {
     }
     // Honest fallback: we know it is an image and nothing more. Attachments is
     // the vault's catch-all for media that is neither a photo nor a screenshot.
-    return { dest: "media/attachments", rationale: "图片，名称看不出用途，先归入附件", confidence: 0.6 };
+    // Marked provisional — this is exactly the case a vision model settles.
+    return {
+      dest: "media/attachments",
+      rationale: "图片，名称看不出用途，先归入附件",
+      confidence: 0.6,
+      provisional: true,
+    };
   }
 
   if (entry.kind === "video" || entry.kind === "audio") {

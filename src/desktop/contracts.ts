@@ -177,12 +177,15 @@ export const SaveSettingsInputSchema = z.object({
   embeddingBaseUrl: z.string().max(500).optional(),
   embeddingModel: z.string().max(200).optional(),
   embeddingTimeoutMs: z.number().int().positive().max(600_000).optional(),
+  visionBaseUrl: z.string().max(500).optional(),
+  visionModel: z.string().max(200).optional(),
   watch: z.boolean().optional(),
   autoIntakePlanning: z.boolean().optional(),
   // Plaintext keys from the form: a non-empty value sets/replaces, "" clears, and
   // an absent field leaves the stored (encrypted) key untouched.
   deepseekApiKey: z.string().max(500).optional(),
   embeddingApiKey: z.string().max(500).optional(),
+  visionApiKey: z.string().max(500).optional(),
 });
 export type SaveSettingsInput = z.infer<typeof SaveSettingsInputSchema>;
 

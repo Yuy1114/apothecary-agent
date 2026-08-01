@@ -99,6 +99,8 @@ Configuration is via environment variables (a `.env` is loaded):
 | `APOTHECARY_VAULT_PATH` | Path to the Markdown vault | `/Users/yuy/apothecary-vault` |
 | `APOTHECARY_EMBEDDING_API_KEY` / `OPENAI_API_KEY` | Embeddings for the vector index | — |
 | `APOTHECARY_EMBEDDING_BASE_URL` / `_MODEL` | Embedding endpoint / model | aihubmix / `text-embedding-3-small` |
+| `APOTHECARY_VISION_MODEL` | Vision model that reads inbox images (e.g. `openai/gpt-4o-mini`). **Optional** — unset, images are placed by rule and never read. | — |
+| `APOTHECARY_VISION_API_KEY` / `_BASE_URL` | Vision credentials. A base URL points at any OpenAI-compatible endpoint (and then requires the key); with neither, the model id goes through Mastra's router. | `OPENAI_API_KEY` / — |
 | `APOTHECARY_SEMANTIC_SYNC_DEBOUNCE_MS` | Watcher → semantic-sync debounce | `8000` |
 | `APOTHECARY_DESKTOP_WATCH` | Set to `0` to skip the desktop's vault watcher (use when running `desktop:dev` next to `mastra dev` so a single watcher owns change detection) | on |
 

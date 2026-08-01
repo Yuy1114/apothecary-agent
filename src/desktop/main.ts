@@ -87,6 +87,7 @@ function applySettingsToEnv(settings: DesktopSettings): void {
   Object.assign(process.env, settingsEnv(settings, {
     deepseekApiKey: decryptSecret(settings.deepseekApiKeyEnc),
     embeddingApiKey: decryptSecret(settings.embeddingApiKeyEnc),
+    visionApiKey: decryptSecret(settings.visionApiKeyEnc),
   }));
   // settingsEnv only emits set values, and Object.assign never unsets — but the
   // auto-intake kill switch must take effect immediately, not on next relaunch
@@ -100,12 +101,13 @@ function registerSettingsIpc(): void {
     return sanitizeSettings(settings);
   });
   ipcMain.handle(SettingsChannel.save, async (_event, input) => {
-    const { deepseekApiKey, embeddingApiKey, ...config } = SaveSettingsInputSchema.parse(input ?? {});
+    const { deepseekApiKey, embeddingApiKey, visionApiKey, ...config } = SaveSettingsInputSchema.parse(input ?? {});
     const patch: Partial<DesktopSettings> = { ...config };
     // A provided key value replaces (non-empty) or clears ("") the stored secret;
     // an absent field leaves it untouched.
     if (deepseekApiKey !== undefined) patch.deepseekApiKeyEnc = deepseekApiKey ? encryptSecret(deepseekApiKey) : undefined;
     if (embeddingApiKey !== undefined) patch.embeddingApiKeyEnc = embeddingApiKey ? encryptSecret(embeddingApiKey) : undefined;
+    if (visionApiKey !== undefined) patch.visionApiKeyEnc = visionApiKey ? encryptSecret(visionApiKey) : undefined;
     const merged = await persistSettings(patch);
     applySettingsToEnv(merged); // diagnostics (which read env live) reflect immediately
     return sanitizeSettings(merged);
