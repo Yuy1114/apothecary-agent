@@ -26,6 +26,10 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
   apo audit readme                README 与实际文件对不上的地方 → 编辑提案
   apo polish <path> --mode <m>    重写一篇笔记 → 编辑提案（m: expand|format|tags，可重复）
 
+给定时任务用
+  apo brief                       先扫 _inbox 起草归位提案，再报出所有等你处理的事
+                                  一条命令搞定「早上告诉我欠什么」，顺序固定不会搞反
+
 维护命令（只写 agent 自己的目录，不碰药柜）
   apo describe images             用视觉模型读遍药柜里的图片，写进语义层并建索引
                                   之后 apo ask 就能搜到图。按内容哈希去重，重跑不会重复付费。

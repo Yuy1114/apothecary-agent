@@ -182,3 +182,43 @@ export async function describeImagesCommand(
     throw error;
   }
 }
+
+/**
+ * The morning brief: sweep `_inbox` into an approvable plan, then report
+ * everything waiting on the human — in that order, because a sweep that runs
+ * after the report would produce proposals nobody is told about until tomorrow.
+ *
+ * Exists as one command so an unattended caller cannot get the order wrong, and
+ * so a cron job is a single line. The sweep is best-effort: a model outage must
+ * still leave a usable report of what was already pending.
+ */
+export async function briefCommand(vaultPath: string): Promise<CommandResult> {
+  const { statusCommand } = await import("./read.js");
+
+  let sweep: { ok: boolean; proposalId?: string | null; actionable?: number; error?: string };
+  try {
+    const planned = (await intakePlanCommand()).json as {
+      ok: boolean;
+      proposalId?: string | null;
+      actionable?: number;
+      error?: string;
+    };
+    sweep = planned;
+  } catch (error) {
+    sweep = { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  const status = await statusCommand(vaultPath);
+  const lines: string[] = [];
+  if (sweep.ok && sweep.proposalId) {
+    lines.push(`刚扫了 _inbox：${sweep.actionable ?? 0} 项待归位，已起草提案。`, "");
+  } else if (!sweep.ok) {
+    lines.push(`_inbox 勘查失败（${sweep.error ?? "未知"}），下面是已有的待办。`, "");
+  }
+  lines.push(status.text);
+
+  return {
+    json: { sweep, status: status.json },
+    text: lines.join("\n"),
+  };
+}

@@ -18,6 +18,7 @@ import {
   intakePlanCommand,
   polishCommand,
   describeImagesCommand,
+  briefCommand,
 } from "./commands/propose.js";
 
 /**
@@ -88,6 +89,9 @@ async function dispatch(args: ParsedArgs, vaultPath: string): Promise<CommandRes
         topic: args.topic,
         source: "cli",
       });
+
+    case "brief":
+      return briefCommand(vaultPath);
 
     case "describe": {
       if (second !== "images") throw new Error("用法: apo describe images [--limit N] [--force]");
