@@ -71,6 +71,61 @@ export function sanitizeSuggestedName(suggested: string, maxLength = 60): string
   return cleaned.length > 0 ? cleaned : null;
 }
 
+/**
+ * Tolerant view of what a vision model actually returns. An unrecognised `kind`
+ * degrades to `other` instead of failing the whole read — the description and
+ * the transcribed text are what the filing decision rests on, and losing them
+ * over an unexpected label would be a bad trade.
+ */
+const ImageDescriptionResponseSchema = z.object({
+  kind: ImageKindSchema.catch("other"),
+  description: z.string().default(""),
+  text: z.string().default(""),
+  suggestedName: z.string().default(""),
+});
+
+/** The JSON object the model is asked to produce, spelled out for the prompt. */
+export function imageDescriptionJsonSpec(): string {
+  return [
+    "{",
+    `  "kind": one of ${ImageKindSchema.options.map((k) => `"${k}"`).join(" | ")},`,
+    '  "description": "one or two sentences in ENGLISH",',
+    '  "text": "text visible in the image, verbatim and in its original language ("" if none)",',
+    '  "suggestedName": "a short filename stem in the image\'s own language, no extension ("" if unsure)"',
+    "}",
+  ].join("\n");
+}
+
+/**
+ * Parse a model's JSON reply. Tolerates the markdown fence models like to wrap
+ * JSON in, and prose around it. Throws when nothing usable comes back, so the
+ * caller reports a failed read rather than filing on an empty description. Pure.
+ */
+export function parseImageDescription(raw: string): ImageDescriptionDraft {
+  const unfenced = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  // A model that adds a sentence around the object is still usable.
+  const start = unfenced.indexOf("{");
+  const end = unfenced.lastIndexOf("}");
+  if (start === -1 || end <= start) throw new Error("vision_response_not_json");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(unfenced.slice(start, end + 1));
+  } catch {
+    throw new Error("vision_response_not_json");
+  }
+
+  const result = ImageDescriptionResponseSchema.safeParse(parsed);
+  if (!result.success || !result.data.description.trim()) {
+    throw new Error("vision_response_unusable");
+  }
+  return result.data;
+}
+
 /** Render a description as the excerpt the organizer reads. */
 export function renderImageDescription(draft: ImageDescriptionDraft): string {
   const lines = [`[${draft.kind}] ${draft.description}`];
