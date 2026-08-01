@@ -2,36 +2,61 @@ import { describe, expect, it } from "vitest";
 import { parseArgs } from "./args.js";
 
 describe("parseArgs", () => {
-  it("defaults to human output with no vault override", () => {
-    expect(parseArgs(["status"])).toEqual({ command: "status", json: false, help: false });
+  it("collects the command and its subcommand as positionals", () => {
+    expect(parseArgs(["proposals", "show", "prop-1"]).positionals).toEqual([
+      "proposals",
+      "show",
+      "prop-1",
+    ]);
   });
 
-  it("accepts --json and both --vault spellings", () => {
-    expect(parseArgs(["status", "--json", "--vault", "/tmp/v"])).toMatchObject({
-      command: "status",
+  it("defaults to human output with no overrides", () => {
+    const parsed = parseArgs(["status"]);
+    expect(parsed).toMatchObject({ json: false, help: false, modes: [] });
+    expect(parsed.vault).toBeUndefined();
+  });
+
+  it("accepts value flags in both spellings", () => {
+    expect(parseArgs(["status", "--vault", "/tmp/v"]).vault).toBe("/tmp/v");
+    expect(parseArgs(["status", "--vault=/tmp/v"]).vault).toBe("/tmp/v");
+  });
+
+  it("keeps a quoted question as a single positional", () => {
+    expect(parseArgs(["ask", "Redis 的过期策略是什么", "--json"])).toMatchObject({
+      positionals: ["ask", "Redis 的过期策略是什么"],
       json: true,
-      vault: "/tmp/v",
     });
-    expect(parseArgs(["status", "--vault=/tmp/v"])).toMatchObject({ vault: "/tmp/v" });
   });
 
-  it("treats -h/--help as a request for help", () => {
-    expect(parseArgs(["--help"]).help).toBe(true);
-    expect(parseArgs(["-h"]).help).toBe(true);
+  it("collects repeated --mode flags", () => {
+    expect(parseArgs(["polish", "notes/a.md", "--mode", "expand", "--mode", "tags"]).modes).toEqual([
+      "expand",
+      "tags",
+    ]);
+  });
+
+  it("parses numeric flags and rejects non-positive values", () => {
+    expect(parseArgs(["ask", "q", "--top-k", "8"]).topK).toBe(8);
+    expect(parseArgs(["findings", "--limit", "3"]).limit).toBe(3);
+    expect(() => parseArgs(["findings", "--limit", "0"])).toThrow(/正整数/);
+    expect(() => parseArgs(["findings", "--limit", "abc"])).toThrow(/正整数/);
   });
 
   it("rejects a mistyped flag rather than silently ignoring it", () => {
     // The failure this guards: `--jsonn` quietly yielding human-formatted text
     // to an agent that expected JSON.
     expect(() => parseArgs(["status", "--jsonn"])).toThrow(/未知选项/);
+    expect(() => parseArgs(["status", "--topicc=x"])).toThrow(/未知选项/);
   });
 
-  it("rejects a --vault without a value", () => {
-    expect(() => parseArgs(["status", "--vault"])).toThrow(/需要一个路径/);
-    expect(() => parseArgs(["status", "--vault", "--json"])).toThrow(/需要一个路径/);
+  it("rejects a value flag whose value is missing or is another flag", () => {
+    expect(() => parseArgs(["capture", "x", "--topic"])).toThrow(/需要一个值/);
+    expect(() => parseArgs(["capture", "x", "--topic", "--json"])).toThrow(/需要一个值/);
+    expect(() => parseArgs(["capture", "x", "--topic="])).toThrow(/需要一个值/);
   });
 
-  it("rejects a second bare argument", () => {
-    expect(() => parseArgs(["status", "extra"])).toThrow(/多余的参数/);
+  it("treats -h/--help as a request for help", () => {
+    expect(parseArgs(["--help"]).help).toBe(true);
+    expect(parseArgs(["-h"]).help).toBe(true);
   });
 });

@@ -129,6 +129,34 @@ Mastra Studio remains available as a development and debugging surface:
 pnpm run dev     # Mastra Studio (agents, tools, workflows)
 ```
 
+### The `apo` CLI
+
+The third composition root is headless, so another agent or a cron job can drive
+Apothecary **without the desktop app running** — which is otherwise a hard
+requirement for every background loop it has:
+
+```bash
+npx tsc                      # build once; dist/ is gitignored
+node dist/cli/index.js --help
+```
+
+Commands are grouped by permission, and the grouping is the contract:
+
+| Group | Commands | Effect |
+|-------|----------|--------|
+| Read | `status`, `proposals list\|show`, `ask`, `findings`, `journal`, `anki due` | Nothing is written. |
+| Propose | `intake plan`, `capture`, `audit readme`, `polish` | Only ever produces a proposal awaiting approval. |
+
+**Approving has no command.** An unattended caller cannot talk itself into
+applying a change; the human approves in the desktop app. `--json` is for agents,
+the default Chinese summary is for people, and stdout carries only the result
+(diagnostics go to stderr) so `--json` stays parseable.
+
+The CLI resolves the vault the same way the app does — reading the desktop's
+persisted settings — so the two can never report on different vaults, and it
+reads credentials from the project's `.env` rather than the app's
+`safeStorage`-encrypted keys, which only Electron can decrypt.
+
 ## Verifying
 
 ```bash
