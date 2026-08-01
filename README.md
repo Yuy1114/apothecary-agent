@@ -129,6 +129,14 @@ Mastra Studio remains available as a development and debugging surface:
 pnpm run dev     # Mastra Studio (agents, tools, workflows)
 ```
 
+### 倾倒站 (the drop station)
+
+A small always-on-top window summoned from the menu bar — drag files onto it (or
+straight onto the tray icon) and they move into `_inbox`, no Finder navigation.
+Where they end up is still decided by an approvable intake proposal; the drop
+only gets them through the door. A file already inside the vault is refused:
+re-filing one is a vault change and belongs in a move proposal.
+
 ### The `apo` CLI
 
 The third composition root is headless, so another agent or a cron job can drive

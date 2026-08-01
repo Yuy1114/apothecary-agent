@@ -193,6 +193,22 @@ export const SettingsChannel = {
   relaunch: "apothecary:app-relaunch",
 } as const;
 
+/** 倾倒站: drag files in, they land in `_inbox`. */
+export const DropStationChannel = {
+  /** renderer → main: absolute paths of the dropped files. */
+  drop: "apothecary:drop-files",
+  /** main → renderer: outcome of a drop, whoever triggered it. */
+  result: "apothecary:drop-result",
+  /**
+   * renderer → main: the most recent outcome. A drop on the tray icon creates
+   * the window *after* the files are filed, so the push can land before the page
+   * has subscribed; the window asks on mount to close that race.
+   */
+  last: "apothecary:drop-last",
+  /** renderer → main: dismiss the window (Escape / close button). */
+  close: "apothecary:drop-close",
+} as const;
+
 export const DesktopChannel = {
   dashboard: "apothecary:dashboard",
   chat: "apothecary:chat",

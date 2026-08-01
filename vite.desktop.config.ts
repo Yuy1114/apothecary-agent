@@ -43,5 +43,14 @@ export default defineConfig({
   build: {
     outDir: path.join(root, "dist", "desktop", "ui"),
     emptyOutDir: true,
+    rollupOptions: {
+      // Two renderer entries: the console, and the 倾倒站 drop window — which is
+      // deliberately its own page so summoning it does not boot the whole
+      // ten-view app.
+      input: {
+        index: path.join(uiRoot, "index.html"),
+        drop: path.join(uiRoot, "drop.html"),
+      },
+    },
   },
 });

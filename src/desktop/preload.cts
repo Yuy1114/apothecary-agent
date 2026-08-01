@@ -1,6 +1,6 @@
 // The one CommonJS file in an otherwise ESM-only codebase: sandboxed Electron
 // preload scripts (sandbox: true in main.ts) cannot be ES modules.
-const { contextBridge, ipcRenderer } = require("electron") as typeof import("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron") as typeof import("electron");
 
 const channel = {
   dashboard: "apothecary:dashboard",
@@ -48,6 +48,10 @@ const channel = {
   journalOpenEditor: "apothecary:journal-open-editor",
   navigate: "apothecary:navigate",
   pendingNavigation: "apothecary:pending-navigation",
+  dropFiles: "apothecary:drop-files",
+  dropResult: "apothecary:drop-result",
+  dropLast: "apothecary:drop-last",
+  dropClose: "apothecary:drop-close",
 } as const;
 
 contextBridge.exposeInMainWorld("apothecary", {
@@ -124,4 +128,19 @@ contextBridge.exposeInMainWorld("apothecary", {
     return () => ipcRenderer.removeListener(channel.navigate, handler);
   },
   pendingNavigation: () => ipcRenderer.invoke(channel.pendingNavigation),
+
+  // ── 倾倒站 ──
+  // Electron 32 removed `File.path`, so the renderer cannot learn where a
+  // dropped file lives. `webUtils.getPathForFile` is the sanctioned replacement
+  // and only works here in the preload — the renderer hands back the File
+  // objects it received and gets absolute paths.
+  pathForFile: (file: File) => webUtils.getPathForFile(file),
+  dropFiles: (paths: string[]) => ipcRenderer.invoke(channel.dropFiles, { paths }),
+  lastDropResult: () => ipcRenderer.invoke(channel.dropLast),
+  closeDropStation: () => ipcRenderer.invoke(channel.dropClose),
+  onDropResult: (listener: (result: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, result: unknown) => listener(result);
+    ipcRenderer.on(channel.dropResult, handler);
+    return () => ipcRenderer.removeListener(channel.dropResult, handler);
+  },
 });

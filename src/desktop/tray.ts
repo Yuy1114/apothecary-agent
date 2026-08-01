@@ -10,6 +10,13 @@ export type TrayDeps = {
   /** Open the console focused on today's journal (deep link into the 日记 view). */
   openJournal: () => void;
   iconPath: string;
+  /** Summon 倾倒站, anchored under the menu-bar icon. */
+  openDropStation?: (anchor?: Electron.Rectangle) => void;
+  /**
+   * Files dragged straight onto the menu-bar icon — the zero-click path into
+   * `_inbox`, for when the window would just be in the way.
+   */
+  onFilesDroppedOnTray?: (paths: string[]) => void;
   /**
    * English reading mode. The tray is the only surface for it on purpose: the
    * switch must be one click away from anywhere, and its state must be visible
@@ -116,6 +123,12 @@ export function installScheduleTray(deps: TrayDeps): ScheduleTray {
         },
       });
     }
+    if (deps.openDropStation) {
+      template.push({
+        label: "倾倒站（拖文件进 _inbox）",
+        click: () => deps.openDropStation!(tray.getBounds()),
+      });
+    }
     template.push(
       { label: "打开日记", click: () => deps.openJournal() },
       { label: "打开控制台", click: () => void deps.showConsole() },
@@ -134,6 +147,12 @@ export function installScheduleTray(deps: TrayDeps): ScheduleTray {
   };
   tray.on("click", () => void open());
   tray.on("right-click", () => void open());
+  // macOS lets files be dropped directly on the menu-bar icon. That is the
+  // shortest possible path from "this file should go in the vault" to it being
+  // there — no window, no clicks.
+  if (deps.onFilesDroppedOnTray) {
+    tray.on("drop-files", (_event, files) => deps.onFilesDroppedOnTray!(files));
+  }
 
   let lastSummary = { total: 0, remaining: 0 };
 
