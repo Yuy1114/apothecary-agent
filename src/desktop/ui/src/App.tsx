@@ -1933,7 +1933,7 @@ function DiagBadge({ diagnostic }: { diagnostic: any }) {
   return <span className={`diag-status ${ok ? "ok" : err ? "err" : "warn"}`}><span className="dot" />{diagnostic.detail}</span>;
 }
 
-type SettingsForm = { chatModel: string; deepseekBaseUrl: string; embeddingBaseUrl: string; embeddingModel: string; embeddingTimeoutMs: string; watch: boolean; autoIntakePlanning: boolean };
+type SettingsForm = { chatModel: string; deepseekBaseUrl: string; embeddingBaseUrl: string; embeddingModel: string; embeddingTimeoutMs: string; visionModel: string; watch: boolean; autoIntakePlanning: boolean };
 
 function SettingsView({ refreshKey, notify, dashboard }: { refreshKey: number; notify: (t: string) => void; dashboard: any }) {
   const [diag, setDiag] = useState<any>(null);
@@ -1949,6 +1949,7 @@ function SettingsView({ refreshKey, notify, dashboard }: { refreshKey: number; n
     setForm({
       chatModel: s.chatModel ?? "", deepseekBaseUrl: s.deepseekBaseUrl ?? "", embeddingBaseUrl: s.embeddingBaseUrl ?? "",
       embeddingModel: s.embeddingModel ?? "", embeddingTimeoutMs: s.embeddingTimeoutMs ? String(s.embeddingTimeoutMs) : "",
+      visionModel: s.visionModel ?? "",
       watch: s.watch !== false, autoIntakePlanning: s.autoIntakePlanning === true,
     });
   }).catch((e) => notify(e.message)), [notify]);
@@ -1964,6 +1965,7 @@ function SettingsView({ refreshKey, notify, dashboard }: { refreshKey: number; n
       embeddingBaseUrl: form.embeddingBaseUrl.trim() || undefined,
       embeddingModel: form.embeddingModel.trim() || undefined,
       embeddingTimeoutMs: form.embeddingTimeoutMs ? Number(form.embeddingTimeoutMs) : undefined,
+      visionModel: form.visionModel.trim() || undefined,
       watch: form.watch, autoIntakePlanning: form.autoIntakePlanning,
     };
     if (dkKey) patch.deepseekApiKey = dkKey;
@@ -2051,6 +2053,11 @@ function SettingsView({ refreshKey, notify, dashboard }: { refreshKey: number; n
           <div className="field">
             <label>Embedding 地址</label>
             <input className="input mono" value={form.embeddingBaseUrl} placeholder="https://api.aihubmix.com/v1" onChange={(e) => set("embeddingBaseUrl", e.target.value)} style={{ fontSize: 12.5 }} />
+          </div>
+          <div className="field">
+            <label>视觉模型（读 _inbox 里的图片）</label>
+            <input className="input" value={form.visionModel} placeholder="留空 = 不读图，图片按文件名规则归位" onChange={(e) => set("visionModel", e.target.value)} />
+            <div className="hint">凭据默认复用下面的 Embedding Key 与地址，同一个聚合器只需填模型名。</div>
           </div>
           <div className="field">
             <label>Embedding API Key</label>
