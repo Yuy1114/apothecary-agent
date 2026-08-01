@@ -4,8 +4,12 @@
   "main": "dist/desktop/main.js",
   "description": "Mastra-native agent for local Markdown knowledge bases.",
   "type": "module",
+  "bin": {
+    "apo": "dist/cli/index.js"
+  },
   "scripts": {
     "dev": "mastra dev",
+    "cli": "tsc && node dist/cli/index.js",
     "desktop:dev": "node scripts/desktop-dev.js",
     "desktop:install": "./scripts/desktop-install.sh",
     "build": "tsc && vite build --config vite.desktop.config.ts",
