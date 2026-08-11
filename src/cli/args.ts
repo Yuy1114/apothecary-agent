@@ -31,6 +31,9 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
 给定时任务用
   apo brief                       先扫 _inbox 起草归位提案，再报出所有等你处理的事
                                   一条命令搞定「早上告诉我欠什么」，顺序固定不会搞反
+  apo schedule [<YYYY-MM-DD>]      生成某天（缺省今天）的日程，落盘到 schedule/<date>.md
+                                  并回显日程。唯一会写药柜的命令：日程是派生数据，
+                                  不经提案直接落盘（晨间 cron / Hermes 的入口）
 
 维护命令（只写 agent 自己的目录，不碰药柜）
   apo describe images             用视觉模型读遍药柜里的图片，写进语义层并建索引

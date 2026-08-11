@@ -14,6 +14,7 @@ import {
   statusCommand,
   type CommandResult,
 } from "./commands/read.js";
+import { scheduleCommand } from "./commands/schedule.js";
 import {
   auditReadmeCommand,
   captureCommand,
@@ -33,9 +34,12 @@ import {
  *
  * Two invariants hold across every command:
  *
- * - **Nothing here can change the vault.** Commands either read, or produce a
- *   proposal awaiting approval. Approving is a human action and deliberately
- *   has no command, so an unattended caller cannot talk itself into applying.
+ * - **Nothing here can change the vault** — except `apo schedule`, the single
+ *   deliberate exception: a generated schedule is derived output (like activity
+ *   digests), so it skips the proposal gate by design. Everything else either
+ *   reads, or produces a proposal awaiting approval. Approving is a human
+ *   action and deliberately has no command, so an unattended caller cannot talk
+ *   itself into applying.
  * - **stdout carries only the result.** Diagnostics go to stderr, so `--json`
  *   output stays parseable even when a use case logs progress.
  */
@@ -73,6 +77,9 @@ async function dispatch(args: ParsedArgs, vaultPath: string): Promise<CommandRes
 
     case "day":
       return dayCommand(vaultPath, requireArg(second, "day 需要一个日期，例如 apo day 2026-08-11"));
+
+    case "schedule":
+      return scheduleCommand(vaultPath, second);
 
     case "findings":
       return findingsCommand(vaultPath, args.limit ?? 20);
