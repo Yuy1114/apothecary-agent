@@ -7,7 +7,7 @@
  *   vault artifacts reports              infrastructure (disk, yaml, markdown)
  *   application use cases + ports/ (interfaces infra must implement)
  *   mastra      framework adapters, agents, tools, workflows
- *   desktop     Electron shell / composition root
+ *   desktop cli Electron shell and headless CLI — the composition roots
  *
  * The one rule that matters: dependencies point down. Every violation this file
  * forbids was a real edge in the codebase before the layering refactor.
@@ -30,18 +30,18 @@ export default {
         "upper layers import them.",
       from: { path: "^src/domain" },
       to: {
-        path: "^src/(application|mastra|vault|desktop|reports|artifacts|config|safety|observability|protocol)",
+        path: "^src/(application|mastra|vault|desktop|cli|reports|artifacts|config|safety|observability|protocol)",
       },
     },
     {
       name: "application-not-framework",
       severity: "error",
       comment:
-        "Use cases must not import Mastra, its agents, its tools, or the Electron " +
-        "shell. If a use case needs an LLM or the vector index, declare a port in " +
+        "Use cases must not import Mastra, its agents, its tools, or a composition " +
+        "root. If a use case needs an LLM or the vector index, declare a port in " +
         "application/ports/ and let mastra/adapters/ implement it.",
       from: { path: "^src/application", pathNot: "\\.test\\.ts$" },
-      to: { path: "^src/(mastra|desktop)" },
+      to: { path: "^src/(mastra|desktop|cli)" },
     },
     {
       name: "no-mastra-package-in-application",
@@ -55,9 +55,9 @@ export default {
       severity: "error",
       comment:
         "vault/, artifacts/ and reports/ are storage and rendering. They may not " +
-        "reach up into use cases, the framework or the shell.",
+        "reach up into use cases, the framework or a composition root.",
       from: { path: "^src/(vault|artifacts|reports)", pathNot: "\\.test\\.ts$" },
-      to: { path: "^src/(application|mastra|desktop)" },
+      to: { path: "^src/(application|mastra|desktop|cli)" },
     },
     {
       name: "foundation-not-infra",
@@ -67,7 +67,7 @@ export default {
         "of them needs a constant from an upper layer, the constant is in the " +
         "wrong place — sink it into domain/.",
       from: { path: "^src/(config|utils|safety|observability)", pathNot: "\\.test\\.ts$" },
-      to: { path: "^src/(vault|application|mastra|desktop|reports)" },
+      to: { path: "^src/(vault|application|mastra|desktop|cli|reports)" },
     },
     {
       name: "ports-declare-nothing-concrete",

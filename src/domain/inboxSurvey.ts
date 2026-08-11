@@ -89,7 +89,7 @@ export function isPackageDir(name: string): boolean {
   return PACKAGE_EXTS.has(path.extname(name).toLowerCase());
 }
 
-const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".heic", ".heif", ".bmp", ".tiff", ".tif"]);
+export const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".heic", ".heif", ".bmp", ".tiff", ".tif"]);
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".flv", ".wmv"]);
 const AUDIO_EXTS = new Set([".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus"]);
 

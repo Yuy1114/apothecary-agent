@@ -31,10 +31,12 @@ notes/（原子笔记，**严格平铺、不建子文件夹**，主题变标签�
 4. 每个条目调一次 recordDecision；直到全部有判断后结束，并简述覆盖情况。
 
 ## 按 kind 的规则
-- image/video/audio：直接归 media/（\`Screenshot*\`→media/screenshots/，其余→media/attachments/），**无需读内容**。
+- 视频/音频、电子书、源码文件、以及**名字认得出的**图片（截图工具名、相机名）：快速归位已按类型定好（截图→media/screenshots/、相机名→media/photos/、其余媒体→media/attachments/、.epub→resources/books/、源码→resources/code/），survey 里不会出现，不必处理。
+- **名字认不出的图片**（哈希名、\`未命名\`、\`图片1\` 之类）会留在 survey 里给你：**对它调 readInboxFile**——配了视觉模型时它会告诉你图里是什么、上面写了什么字，并给一个 \`suggestedName\`。看清楚再判：文档/收据/证件的照片是**原件**（records/），白板/草图/示意图多半配合某条笔记（media/attachments/ 或对应 projects/），随手拍的生活照才是 media/photos/。拿到 \`suggestedName\` 就用它做 \`rename\`（保留原扩展名），别让哈希名进 vault。返回 \`error\` 时说明看不了这张图（没配视觉模型或调用失败）：**不要 leave**，按名字判断，判断不了就 \`dest="media/attachments/"\` 置信度 0.6 —— 让它进药柜等你复核，好过烂在 _inbox。
 - package：→ media/photos/，当整体一个决策。
 - directory：当作一个单元。\`dest\` 直接写它**应成为的目标目录**（如 \`resources/books/\`）——其内容会被合并进去，**不要** rename、也不要在 dest 后再加目录名。
-- markdown/text/pdf：先只凭名字判断该去哪层；notes 一律 \`dest="notes/"\` 并把主题写进 \`tags\`（如 programming、java）。pdf 无法在此读取，按名字判断或低置信度 leave。
+- markdown/text/pdf/docx/pptx/xlsx/html：先只凭名字判断该去哪层；notes 一律 \`dest="notes/"\` 并把主题写进 \`tags\`（如 programming、java）。名字不足以判断时 **readInboxFile 能读出它们的正文**（PDF/Word/PPT/Excel/网页都可以），读完再定，别急着 leave。
+- **原件 vs 思考**（README 的规矩）：收到的 PDF/表格/合同这类**原件**进 \`records/\`（账单、合同、证件、病历）或 \`resources/\`（论文、剪藏、书）；**你自己写的分析**才进 \`areas/\` 或 \`notes/\`。这条区分**必须读内容才能判**——一份账单和一篇论文都是 .pdf，光看名字分不开，所以拿不准就读。
 - **文件名必清理**：凡 move 进 notes/ 或 journal/，**必须**给一个干净、人类可读的 \`rename\`（基于文件真实标题/含义，如 \`Kubernetes 笔记.md\`），**绝不保留带前缀的扁平原名**（如 \`a__b__c.md\`）；主题放进 tags，不放文件名。（工具会拒绝没设 rename 的 notes/journal move。）其他层的扁平文件也尽量清理成可读名。
 - junk：survey 已单列（不在 entries 里），你可对这类整体用 action="archive" 或忽略，不必逐个处理。
 

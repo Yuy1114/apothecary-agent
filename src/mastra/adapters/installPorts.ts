@@ -4,6 +4,8 @@ import { ragSearchIndex } from "./ragSearchIndex.js";
 import { generateFileSummary } from "./mastraFileSummarizer.js";
 import { setSearchIndex } from "../../application/ports/searchIndex.js";
 import { setFileSummarizer } from "../../application/ports/fileSummarizer.js";
+import { setImageDescriber } from "../../application/ports/imageDescriber.js";
+import { visionImageDescriber } from "./visionImageDescriber.js";
 
 /**
  * Bind every registry-injected port to its Mastra implementation.
@@ -24,4 +26,8 @@ export function installPorts(vectorStore: LibSQLVector): void {
   setVectorStore(vectorStore);
   setSearchIndex(ragSearchIndex);
   setFileSummarizer(generateFileSummary);
+  // Installed unconditionally even though a vision model is optional: the
+  // adapter reports its own availability from configuration on every call, so
+  // adding a key and relaunching turns it on with no wiring change.
+  setImageDescriber(visionImageDescriber);
 }

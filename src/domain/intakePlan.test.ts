@@ -9,6 +9,7 @@ function decision(over: Partial<IntakeDecision>): IntakeDecision {
     tags: [],
     confidence: 0.9,
     rationale: "reason",
+    decidedBy: "agent",
     decidedAt: "2026-07-21T00:00:00.000Z",
     ...over,
   };

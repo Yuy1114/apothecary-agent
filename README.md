@@ -24,8 +24,8 @@ new knowledge / file / manual edit
 
 | # | Capability | What it does |
 |---|------------|--------------|
-| 1 | Chat / Knowledge Capture | RAG Q&A over the vault with source citations; capture a durable insight from a conversation as a proposal. |
-| 2 | Inbox Triage | Understand `inbox/` notes and propose where they belong; moving a note keeps directory README indexes in sync. |
+| 1 | Chat / Knowledge Capture | RAG Q&A over the vault with source citations; capture a durable insight from a conversation as a proposal. Images are searchable too: `apo describe images` reads each one with a vision model and indexes what it saw, so a query matches words that were only ever *inside* a screenshot. |
+| 2 | Inbox Triage | Understand `_inbox/` items and propose where they belong; moving a note keeps directory README indexes in sync. Type-determined files (screenshots, photos, media, ebooks, source) are placed by deterministic rule before any model runs; documents are read for real — `.md`/`.txt` plus `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html` — so a bank statement and a research paper are told apart rather than guessed at from the filename. |
 | 3 | Change Awareness / Sync | A file watcher records created/modified/deleted notes; manual sync + snapshot diff recover missed events and re-sync the index and semantic layer. |
 | 4 | Semantic Maintenance | File summaries, topic/concept graph, typed relations, duplicate detection/classification, canonical candidates, and a maintenance-findings worklist. |
 | 5 | Knowledge Profile & Views | A standing `knowledge-profile.{md,json}` and per-topic knowledge-system views under `.agent/views/`. |
@@ -99,6 +99,8 @@ Configuration is via environment variables (a `.env` is loaded):
 | `APOTHECARY_VAULT_PATH` | Path to the Markdown vault | `/Users/yuy/apothecary-vault` |
 | `APOTHECARY_EMBEDDING_API_KEY` / `OPENAI_API_KEY` | Embeddings for the vector index | — |
 | `APOTHECARY_EMBEDDING_BASE_URL` / `_MODEL` | Embedding endpoint / model | aihubmix / `text-embedding-3-small` |
+| `APOTHECARY_VISION_MODEL` | Vision model that reads inbox images (e.g. `openai/gpt-4o-mini`). **Optional** — unset, images are placed by rule and never read. | — |
+| `APOTHECARY_VISION_API_KEY` / `_BASE_URL` | Vision credentials. Fall back to the embedding endpoint's — one OpenAI-compatible aggregator usually serves both, so naming a model is often the only setting needed. | embedding key / URL, then `OPENAI_API_KEY` |
 | `APOTHECARY_SEMANTIC_SYNC_DEBOUNCE_MS` | Watcher → semantic-sync debounce | `8000` |
 | `APOTHECARY_DESKTOP_WATCH` | Set to `0` to skip the desktop's vault watcher (use when running `desktop:dev` next to `mastra dev` so a single watcher owns change detection) | on |
 
@@ -128,6 +130,42 @@ Mastra Studio remains available as a development and debugging surface:
 ```bash
 pnpm run dev     # Mastra Studio (agents, tools, workflows)
 ```
+
+### 倾倒站 (the drop station)
+
+A small always-on-top window summoned from the menu bar — drag files onto it (or
+straight onto the tray icon) and they move into `_inbox`, no Finder navigation.
+Where they end up is still decided by an approvable intake proposal; the drop
+only gets them through the door. A file already inside the vault is refused:
+re-filing one is a vault change and belongs in a move proposal.
+
+### The `apo` CLI
+
+The third composition root is headless, so another agent or a cron job can drive
+Apothecary **without the desktop app running** — which is otherwise a hard
+requirement for every background loop it has:
+
+```bash
+npx tsc                      # build once; dist/ is gitignored
+node dist/cli/index.js --help
+```
+
+Commands are grouped by permission, and the grouping is the contract:
+
+| Group | Commands | Effect |
+|-------|----------|--------|
+| Read | `status`, `proposals list\|show`, `ask`, `findings`, `journal`, `anki due` | Nothing is written. |
+| Propose | `intake plan`, `capture`, `audit readme`, `polish` | Only ever produces a proposal awaiting approval. |
+
+**Approving has no command.** An unattended caller cannot talk itself into
+applying a change; the human approves in the desktop app. `--json` is for agents,
+the default Chinese summary is for people, and stdout carries only the result
+(diagnostics go to stderr) so `--json` stays parseable.
+
+The CLI resolves the vault the same way the app does — reading the desktop's
+persisted settings — so the two can never report on different vaults, and it
+reads credentials from the project's `.env` rather than the app's
+`safeStorage`-encrypted keys, which only Electron can decrypt.
 
 ## Verifying
 

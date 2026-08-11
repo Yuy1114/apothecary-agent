@@ -4,8 +4,12 @@
   "main": "dist/desktop/main.js",
   "description": "Mastra-native agent for local Markdown knowledge bases.",
   "type": "module",
+  "bin": {
+    "apo": "dist/cli/index.js"
+  },
   "scripts": {
     "dev": "mastra dev",
+    "cli": "tsc && node dist/cli/index.js",
     "desktop:dev": "node scripts/desktop-dev.js",
     "desktop:install": "./scripts/desktop-install.sh",
     "build": "tsc && vite build --config vite.desktop.config.ts",
@@ -39,12 +43,14 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
     "fast-glob": "^3.3.3",
+    "fflate": "^0.8.3",
     "gray-matter": "^4.0.3",
     "lucide-react": "^1.23.0",
     "mastra": "^1.16.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^3.6.0",
+    "unpdf": "^1.8.0",
     "yaml": "^2.8.2",
     "zod": "^3.25.76",
     "zod-from-json-schema": "0.5.3",

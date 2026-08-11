@@ -177,12 +177,15 @@ export const SaveSettingsInputSchema = z.object({
   embeddingBaseUrl: z.string().max(500).optional(),
   embeddingModel: z.string().max(200).optional(),
   embeddingTimeoutMs: z.number().int().positive().max(600_000).optional(),
+  visionBaseUrl: z.string().max(500).optional(),
+  visionModel: z.string().max(200).optional(),
   watch: z.boolean().optional(),
   autoIntakePlanning: z.boolean().optional(),
   // Plaintext keys from the form: a non-empty value sets/replaces, "" clears, and
   // an absent field leaves the stored (encrypted) key untouched.
   deepseekApiKey: z.string().max(500).optional(),
   embeddingApiKey: z.string().max(500).optional(),
+  visionApiKey: z.string().max(500).optional(),
 });
 export type SaveSettingsInput = z.infer<typeof SaveSettingsInputSchema>;
 
@@ -191,6 +194,22 @@ export const SettingsChannel = {
   save: "apothecary:settings-save",
   chooseVault: "apothecary:settings-choose-vault",
   relaunch: "apothecary:app-relaunch",
+} as const;
+
+/** 倾倒站: drag files in, they land in `_inbox`. */
+export const DropStationChannel = {
+  /** renderer → main: absolute paths of the dropped files. */
+  drop: "apothecary:drop-files",
+  /** main → renderer: outcome of a drop, whoever triggered it. */
+  result: "apothecary:drop-result",
+  /**
+   * renderer → main: the most recent outcome. A drop on the tray icon creates
+   * the window *after* the files are filed, so the push can land before the page
+   * has subscribed; the window asks on mount to close that race.
+   */
+  last: "apothecary:drop-last",
+  /** renderer → main: dismiss the window (Escape / close button). */
+  close: "apothecary:drop-close",
 } as const;
 
 export const DesktopChannel = {

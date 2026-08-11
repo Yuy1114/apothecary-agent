@@ -6,14 +6,21 @@ type DesktopSettingsView = {
   embeddingBaseUrl?: string;
   embeddingModel?: string;
   embeddingTimeoutMs?: number;
+  /** Vision model for reading _inbox images; credentials fall back to the embedding ones. */
+  visionModel?: string;
+  visionBaseUrl?: string;
   watch?: boolean;
   autoIntakePlanning?: boolean;
   hasDeepseekKey: boolean;
   hasEmbeddingKey: boolean;
+  hasVisionKey: boolean;
 };
-type SaveSettingsPatch = Partial<Omit<DesktopSettingsView, "hasDeepseekKey" | "hasEmbeddingKey">> & {
+type SaveSettingsPatch = Partial<
+  Omit<DesktopSettingsView, "hasDeepseekKey" | "hasEmbeddingKey" | "hasVisionKey">
+> & {
   deepseekApiKey?: string;
   embeddingApiKey?: string;
+  visionApiKey?: string;
 };
 type ProposalDecisionState = { proposalId: string; title: string; type: string; targetFiles: string[] };
 type RecentActivityItem = {

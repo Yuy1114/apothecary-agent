@@ -9,6 +9,10 @@ export const DesktopSettingsSchema = z.object({
   embeddingBaseUrl: z.string().optional(),
   embeddingModel: z.string().optional(),
   embeddingTimeoutMs: z.number().int().positive().optional(),
+  // Vision. Optional and separately paid for: with no model set, images are
+  // placed by rule and never read (see application/ports/imageDescriber.ts).
+  visionBaseUrl: z.string().optional(),
+  visionModel: z.string().optional(),
   watch: z.boolean().optional(),
   // Deliberately renamed from `autoIntake` when the feature changed from
   // auto-APPLYING inbox moves to only drafting an approvable plan: any stored
@@ -21,19 +25,29 @@ export const DesktopSettingsSchema = z.object({
   // plaintext on disk, and never sent to the renderer (see sanitizeSettings).
   deepseekApiKeyEnc: z.string().optional(),
   embeddingApiKeyEnc: z.string().optional(),
+  visionApiKeyEnc: z.string().optional(),
 });
 
 export type DesktopSettings = z.infer<typeof DesktopSettingsSchema>;
 
 /** Renderer-safe view: config fields plus booleans for whether each key is set. */
-export type PublicDesktopSettings = Omit<DesktopSettings, "deepseekApiKeyEnc" | "embeddingApiKeyEnc"> & {
+export type PublicDesktopSettings = Omit<
+  DesktopSettings,
+  "deepseekApiKeyEnc" | "embeddingApiKeyEnc" | "visionApiKeyEnc"
+> & {
   hasDeepseekKey: boolean;
   hasEmbeddingKey: boolean;
+  hasVisionKey: boolean;
 };
 
 export function sanitizeSettings(settings: DesktopSettings): PublicDesktopSettings {
-  const { deepseekApiKeyEnc, embeddingApiKeyEnc, ...rest } = settings;
-  return { ...rest, hasDeepseekKey: Boolean(deepseekApiKeyEnc), hasEmbeddingKey: Boolean(embeddingApiKeyEnc) };
+  const { deepseekApiKeyEnc, embeddingApiKeyEnc, visionApiKeyEnc, ...rest } = settings;
+  return {
+    ...rest,
+    hasDeepseekKey: Boolean(deepseekApiKeyEnc),
+    hasEmbeddingKey: Boolean(embeddingApiKeyEnc),
+    hasVisionKey: Boolean(visionApiKeyEnc),
+  };
 }
 
 /**
@@ -43,7 +57,7 @@ export function sanitizeSettings(settings: DesktopSettings): PublicDesktopSettin
  */
 export function settingsEnv(
   settings: Partial<DesktopSettings>,
-  keys: { deepseekApiKey?: string; embeddingApiKey?: string } = {},
+  keys: { deepseekApiKey?: string; embeddingApiKey?: string; visionApiKey?: string } = {},
 ): Record<string, string> {
   const env: Record<string, string> = {};
   const put = (k: string, v?: string) => { if (v) env[k] = v; };
@@ -54,6 +68,9 @@ export function settingsEnv(
   put("APOTHECARY_EMBEDDING_BASE_URL", settings.embeddingBaseUrl);
   put("APOTHECARY_EMBEDDING_MODEL", settings.embeddingModel);
   if (settings.embeddingTimeoutMs) env.APOTHECARY_EMBEDDING_TIMEOUT_MS = String(settings.embeddingTimeoutMs);
+  put("APOTHECARY_VISION_API_KEY", keys.visionApiKey);
+  put("APOTHECARY_VISION_BASE_URL", settings.visionBaseUrl);
+  put("APOTHECARY_VISION_MODEL", settings.visionModel);
   if (settings.watch === false) env.APOTHECARY_DESKTOP_WATCH = "0";
   // Opt-in: auto-intake surveys `_inbox` drops in the background and drafts an
   // approvable intake proposal — it never moves files itself (consent stays with

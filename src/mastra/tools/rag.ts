@@ -139,7 +139,25 @@ export async function reindexFile(
 ): Promise<{ added: number }> {
   const normalizedPath = toPortablePath(relativePath);
   const absolutePath = path.join(VAULT_PATH, normalizedPath);
-  const content = await fs.readFile(absolutePath, "utf8");
+  return indexContent(normalizedPath, await fs.readFile(absolutePath, "utf8"));
+}
+
+/**
+ * Index text on behalf of a path whose own bytes cannot be embedded — an
+ * image's vision description. Same index, same metadata, same chunking, so a
+ * hit is indistinguishable from a note hit except that its source is a picture.
+ */
+export async function indexText(
+  relativePath: string,
+  content: string
+): Promise<{ added: number }> {
+  return indexContent(toPortablePath(relativePath), content);
+}
+
+async function indexContent(
+  normalizedPath: string,
+  content: string
+): Promise<{ added: number }> {
   const chunks = await buildChunkDrafts(normalizedPath, content);
 
   if (chunks.length === 0) {

@@ -1,0 +1,157 @@
+/* 倾倒站. Imports the shared token layer so it inherits the console's palette
+   (including its dark-mode switch) without pulling in any of its components. */
+@import "../../renderer/styles.css";
+
+html,
+body {
+  /* The window is transparent so the card can have real corners and a shadow. */
+  background: transparent;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.station {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* The whole title bar drags the frameless window; the close button opts out. */
+.station__bar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.station__title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-muted);
+}
+
+.station__close {
+  -webkit-app-region: no-drag;
+  border: 0;
+  background: transparent;
+  color: var(--fg-subtle);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.station__close:hover {
+  background: var(--bg-muted);
+  color: var(--fg);
+}
+
+.zone {
+  flex: 1;
+  min-height: 116px;
+  margin: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.zone--over {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+.zone--busy {
+  opacity: 0.7;
+}
+
+.zone__icon {
+  font-size: 20px;
+  color: var(--fg-subtle);
+  line-height: 1;
+}
+.zone--over .zone__icon {
+  color: var(--primary);
+}
+
+.zone__label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.zone__hint {
+  font-size: 11px;
+  color: var(--fg-subtle);
+}
+
+.report {
+  border-top: 1px solid var(--border);
+  padding: 8px 10px 10px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.report__head {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-bottom: 6px;
+}
+
+.report__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.outcome {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.outcome__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outcome__note {
+  flex: none;
+  font-size: 11px;
+  color: var(--fg-subtle);
+}
+.outcome--filed .outcome__note {
+  color: var(--success);
+}
+.outcome--rejected .outcome__note,
+.outcome--failed .outcome__note {
+  color: var(--danger);
+}

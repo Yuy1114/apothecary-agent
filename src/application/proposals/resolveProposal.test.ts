@@ -100,7 +100,7 @@ describe("resolveProposalById", () => {
     await writeFile(abs("_inbox/drop.md"), "# Drop", "utf8");
     await writeFile(abs("_inbox/stale.md"), "# Stale", "utf8");
     await writeFile(abs("_inbox/unsure.md"), "# Unsure", "utf8");
-    const base = { kind: "markdown", tags: [], confidence: 0.9, rationale: "r", decidedAt: "t" };
+    const base = { kind: "markdown", tags: [], confidence: 0.9, rationale: "r", decidedBy: "agent" as const, decidedAt: "t" };
     const p = await propose("intake", {
       decisions: [
         { ...base, source: "_inbox/drop.md", action: "move", dest: "notes/" },
@@ -122,7 +122,7 @@ describe("resolveProposalById", () => {
   it("leaves an intake proposal open when nothing could be applied", async () => {
     const p = await propose("intake", {
       decisions: [
-        { source: "_inbox/gone.md", kind: "markdown", action: "move", dest: "notes/", tags: [], confidence: 0.9, rationale: "r", decidedAt: "t" },
+        { source: "_inbox/gone.md", kind: "markdown", action: "move", dest: "notes/", tags: [], confidence: 0.9, rationale: "r", decidedBy: "agent", decidedAt: "t" },
       ],
     });
 

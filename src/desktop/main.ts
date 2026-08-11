@@ -21,6 +21,7 @@ import {
 } from "./settings.js";
 import {
   DesktopChannel,
+  DropStationChannel,
   JournalOpenEditorInputSchema,
   SaveSettingsInputSchema,
   SettingsChannel,
@@ -28,6 +29,8 @@ import {
 } from "./contracts.js";
 import { initFileLogging } from "./logging.js";
 import { installScheduleTray, type ScheduleTray } from "./tray.js";
+import { createDropStation, dropStationPage } from "./dropStation.js";
+import { dropIntoInbox } from "../application/intake/dropIntoInbox.js";
 import { startCaptureWatcher } from "./englishCapture.js";
 import { startScheduleTicker, type ReviewReminder } from "./scheduler.js";
 import { togglePlanItem } from "../application/journal/journalStore.js";
@@ -84,6 +87,7 @@ function applySettingsToEnv(settings: DesktopSettings): void {
   Object.assign(process.env, settingsEnv(settings, {
     deepseekApiKey: decryptSecret(settings.deepseekApiKeyEnc),
     embeddingApiKey: decryptSecret(settings.embeddingApiKeyEnc),
+    visionApiKey: decryptSecret(settings.visionApiKeyEnc),
   }));
   // settingsEnv only emits set values, and Object.assign never unsets — but the
   // auto-intake kill switch must take effect immediately, not on next relaunch
@@ -97,12 +101,13 @@ function registerSettingsIpc(): void {
     return sanitizeSettings(settings);
   });
   ipcMain.handle(SettingsChannel.save, async (_event, input) => {
-    const { deepseekApiKey, embeddingApiKey, ...config } = SaveSettingsInputSchema.parse(input ?? {});
+    const { deepseekApiKey, embeddingApiKey, visionApiKey, ...config } = SaveSettingsInputSchema.parse(input ?? {});
     const patch: Partial<DesktopSettings> = { ...config };
     // A provided key value replaces (non-empty) or clears ("") the stored secret;
     // an absent field leaves it untouched.
     if (deepseekApiKey !== undefined) patch.deepseekApiKeyEnc = deepseekApiKey ? encryptSecret(deepseekApiKey) : undefined;
     if (embeddingApiKey !== undefined) patch.embeddingApiKeyEnc = embeddingApiKey ? encryptSecret(embeddingApiKey) : undefined;
+    if (visionApiKey !== undefined) patch.visionApiKeyEnc = visionApiKey ? encryptSecret(visionApiKey) : undefined;
     const merged = await persistSettings(patch);
     applySettingsToEnv(merged); // diagnostics (which read env live) reflect immediately
     return sanitizeSettings(merged);
@@ -584,11 +589,47 @@ app
       trayHandle?.redraw();
     };
 
+    // 倾倒站: the low-friction door into `_inbox`. Files landing there are what
+    // the watcher's auto-intake pass turns into a filing proposal.
+    const dropStation = createDropStation({
+      preloadPath: path.join(currentDir, "preload.cjs"),
+      pageUrl: dropStationPage(process.env.APOTHECARY_RENDERER_URL),
+    });
+    // Held so a window opened *after* a tray drop can still show what landed.
+    let lastDrop: Awaited<ReturnType<typeof dropIntoInbox>> | null = null;
+    const fileDroppedPaths = async (paths: string[]) => {
+      const result = await dropIntoInbox(vaultPath, paths);
+      logger.info("intake", `倾倒站：入库 ${result.filed}/${result.outcomes.length}`);
+      lastDrop = result;
+      // Push regardless of who triggered the drop, so the window is the single
+      // place the outcome is shown.
+      dropStation.report(result);
+      return result;
+    };
+    ipcMain.handle(DropStationChannel.drop, async (_event, input: { paths: string[] }) =>
+      fileDroppedPaths(input?.paths ?? []),
+    );
+    ipcMain.handle(DropStationChannel.last, () => lastDrop);
+    ipcMain.handle(DropStationChannel.close, () => {
+      dropStation.hide();
+    });
+
     const tray = installScheduleTray({
       vaultPath,
       showConsole,
       openJournal: openJournalToday,
       iconPath: path.join(app.getAppPath(), "build", "tray", "apothecaryTemplate.png"),
+      openDropStation: (anchor) => void dropStation.toggle(anchor),
+      // Dropping straight onto the menu-bar icon skips the window entirely; the
+      // window is still opened afterwards so the outcome is visible.
+      onFilesDroppedOnTray: (paths) => {
+        void (async () => {
+          // Open first, then file: the window is where the outcome shows up, and
+          // it reads `last` on mount if the push beats its subscription.
+          await dropStation.show();
+          await fileDroppedPaths(paths);
+        })().catch((error) => logger.warn("intake", `倾倒失败: ${(error as Error).message}`));
+      },
       reading: {
         session: captureWatcher.session,
         toggle: captureWatcher.toggle,
@@ -619,12 +660,14 @@ app
     app.on("before-quit", () => {
       ticker.stop();
       captureWatcher.stop();
+      dropStation.destroy();
       tray.destroy();
     });
     if (testHooks) {
       (globalThis as Record<string, unknown>).__apothecaryTest = {
         tick: ticker.tick,
         showConsole,
+        openDropStation: () => dropStation.show(),
         buildTrayMenu: async () =>
           (await tray.buildMenuTemplate()).map(({ label, type, checked, enabled }) => ({ label, type, checked, enabled })),
         toggle: (line: number) => togglePlanItem(vaultPath, "daily", formatLocalDate(), line),

@@ -39,7 +39,7 @@ afterEach(async () => {
 });
 
 function decision(o: Partial<IntakeDecision> & Pick<IntakeDecision, "source" | "action">): IntakeDecision {
-  return { kind: "markdown", tags: [], confidence: 0.9, rationale: "r", decidedAt: "t", ...o };
+  return { kind: "markdown", tags: [], confidence: 0.9, rationale: "r", decidedBy: "agent", decidedAt: "t", ...o };
 }
 
 describe("executeIntake", () => {

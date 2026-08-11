@@ -27,6 +27,8 @@ export const apothecaryDb = {
   studioStore: () => dbUrl("memory", "studio.db"),
   /** Desktop app's separate Mastra store (kept apart to avoid lock contention). */
   desktopStore: () => dbUrl("memory", "desktop.db"),
+  /** Same reasoning for the CLI: it may run while the desktop app is live. */
+  cliStore: () => dbUrl("memory", "cli.db"),
   /** Pending-change ledger (agent work queue). */
   changeLog: () => dbUrl("queue", "change-log.db"),
   /** Reading-mode English captures waiting to be settled against Anki. */

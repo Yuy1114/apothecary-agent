@@ -6,8 +6,10 @@ import { classifyLayer } from "../../vault/classifyLayer.js";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { nowIso } from "../../utils/time.js";
 
-// The organizer supplies everything except the timestamp, which we stamp here.
-const RecordDecisionInputSchema = IntakeDecisionSchema.omit({ decidedAt: true });
+// The organizer supplies everything except the timestamp and the authorship,
+// which we stamp here — a decision arriving through this tool is by definition
+// the agent's, never a 快速归位 rule's.
+const RecordDecisionInputSchema = IntakeDecisionSchema.omit({ decidedAt: true, decidedBy: true });
 
 // A move must target one of the real vault content layers — never _inbox, and
 // never the agent's private home (.apothecary/.agent live outside the vault).
@@ -60,7 +62,10 @@ export const recordDecisionTool = createTool({
         };
       }
     }
-    const { total } = await recordIntakeDecision({ ...input, decidedAt: nowIso() }, apothecaryHome());
+    const { total } = await recordIntakeDecision(
+      { ...input, decidedBy: "agent", decidedAt: nowIso() },
+      apothecaryHome(),
+    );
     return { recorded: true, source: input.source, total };
   },
 });
