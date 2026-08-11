@@ -8,7 +8,14 @@ import { nowIso } from "../../utils/time.js";
 
 /* ── Schemas ─────────────────────────────────────────────────────────── */
 
-const InputSchema = z.object({ vaultPath: z.string() });
+const InputSchema = z.object({
+  vaultPath: z.string(),
+  /**
+   * 目标日期 YYYY-MM-DD；缺省生成今天的日程。CLI `apo schedule <date>` 透传
+   * 进来，Studio 直接触发时可以不传（接线必需的最小改动，生成逻辑本身没动）。
+   */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
 
 const OutputSchema = z.object({
   date: z.string(),
@@ -31,6 +38,8 @@ const resolveVaultStep = createStep({
   outputSchema: InputSchema,
   execute: async ({ inputData }) => ({
     vaultPath: await resolveExistingDirectory(inputData.vaultPath),
+    // date 也要原样透传给下一步：步骤链上一步的输出就是下一步的输入。
+    date: inputData.date,
   }),
 });
 
@@ -39,8 +48,11 @@ const generateScheduleStep = createStep({
   inputSchema: InputSchema,
   outputSchema: OutputSchema,
   execute: async ({ inputData }) => {
-    const today = formatLocalDate();
-    const dayOfWeek = new Date().getDay();
+    // 指定日期时以它为准（含星期/周末判断），否则沿用“今天”。
+    const today = inputData.date ?? formatLocalDate();
+    const dayOfWeek = inputData.date
+      ? new Date(`${inputData.date}T00:00:00`).getDay()
+      : new Date().getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const weekdayLabel = ["日", "一", "二", "三", "四", "五", "六"][dayOfWeek];
 
@@ -68,11 +80,12 @@ const generateScheduleStep = createStep({
     const draft = ScheduleDraftSchema.parse(result.object);
     const generatedAt = nowIso();
 
-    // Persist to vault
-    await saveSchedule(inputData.vaultPath, { ...draft, generatedAt });
+    // Persist to vault。落盘日期钉死为请求的日期（缺省=今天），保证文件路径
+    // 与调用方期望一致，不随模型输出漂移。
+    await saveSchedule(inputData.vaultPath, { ...draft, date: today, generatedAt });
 
     return {
-      date: draft.date,
+      date: today,
       blocks: draft.blocks,
       notes: draft.notes,
       markdown: result.text ?? "",

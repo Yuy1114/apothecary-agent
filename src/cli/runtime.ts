@@ -38,20 +38,24 @@ export async function installCliPorts(): Promise<import("@mastra/libsql").LibSQL
 }
 
 /**
- * A minimal Mastra host: the organizer agent only, no watcher, no observability
- * file. Enough to drive an intake pass headlessly.
+ * A minimal Mastra host: the organizer agent plus the daily-plan workflow — no
+ * watcher, no observability file. Enough to drive an intake pass headlessly
+ * and to trigger schedule generation from the morning cron.
  */
 export async function createCliMastra(): Promise<CliMastra> {
   const vectorStore = await installCliPorts();
-  const [{ Mastra }, { LibSQLStore }, { organizer }, { apothecaryDb }] = await Promise.all([
+  const [{ Mastra }, { LibSQLStore }, { organizer }, { dailyPlanWorkflow }, { apothecaryDb }] = await Promise.all([
     import("@mastra/core/mastra"),
     import("@mastra/libsql"),
     import("../mastra/agents/organizer.js"),
+    import("../mastra/workflows/daily-plan.js"),
     import("../config/apothecaryDb.js"),
   ]);
 
   const mastra = new Mastra({
     agents: { organizer },
+    // 注册键就是 getWorkflow 的查找键（见 sync-watcher.ts 的注释约定）。
+    workflows: { dailyPlanWorkflow },
     storage: new LibSQLStore({ id: "apothecary-cli-storage", url: apothecaryDb.cliStore() }),
     vectors: { vaultChunks: vectorStore },
   });
