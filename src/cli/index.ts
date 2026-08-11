@@ -5,10 +5,12 @@ import { resolveVaultPath } from "./vaultLocator.js";
 import {
   ankiDueCommand,
   askCommand,
+  dayCommand,
   findingsCommand,
   journalCommand,
   proposalsListCommand,
   proposalsShowCommand,
+  relatedCommand,
   statusCommand,
   type CommandResult,
 } from "./commands/read.js";
@@ -61,6 +63,16 @@ async function dispatch(args: ParsedArgs, vaultPath: string): Promise<CommandRes
 
     case "ask":
       return askCommand(vaultPath, requireArg(second, 'ask 需要一个问题，例如 apo ask "…"'), args.topK);
+
+    case "related":
+      return relatedCommand(
+        vaultPath,
+        requireArg(second, 'related 需要一个话题，例如 apo related "排课"'),
+        args.topK,
+      );
+
+    case "day":
+      return dayCommand(vaultPath, requireArg(second, "day 需要一个日期，例如 apo day 2026-08-11"));
 
     case "findings":
       return findingsCommand(vaultPath, args.limit ?? 20);

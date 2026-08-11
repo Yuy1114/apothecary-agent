@@ -1,3 +1,6 @@
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { apothecaryHome } from "../../config/apothecaryHome.js";
 import { buildMaintenanceFindings } from "../../domain/maintenanceFindings.js";
 import { periodKeyFor, shiftPeriod } from "../../domain/journal.js";
@@ -7,6 +10,7 @@ import { detectSupersededNotes } from "../../application/maintenance/detectSuper
 import { ankiConfig, findCards, invokeAnki } from "../../application/english/ankiConnect.js";
 import { loadCanonicalCandidates } from "../../vault/semanticStore.js";
 import { listProposals, loadProposal } from "../../vault/proposalStore.js";
+import { safeVaultPath } from "../../safety/pathSafety.js";
 import { renderStatusText } from "../renderStatus.js";
 
 /**
@@ -112,6 +116,173 @@ export async function askCommand(
     if (r.supersededBy) lines.push(`    ⚠︎ 已被 ${r.supersededBy} 取代，优先看那一篇`);
     lines.push(`    ${r.content.replace(/\s+/g, " ").slice(0, 160)}…`);
     lines.push("");
+  }
+  return { json, text: lines.join("\n").trimEnd() };
+}
+
+export async function relatedCommand(
+  vaultPath: string,
+  topic: string,
+  topK = 5,
+): Promise<CommandResult> {
+  // Dynamic: rag.ts freezes APOTHECARY_VAULT_PATH at import time (see runtime.ts).
+  const [{ installCliPorts }, { queryVault }] = await Promise.all([
+    import("../runtime.js"),
+    import("../../mastra/tools/rag.js"),
+  ]);
+  await installCliPorts();
+
+  // 轻量版 ask：只带 source/title/supersededBy，不传 content，省 token。
+  const results = await queryVault(topic, topK);
+  const json = {
+    topic,
+    results: results.map((r) => ({
+      source: r.source,
+      title: r.title,
+      supersededBy: r.supersededBy,
+    })),
+  };
+
+  if (results.length === 0) {
+    return { json, text: `药柜里没有找到跟「${topic}」相关的笔记。` };
+  }
+  const lines = [`跟「${topic}」相关的笔记（${results.length}）：`, ""];
+  for (const r of results) {
+    lines.push(`  ${r.source}${r.title ? `　${r.title}` : ""}`);
+    if (r.supersededBy) lines.push(`    ⚠︎ 已被 ${r.supersededBy} 取代，优先看那一篇`);
+  }
+  return { json, text: lines.join("\n").trimEnd() };
+}
+
+/** 日记摘要：空白归一化后截断的轻量摘录，不调模型。 */
+function excerpt(content: string, max = 400): string {
+  const flat = content.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
+
+/**
+ * Type4Me 库路径。允许用 TYPE4ME_HISTORY_DB 覆盖（测试用），缺省是真实用户目录。
+ */
+function type4MeHistoryDbPath(): string {
+  return (
+    process.env.TYPE4ME_HISTORY_DB ??
+    path.join(os.homedir(), "Library", "Application Support", "Type4Me", "history.db")
+  );
+}
+
+type VoiceRecord = { time: string; text: string };
+
+/**
+ * 只读 Type4Me 语音历史。recognition_history.created_at 是 UTC（本地=UTC+8）：
+ * 按请求的本地日期做 UTC 日期前缀匹配（白天口述时段的 UTC 日期与本地一致）。
+ * 库不存在/打不开 → available:false 降级。打开方式必须是真只读：@libsql/client 的
+ * file: 后端不支持只读（连不存在的库都会建出来），所以这里用 node:sqlite 的
+ * SQLITE_OPEN_READONLY——先 stat 再打开，绝不写任何文件。
+ */
+async function readType4MeDay(
+  date: string,
+): Promise<{ available: true; records: VoiceRecord[] } | { available: false }> {
+  const dbPath = type4MeHistoryDbPath();
+  try {
+    if (!(await fs.stat(dbPath)).isFile()) return { available: false };
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const rows = db
+        .prepare(
+          "SELECT created_at, raw_text FROM recognition_history WHERE created_at LIKE ? ORDER BY created_at ASC",
+        )
+        .all(`${date}%`) as Array<{ created_at: string | null; raw_text: string | null }>;
+      const records: VoiceRecord[] = rows.map((row) => {
+        const createdAt = String(row.created_at ?? "");
+        // UTC → 本地（+8）手工换算，不依赖机器时区。
+        const local = new Date(
+          Date.parse(createdAt.endsWith("Z") ? createdAt : `${createdAt}Z`) + 8 * 3_600_000,
+        );
+        const time = `${String(local.getUTCHours()).padStart(2, "0")}:${String(
+          local.getUTCMinutes(),
+        ).padStart(2, "0")}`;
+        return { time, text: String(row.raw_text ?? "") };
+      });
+      return { available: true, records };
+    } finally {
+      db.close();
+    }
+  } catch {
+    return { available: false };
+  }
+}
+
+export async function dayCommand(vaultPath: string, date: string): Promise<CommandResult> {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) throw new Error(`day 需要一个 YYYY-MM-DD 日期，收到: ${date}`);
+  const year = match[1];
+  // 拒绝 2026-13-99 这种格式合法但日期不存在的输入（防呆，也防路径拼接出怪文件名）。
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (
+    parsed.getFullYear() !== Number(match[1]) ||
+    parsed.getMonth() !== Number(match[2]) - 1 ||
+    parsed.getDate() !== Number(match[3])
+  ) {
+    throw new Error(`day 需要一个真实的 YYYY-MM-DD 日期，收到: ${date}`);
+  }
+
+  // 1) 日记：journal/YYYY/YYYY-MM-DD Daily Log.md（存在才读，只读摘要）。
+  const relPath = `journal/${year}/${date} Daily Log.md`;
+  const abs = safeVaultPath(vaultPath, relPath);
+  const content = abs ? await fs.readFile(abs, "utf8").catch(() => null) : null;
+  const journal =
+    content === null
+      ? { exists: false, relPath }
+      : { exists: true, relPath, summary: excerpt(content) };
+
+  // 2) 语音：Type4Me 只读库（打不开只降级语音块，不影响其他两块）。
+  const voice = await readType4MeDay(date);
+
+  // 3) 提案：createdAt 是 UTC ISO，按请求日期前缀过滤（与语音同一换算约定）。
+  const proposals = (await listProposals(apothecaryHome())).filter((p) =>
+    p.createdAt.startsWith(date),
+  );
+
+  const json = {
+    date,
+    journal,
+    voice: voice.available
+      ? { available: true, count: voice.records.length, records: voice.records }
+      : { available: false, reason: "Type4Me 未安装或库不存在" },
+    proposals: {
+      count: proposals.length,
+      proposals: proposals.map((p) => ({
+        id: p.id,
+        type: p.type,
+        title: p.title,
+        createdAt: p.createdAt,
+      })),
+    },
+  };
+
+  const lines = [`${date} 全记录回看`, ""];
+  if (journal.exists) {
+    lines.push(`【日记】${journal.relPath}`);
+    lines.push(`  ${journal.summary}`);
+  } else {
+    lines.push("【日记】当日无日记");
+  }
+  lines.push("");
+  if (!voice.available) {
+    lines.push("【语音记录】语音记录不可用（Type4Me 未安装或库不存在）");
+  } else if (voice.records.length === 0) {
+    lines.push("【语音记录】当日无语音记录");
+  } else {
+    lines.push(`【语音记录】当日 ${voice.records.length} 条（Type4Me，本地时间 UTC+8）`);
+    for (const r of voice.records) lines.push(`  ${r.time}　${r.text}`);
+  }
+  lines.push("");
+  if (proposals.length === 0) {
+    lines.push("【提案】当日无提案记录");
+  } else {
+    lines.push(`【提案】当日 ${proposals.length} 条提案`);
+    for (const p of proposals) lines.push(`  ${p.id} [${p.type}] ${p.title}`);
   }
   return { json, text: lines.join("\n").trimEnd() };
 }

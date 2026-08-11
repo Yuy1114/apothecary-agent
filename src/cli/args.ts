@@ -3,7 +3,7 @@
  * without executing the CLI (importing `index.ts` runs it).
  *
  * The command surface is grouped by permission, and that grouping is the point:
- * `status`/`proposals`/`ask`/`findings`/`journal`/`anki` only read, and
+ * `status`/`proposals`/`ask`/`related`/`day`/`findings`/`journal`/`anki` only read, and
  * `intake`/`capture`/`audit`/`polish` only ever produce an approvable proposal.
  * Nothing here can change the vault — approving is a human action and has no
  * command.
@@ -16,6 +16,8 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
   apo proposals list              列出待审提案
   apo proposals show <id>         单条提案详情（含 targetFiles 与 payload）
   apo ask "<问题>"                 检索药柜并返回带出处的片段
+  apo related "<话题>"             轻量关联检索：只返回相关笔记的标题与出处，不带内容片段
+  apo day <YYYY-MM-DD>            某天全记录回看：日记摘要 + Type4Me 语音记录 + 当天提案
   apo findings                    维护清单：被取代的笔记、散落的概念
   apo journal today|yesterday     当期日记：计划条目与复盘状态
   apo anki due                    今日到期卡片数与断更天数
@@ -39,7 +41,7 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
   --vault <path>                  指定药柜；缺省依次尝试 APOTHECARY_VAULT_PATH、桌面 app 当前药柜、默认路径
   --limit <n>                     findings / proposals 的条数上限；describe images 的本次张数上限
   --force                         describe images：即使内容没变也重新描述
-  --top-k <n>                     ask 返回的片段数（默认 5）
+  --top-k <n>                     ask / related 返回的条数（默认 5）
   -h, --help                      显示本帮助
 
 注意：批准提案没有命令。agent 可以把待审项讲给你听，但按下同意的必须是人。
