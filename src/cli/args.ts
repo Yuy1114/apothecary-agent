@@ -6,7 +6,7 @@
  * `status`/`proposals`/`ask`/`related`/`day`/`findings`/`journal`/`anki` only read, and
  * `intake`/`capture`/`audit`/`polish` only ever produce an approvable proposal.
  * Nothing here can change the vault — approving is a human action and has no
- * command.
+ * command. `speech ingest` 写的是 Anki（药柜之外），不属于这个约束。
  */
 
 export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本调用）
@@ -34,6 +34,11 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
   apo schedule [<YYYY-MM-DD>]      生成某天（缺省今天）的日程，落盘到 schedule/<date>.md
                                   并回显日程。唯一会写药柜的命令：日程是派生数据，
                                   不经提案直接落盘（晨间 cron / Hermes 的入口）
+  apo speech ingest --raw "<原句>" --corrected "<纠错句>" [--note "<说明>"]
+                                  把一条口语纠错送进 Anki（晚间英语复盘 cron 用）：
+                                  正面=纠错句里的地道表达，背面=原句+中文说明。
+                                  Anki 未开时退出码 1，但 json.kind=deferred
+                                  表示记录应保留、下次重试（skipped 则不应重试）
 
 维护命令（只写 agent 自己的目录，不碰药柜）
   apo describe images             用视觉模型读遍药柜里的图片，写进语义层并建索引
@@ -45,6 +50,7 @@ export const HELP = `apo — apothecary 的无界面入口（供 Hermes / 脚本
   --limit <n>                     findings / proposals 的条数上限；describe images 的本次张数上限
   --force                         describe images：即使内容没变也重新描述
   --top-k <n>                     ask / related 返回的条数（默认 5）
+  --raw / --corrected / --note    speech ingest 的三段输入（--note 可省略）
   -h, --help                      显示本帮助
 
 注意：批准提案没有命令。agent 可以把待审项讲给你听，但按下同意的必须是人。
@@ -63,9 +69,24 @@ export type ParsedArgs = {
   modes: string[];
   limit?: number;
   topK?: number;
+  /** speech ingest 的输入：原句（必填）。 */
+  raw?: string;
+  /** speech ingest 的输入：纠错句（必填）。 */
+  corrected?: string;
+  /** speech ingest 的输入：中文说明（可省略）。 */
+  note?: string;
 };
 
-const VALUE_FLAGS = new Set(["--vault", "--topic", "--mode", "--limit", "--top-k"]);
+const VALUE_FLAGS = new Set([
+  "--vault",
+  "--topic",
+  "--mode",
+  "--limit",
+  "--top-k",
+  "--raw",
+  "--corrected",
+  "--note",
+]);
 
 function positiveInt(flag: string, raw: string): number {
   const value = Number(raw);
@@ -89,6 +110,15 @@ function applyValue(parsed: ParsedArgs, flag: string, value: string): void {
       break;
     case "--top-k":
       parsed.topK = positiveInt(flag, value);
+      break;
+    case "--raw":
+      parsed.raw = value;
+      break;
+    case "--corrected":
+      parsed.corrected = value;
+      break;
+    case "--note":
+      parsed.note = value;
       break;
   }
 }

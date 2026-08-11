@@ -15,6 +15,7 @@ import {
   type CommandResult,
 } from "./commands/read.js";
 import { scheduleCommand } from "./commands/schedule.js";
+import { speechCommand } from "./commands/speech.js";
 import {
   auditReadmeCommand,
   captureCommand,
@@ -38,8 +39,9 @@ import {
  *   deliberate exception: a generated schedule is derived output (like activity
  *   digests), so it skips the proposal gate by design. Everything else either
  *   reads, or produces a proposal awaiting approval. Approving is a human
- *   action and deliberately has no command, so an unattended caller cannot talk
- *   itself into applying.
+ *   action and has deliberately no command, so an unattended caller cannot talk
+ *   itself into applying. `apo speech ingest` 也直接落盘，但写的是 Anki（药柜
+ *   之外），不在「不得改药柜」的约束内。
  * - **stdout carries only the result.** Diagnostics go to stderr, so `--json`
  *   output stays parseable even when a use case logs progress.
  */
@@ -80,6 +82,13 @@ async function dispatch(args: ParsedArgs, vaultPath: string): Promise<CommandRes
 
     case "schedule":
       return scheduleCommand(vaultPath, second);
+
+    case "speech": {
+      if (second !== "ingest") {
+        throw new Error("用法: apo speech ingest --raw <原句> --corrected <纠错句> [--note <说明>]");
+      }
+      return speechCommand({ raw: args.raw, corrected: args.corrected, note: args.note });
+    }
 
     case "findings":
       return findingsCommand(vaultPath, args.limit ?? 20);

@@ -55,6 +55,29 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["capture", "x", "--topic="])).toThrow(/需要一个值/);
   });
 
+  it("parses speech ingest's value flags", () => {
+    expect(
+      parseArgs([
+        "speech",
+        "ingest",
+        "--raw",
+        "Have you think about it?",
+        "--corrected",
+        "Have you thought about it?",
+        "--note",
+        "完成时用过去分词",
+      ]),
+    ).toMatchObject({
+      positionals: ["speech", "ingest"],
+      raw: "Have you think about it?",
+      corrected: "Have you thought about it?",
+      note: "完成时用过去分词",
+    });
+    // 等号拼写同样支持；--note 可省略。
+    expect(parseArgs(["speech", "ingest", "--raw=a", "--corrected=b"]).note).toBeUndefined();
+    expect(() => parseArgs(["speech", "ingest", "--corrected"]).note).toThrow(/需要一个值/);
+  });
+
   it("treats -h/--help as a request for help", () => {
     expect(parseArgs(["--help"]).help).toBe(true);
     expect(parseArgs(["-h"]).help).toBe(true);
